@@ -6,7 +6,7 @@ description: Attention is permutation-equivariant — shuffle the input and the 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SinusoidalPE } from '@components/widgets';
+import { SinusoidalPE, RoPERotation } from '@components/widgets';
 
 The transformer block from Chapter 5 has a curious property: it does not know the order of its inputs. Shuffle the input sequence — "cat the on mat sat the" instead of "the cat sat on the mat" — and the block's output is shuffled identically. Multi-head attention, the FFN, the residuals, the layer norms: none of them encode position. Each row of the output is determined by *which* other rows interact with it, not by *where* they sit in the sequence.
 
@@ -241,10 +241,8 @@ A useful framing: in attention, the query at position $m$ asks a question and th
 
 The implementation is short and mostly about getting the dimension pairing right. The standard convention pairs adjacent dimensions: dimensions $0$ and $1$ form one 2D pair, dimensions $2$ and $3$ form another, and so on. The rotation is applied independently to each pair.
 
-<WidgetFrame title="RoPE rotation" caption="A query vector at successive positions, viewed pair-by-pair. Each 2D pair rotates at a different angular speed — the fastest pairs sweep through many revolutions across the sequence, while the slowest pairs barely move. The full Q vector is the stack of these rotating 2D components.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 30 (secondary)
-  </div>
+<WidgetFrame title="RoPE rotation" caption="RoPE rotates each pair of adjacent dimensions in Q (and K) by an angle proportional to position × frequency. Drag the position slider to see all 4 pairs rotate at their own rate — low pairs rotate quickly, high pairs slowly. The rotation has no learned parameters; angles are determined by position and pair index.">
+  <RoPERotation client:visible />
 </WidgetFrame>
 
 The same demo serves a second purpose. The numerical check at the end verifies the relative-position property directly — for several $(m, n)$ pairs with the same offset, the dot product after rotation comes out to the same value.
@@ -393,5 +391,180 @@ Chapter 1 introduced the neural network primitives — forward pass, gradients, 
 Tokens in. Embedded. Position-encoded. Passed through twelve or twenty-four or ninety-six transformer blocks, each block doing multi-head attention then FFN with residuals and layer norms keeping training stable. The last block's output projected back into vocabulary space and softmaxed to produce a probability distribution over the next token. Sample, append, repeat. That is the architecture of every modern decoder-only LLM. It is also, modulo specific component choices — RMSNorm versus LayerNorm, SwiGLU versus GELU, RoPE versus sinusoidal — what GPT, Llama, Mistral, and Claude do at the level of the forward pass.
 
 The architecture is defined. The weights start as random noise. What remains is *training* — the process that turns those random weights into something that can write, reason, and converse. Loss functions, optimizers, data pipelines, distributed training, scaling laws, the engineering of taking 175 billion parameters from random initialization to a model that knows the periodic table and can explain it. The next several chapters are about that process.
+
+## Exercises
+
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Compute sinusoidal PE and verify the structure
+
+Compute sinusoidal positional encoding for several positions. Verify that (a) PE values are in [-1, 1], (b) adjacent dimensions form sin/cos pairs at the same frequency, (c) the leftmost dimensions oscillate quickly and the rightmost slowly.
+
+<details>
+<summary>Hint</summary>
+
+PE(p, 2k) = sin(p / 10000^(2k/d_model)); PE(p, 2k+1) = cos(p / 10000^(2k/d_model)). Verify pair structure by checking that PE[p, 2k]² + PE[p, 2k+1]² ≈ 1 for all p, k (since (sin θ)² + (cos θ)² = 1).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def sinusoidal_pe(max_len, d_model, base=10000.0):
+    # TODO: implement
+    pass
+
+# Test (a): all values in [-1, 1]
+PE = sinusoidal_pe(max_len=100, d_model=64)
+# print(f"PE range: [{PE.min():.3f}, {PE.max():.3f}]  (expect ≈ [-1, 1])")
+
+# Test (b): adjacent dims form sin/cos pairs at the same frequency
+# Verify PE[:, 0]^2 + PE[:, 1]^2 ≈ 1 for all positions
+# TODO: compute pair-sum-of-squares, verify
+
+# Test (c): leftmost dims oscillate fast, rightmost slow
+# Verify that PE[0, 0] differs a lot from PE[1, 0] (fast)
+# but PE[0, 62] is close to PE[1, 62] (slow)
+# TODO: print PE differences for dim 0 vs dim 62
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Why learned PE doesn't extrapolate
+
+Train a tiny learned PE (random init) on positions 0-31 and try to use it at position 64. Demonstrate that there's no meaningful "position 64 embedding"; the model has no information about positions it wasn't trained on. Then compare to sinusoidal PE at the same position — sinusoidal gives a well-defined value, even though it wasn't seen during "training" (a learned PE wasn't trained on it).
+
+<details>
+<summary>Hint</summary>
+
+For learned PE, position 64 has no entry in the 32-position embedding table. Any value you put there is arbitrary (typically: out-of-bounds error, or zero-padded, or random). For sinusoidal PE, the formula gives a value for position 64 even if you never used it during a hypothetical training pass — the formula is deterministic.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+d_model = 32
+trained_len = 32
+
+# Learned PE — random init for the "trained" range
+rng = np.random.default_rng(42)
+learned_pe = rng.normal(0, 0.02, (trained_len, d_model))
+
+# Sinusoidal PE — formula-based, well-defined for any position
+def sinusoidal_pe_at(p, d_model, base=10000.0):
+    pe = np.zeros(d_model)
+    k_indices = np.arange(0, d_model, 2)
+    inv_freq = 1.0 / (base ** (k_indices / d_model))
+    pe[0::2] = np.sin(p * inv_freq)
+    pe[1::2] = np.cos(p * inv_freq)
+    return pe
+
+# Position 16 (in-range for learned PE)
+# print(f"Learned PE at p=16: {learned_pe[16][:5].round(3)} ...")
+# print(f"Sinusoidal PE at p=16: {sinusoidal_pe_at(16, d_model)[:5].round(3)} ...")
+
+# Position 64 (out-of-range for learned PE)
+# TODO: try to access learned_pe[64] — what happens?
+# TODO: compute sinusoidal PE at p=64 — what's the result?
+
+# Conclusion: sinusoidal extrapolates by formula; learned PE doesn't have any
+# value for unseen positions.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Implement RoPE and verify the relative-position property
+
+Implement RoPE: rotate Q and K vectors by position-dependent angles before computing attention scores. Verify the key property: for fixed offset n - m, the dot product `RoPE(q, m) · RoPE(k, n)` is the same regardless of m.
+
+<details>
+<summary>Hint</summary>
+
+Treat the d_k-dimensional Q vector as d_k/2 pairs of 2D vectors. For position p and pair k, rotate the k-th pair by angle p × omega_k where omega_k = 1 / 10000^(2k/d_k). Apply the same to K. Then compute the dot product. Test at offsets (0, 5), (3, 8), (10, 15) — all have relative offset 5, so dot products should be equal.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def rope(x, position_ids, base=10000.0):
+    """Apply RoPE to (seq_len, d_k) tensor."""
+    # TODO: compute frequencies (inv_freq), angles, cos/sin
+    # TODO: split x into even/odd dim halves
+    # TODO: apply 2D rotation per pair, interleave back
+    pass
+
+# Verify relative-position property
+d_k = 8
+rng = np.random.default_rng(42)
+q = rng.normal(0, 1, (1, d_k))
+k = rng.normal(0, 1, (1, d_k))
+
+# Test pairs all with relative offset = 5
+pairs = [(0, 5), (3, 8), (10, 15), (50, 55)]
+print("Dot products should all be equal (relative offset = 5):")
+for m, n in pairs:
+    # q_rot = rope(q, np.array([m]))
+    # k_rot = rope(k, np.array([n]))
+    # dot = (q_rot @ k_rot.T)[0, 0]
+    # print(f"  q@pos{m}, k@pos{n}: dot = {dot:.6f}")
+    pass
+
+# All values should be identical (up to floating-point error).
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — ALiBi and length extrapolation
+
+Implement ALiBi attention scores: standard scaled dot-product attention plus a linear-distance bias. Demonstrate that the bias pattern is well-defined at any sequence length — even lengths far beyond training. Compute the attention pattern on a 16-position sequence with the bias; verify the bias is monotonically negative with distance.
+
+<details>
+<summary>Hint</summary>
+
+ALiBi adds `-m_h * |query_pos - key_pos|` to each attention score, where m_h is a head-specific slope (typically `2^(-8h/n_heads)`). For seq_len=16 and 4 heads, build the bias matrix as `(n_heads, seq_len, seq_len)`. Add it to your scaled dot-product attention scores. After softmax, attention should be concentrated near the query position with smooth decay.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def alibi_bias(seq_len, n_heads):
+    """Return (n_heads, seq_len, seq_len) ALiBi bias matrix."""
+    # TODO: compute head slopes (2^(-8h/n_heads) for h = 1..n_heads)
+    # TODO: compute distance matrix |m - n|
+    # TODO: bias = -slope * distance
+    pass
+
+def attention_with_alibi(Q, K, V, n_heads):
+    """Multi-head attention with ALiBi bias added to scores."""
+    # TODO: compute standard scaled dot-product attention scores
+    # TODO: add ALiBi bias
+    # TODO: softmax + multiply V
+    pass
+
+# Test: ALiBi bias is well-defined at any seq_len
+seq_len, n_heads = 16, 4
+bias = alibi_bias(seq_len, n_heads)
+# print(f"Bias shape: {bias.shape}")
+# print(f"Head 0 row 8 (distance from position 8 to each other position):")
+# print(bias[0, 8].round(3))
+# Expect: a V-shape — 0 at position 8, monotonically decreasing as you move away
+
+# Verify length-extrapolation safety: bias formula works at seq_len = 1024
+# bias_long = alibi_bias(1024, n_heads)
+# print(f"Long-context bias shape: {bias_long.shape}  (works without retraining)")
+`}
+  packages={["numpy"]}
+/>
 
 A modern LLM is roughly seven architectural decisions, each of which falls out of the material so far: the layer count $N$, the model dimension $d_{\text{model}}$, the number of heads per layer $h$, the positional encoding scheme, the context length $L$, the vocabulary size $V$, and the activation function inside the FFN. Pick those, and you have an architecture. Train it, and you have a model. The chapter completes the first half. Chapter 7 starts the second.
