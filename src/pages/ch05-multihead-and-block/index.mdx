@@ -1,0 +1,513 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch05-multihead-and-block
+description: Multi-head attention generalizes Chapter 4's single-head attention to h parallel heads, each with their own learned projections. The transformer block wraps multi-head attention with a feedforward network, residual connections, and layer normalization. Together, multi-head attention and the block form the minimum unit that stacks N times to make a transformer.
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Chapter 4 was about one attention head. Real transformers have many — eight, twelve, ninety-six, depending on the model. Each head has its own learned projections, computes its own attention pattern, and produces its own slice of output. The slices are concatenated and projected back into the model's feature space. The motivation is that different heads can specialize in different relationships — locality, syntax, coreference — without the architectural complexity of separate networks.
+
+Multi-head attention alone is not a transformer. The repeating unit — the *block* — wraps multi-head attention with three more pieces. A feedforward network does most of the per-position work. Residual connections give gradients a clean path back through the depth. Layer normalization keeps activations at a stable scale. The block runs each piece in sequence, applies the residual short-circuits, and produces a refined representation that is the same shape as the input.
+
+This chapter is two chapters folded into one. The first half generalizes Chapter 4's attention to multi-head. The second half assembles the block. By the end the reader will have written a working Pre-LN transformer block in numpy — the unit that stacks N times to form GPT, Llama, Mistral, Claude, and every modern LLM.
+
+## The setup — why multiple heads
+
+In Chapter 4 attention had one set of projections — one $W^Q$, one $W^K$, one $W^V$. The operation was a single weighted sum: each position queried the rest of the sequence, scored against every key, softmaxed those scores into weights, and took the weighted average of the values. One attention pattern, one output per position. Clean, complete, $O(n^2)$ in the sequence length.
+
+A single attention pattern is a single *viewpoint* on the sequence. The model gets to choose, per position, *which* other positions to weight — but it can only express one choice at a time. That is a real limitation. The sentence "The dog that the man saw bit him" has at least three relationships a useful attention pass would want to capture simultaneously: the agreement between *dog* and *bit* (subject and verb), the embedded clause structure (*that the man saw*), and the coreference between *him* and *dog*. A single attention head can only commit to one pattern of weights. Whichever relationship it pays attention to, the others go uncaptured at this layer.
+
+Multi-head attention is the architectural response. Instead of one set of projections, the layer maintains $h$ parallel sets — $h$ independent attention computations, each with their own $W^Q_i$, $W^K_i$, $W^V_i$. Each head produces its own attention pattern, its own weighted sum of values, its own per-position output. The outputs are concatenated along the feature dimension and projected through a final learned linear layer that mixes the heads back into a single representation. Eight heads give the model eight different "views" of the sequence simultaneously. Twelve heads give twelve. Ninety-six give ninety-six.
+
+What makes multi-head attention interesting — and the source of the most common misconception about it — is that running $h$ attentions in parallel does *not* multiply the parameter count or compute by $h$. With the standard $d_k = d_{\text{model}} / h$ convention covered in the next section, multi-head attention has *exactly the same* parameter count and *exactly the same* total compute as a single-head attention at the same model width. The split into heads is a representation choice, not a capacity choice. Each head gets a smaller subspace to play with; the total work is unchanged.
+
+<Callout type="note">
+This chapter assumes Chapter 4. If $\attn(Q, K, V) = \softmax(QK^\top/\sqrt{d_k})V$ is not already second nature — including why the $\sqrt{d_k}$ is there, what causal masking does and where it gets added — pause and revisit Chapter 4 before continuing. Multi-head attention reuses everything from there; this chapter only adds the wrapping.
+</Callout>
+
+The next section makes the architecture formal. Three matrices in, $h$ heads of attention in parallel, one matrix out.
+
+## Multi-head attention — the parallel-heads architecture
+
+### The formula
+
+Multi-head attention runs $h$ copies of scaled dot-product attention in parallel and stitches their outputs together with one final linear layer. The full operation is captured in two lines:
+
+<Equation label="5.multihead">
+$$\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \dots, \text{head}_h) \, W^O$$
+$$\text{where } \text{head}_i = \attn(X W_i^Q, X W_i^K, X W_i^V)$$
+</Equation>
+
+Each head $i$ has its own three projection matrices $W_i^Q, W_i^K \in \R^{d_{\text{model}} \times d_k}$ and $W_i^V \in \R^{d_{\text{model}} \times d_v}$. Applied to the input $X \in \R^{n \times d_{\text{model}}}$, they produce that head's query, key, and value matrices in $\R^{n \times d_k}$ or $\R^{n \times d_v}$. Each head then runs the Chapter 4 attention operation independently and produces an output of shape $(n, d_v)$. The $h$ outputs are concatenated along the feature dimension into a single $(n, h \cdot d_v)$ matrix and passed through one more linear layer $W^O \in \R^{(h \cdot d_v) \times d_{\text{model}}}$ that mixes the heads into the final output.
+
+The output of <EqRef id="5.multihead" /> has the same shape as the input: $n$ rows, $d_{\text{model}}$ columns. This is essential — the block stacks, and stacking requires output and input shapes to match.
+
+### The d_k = d_model / h convention
+
+The standard choice in every modern transformer is to set $d_k = d_v = d_{\text{model}} / h$. With $d_{\text{model}} = 512$ and $h = 8$, each head operates in a 64-dimensional subspace. With $d_{\text{model}} = 12288$ and $h = 96$ (GPT-3), each head operates in a 128-dimensional subspace. The split is exact; $d_{\text{model}}$ must be divisible by $h$.
+
+Three things fall out of this convention. First, the concatenated head outputs have total dimension $h \cdot d_v = d_{\text{model}}$, so the output projection $W^O$ is a *square* $d_{\text{model}} \times d_{\text{model}}$ matrix. Second, the total parameter count across the per-head $Q, K, V$ projections is $h \cdot 3 \cdot d_{\text{model}} \cdot (d_{\text{model}} / h) = 3 d_{\text{model}}^2$ — exactly what a *single* attention head with full $d_{\text{model}}$ output would have. Third, the total compute per attention pattern, $O(n^2 \cdot d_k) = O(n^2 \cdot d_{\text{model}} / h)$, multiplied by $h$ heads gives back $O(n^2 \cdot d_{\text{model}})$ — again exactly single-head's cost.
+
+The interpretation is worth holding fixed. *Multi-head attention is what you get when you take a single attention head and split its dimensionality into $h$ independent sub-attentions.* No new compute is bought. No new parameters are bought. The same total budget is partitioned into $h$ specialists rather than one generalist.
+
+In practice the implementation does not run $h$ separate matmuls. It computes the full $(n, d_{\text{model}})$ projection $X W^Q$ once, then reshapes the result into $(n, h, d_k)$ and transposes to $(h, n, d_k)$ — a per-head view of one big matmul. Computationally this is identical to $h$ separate per-head matmuls; arithmetically it is faster and easier to write.
+
+What heads actually learn varies. In a trained model, different heads tend to specialize empirically: some attend to recent positions (a "local" head), some attend to specific syntactic relationships (subject-verb, determiner-noun), some attend to long-range references like coreference or document structure. The pattern is real but uneven — many heads turn out to be approximately redundant in practice, and pruning experiments have removed roughly half the heads from BERT without much loss in accuracy. The rigorous study of what individual heads do is the domain of mechanistic interpretability (Chapter 25); for now it is enough to know that the multi-head structure makes head-level specialization *possible*, and trained models often exhibit it.
+
+### A working implementation
+
+The widget below shows what specialization looks like in practice — four heads over the same 6-token sequence, each producing a different attention pattern, then blended through the output projection. Different head, different focus, same input.
+
+<WidgetFrame title="Multi-head attention" caption="The same 6-token sequence with h=4 attention heads. Each head has its own learned Q, K, V projections, producing a different attention pattern. The final output blends the heads via a learned projection.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 24 (marquee)
+  </div>
+</WidgetFrame>
+
+The numpy implementation is a few dozen lines. The trick is the reshape-and-transpose that splits the single $d_{\text{model}}$ projection into per-head views without doing $h$ separate matmuls.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+class MultiHeadAttention:
+    def __init__(self, d_model, n_heads, seed=42):
+        assert d_model % n_heads == 0, "d_model must be divisible by n_heads"
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
+        rng = np.random.default_rng(seed)
+        # All per-head Q, K, V projections folded into single (d_model, d_model) matrices
+        self.W_Q = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_K = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_V = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_O = rng.normal(0, 0.02, (d_model, d_model))
+
+    def __call__(self, X, mask=None):
+        n, d_model = X.shape
+        # Project then reshape to (n_heads, n, d_k) — a per-head view of one big matmul
+        Q = (X @ self.W_Q).reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        K = (X @ self.W_K).reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        V = (X @ self.W_V).reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+
+        # Per-head attention scores: (n_heads, n, n)
+        scores = (Q @ K.transpose(0, 2, 1)) / np.sqrt(self.d_k)
+        if mask is not None:
+            scores = scores + mask    # broadcasts over n_heads
+        weights = softmax(scores, axis=-1)
+        head_outputs = weights @ V    # (n_heads, n, d_k)
+
+        # Concatenate heads: (n_heads, n, d_k) -> (n, n_heads * d_k) = (n, d_model)
+        concat = head_outputs.transpose(1, 0, 2).reshape(n, d_model)
+        return concat @ self.W_O
+
+# Demo: 6-token sequence, d_model=8, 4 heads (each with d_k=2)
+n, d_model = 6, 8
+mha = MultiHeadAttention(d_model, n_heads=4)
+X = np.random.default_rng(0).normal(0, 1, (n, d_model))
+output = mha(X)
+print(f"Input shape:  {X.shape}")
+print(f"Output shape: {output.shape}")
+print(f"n_heads = {mha.n_heads}, d_k per head = {mha.d_k}")
+`}
+  packages={["numpy"]}
+  height={620}
+/>
+
+The two reshape calls are the only part of the implementation that is not a direct transcription of <EqRef id="5.multihead" />. They look fussy but they are doing something simple: take the single $(n, d_{\text{model}})$ matrix produced by $X W^Q$ and view it as $h$ stacked $(n, d_k)$ matrices, one per head. The transpose puts the head axis first so the broadcasted matmul `Q @ K.transpose(0, 2, 1)` produces an $(h, n, n)$ stack of scores, one $n \times n$ attention matrix per head. After attention, the inverse transpose-and-reshape stitches the heads back into a single $(n, d_{\text{model}})$ matrix that the final $W^O$ projection mixes.
+
+<Callout type="insight">
+The most common misconception about multi-head attention is that "more heads = more capacity." With $d_k = d_{\text{model}} / h$, the parameter count is exactly $4 d_{\text{model}}^2$ regardless of $h$, and the compute per attention pass is exactly $O(n^2 d_{\text{model}})$ regardless of $h$. The number of heads is a representation choice — how finely to partition the same total budget into specialists — not a capacity choice. Doubling $h$ does not add parameters; it just halves the per-head dimension. The marginal benefit of more heads diminishes quickly, which is why production models cluster around $h \in [8, 96]$ rather than scaling $h$ proportionally to $d_{\text{model}}$.
+</Callout>
+
+The next section makes the parameter accounting rigorous and shows where it fits in the broader transformer block.
+
+## Parameter and compute accounting
+
+A single transformer block is dominated, in parameter count, by two operations: multi-head attention and the feedforward network. The layer norms contribute a small amount; the residual connections contribute none.
+
+For multi-head attention with the standard $d_k = d_v = d_{\text{model}}/h$ convention, the parameter breakdown is straightforward. The three projection matrices $W^Q$, $W^K$, $W^V$ each have $d_{\text{model}}^2$ entries — even though they conceptually decompose into $h$ per-head projections of shape $d_{\text{model}} \times d_k$, the total across all heads is $h \cdot d_{\text{model}} \cdot d_k = d_{\text{model}}^2$. Together they contribute $3 d_{\text{model}}^2$ parameters. The output projection $W^O$ adds one more $d_{\text{model}}^2$ matrix. *Multi-head attention total: $4 d_{\text{model}}^2$.*
+
+The feedforward network — covered in detail in the next section — has its own parameter breakdown. The standard structure is two linear layers with an activation between them. The first projects from $d_{\text{model}}$ up to $4 d_{\text{model}}$ (the standard "expansion ratio" of 4×). The second projects back from $4 d_{\text{model}}$ down to $d_{\text{model}}$. Each is $d_{\text{model}} \times 4 d_{\text{model}}$, contributing $4 d_{\text{model}}^2$ parameters. *FFN total: $8 d_{\text{model}}^2$ — twice multi-head attention.*
+
+The layer norms add $2 d_{\text{model}}$ parameters each (the learned scale $\gamma$ and shift $\beta$), and a block has two of them. *Layer norms total: $4 d_{\text{model}}$.* (Often biases are also counted; the chapter ignores them for clarity — they're $O(d_{\text{model}})$, dwarfed by the quadratic terms.)
+
+| Component | Parameter count |
+|---|---|
+| Multi-head $W^Q, W^K, W^V$ | $3 d_{\text{model}}^2$ |
+| Multi-head $W^O$ | $d_{\text{model}}^2$ |
+| **Multi-head total** | **$4 d_{\text{model}}^2$** |
+| FFN up-projection | $4 d_{\text{model}}^2$ |
+| FFN down-projection | $4 d_{\text{model}}^2$ |
+| **FFN total** | **$8 d_{\text{model}}^2$** |
+| Layer norm scales (×2) | $4 d_{\text{model}}$ |
+| **Block total** | **$12 d_{\text{model}}^2 + 4 d_{\text{model}}$** |
+
+For a concrete number: GPT-3 has $d_{\text{model}} = 12288$ and 96 layers. Each block has roughly $12 \cdot 12288^2 \approx 1.8 \times 10^9$ parameters. Across 96 blocks, that is $\sim 173$ billion parameters — and the published total is 175B, with the remainder going to the embedding table and the language-model head. Almost all of GPT-3 lives in the stacked transformer blocks, and within each block roughly two-thirds lives in the FFNs.
+
+Compute scales differently from parameters because attention has both linear-in-$n$ and quadratic-in-$n$ pieces. The per-token cost of one block, ignoring constants, is $O(n \cdot d_{\text{model}}^2)$ for the FFN (linear in sequence length, quadratic in model width) plus $O(n \cdot d_{\text{model}}^2) + O(n^2 \cdot d_{\text{model}})$ for attention (the projections are linear in $n$; the $QK^\top$ and $AV$ matmuls are quadratic in $n$). For short sequences $n \ll d_{\text{model}}$, the linear-in-$n$ terms dominate and the FFN is the larger compute consumer. For long sequences $n \gtrsim d_{\text{model}}$, the $O(n^2)$ attention term takes over. The crossover sits at sequence lengths comparable to $d_{\text{model}}$, which is why the FLOPs profile of an LLM shifts as context length grows.
+
+<Callout type="warning">
+A persistent misconception is that "the FFN is the least important part of the transformer." The numbers above say otherwise: the FFN holds twice the parameters of multi-head attention in a standard block, and at short context lengths it does most of the compute. Mechanistic interpretability research (Geva et al. 2022 and later) further argues that the FFN is where most of the model's *factual knowledge* lives — attention shuffles information between positions; the FFN processes that information at each position. Both pieces are essential, and the FFN is, parameter-wise, the bigger of the two.
+</Callout>
+
+The next section opens up the FFN. Two linear layers with an activation between them — but the choices inside that simple structure have outsized influence on modern model design.
+
+## The feedforward network (FFN)
+
+### Structure: expand then contract
+
+The feedforward network is the second sublayer in every transformer block, and structurally it is the simpler of the two. It is a position-wise multilayer perceptron: the *same* MLP is applied independently to each position's feature vector. There is no information flow between positions inside the FFN — that is attention's job. The FFN is where each position "thinks alone" with the context that attention has already gathered for it.
+
+The standard architecture is two linear layers with a nonlinear activation between them. The first layer projects up from $d_{\text{model}}$ to $4 d_{\text{model}}$. The activation applies element-wise. The second layer projects back down from $4 d_{\text{model}}$ to $d_{\text{model}}$.
+
+<Equation>
+$$\text{FFN}(x) = (\text{GELU}(x W_1 + b_1)) W_2 + b_2$$
+</Equation>
+
+where $W_1 \in \R^{d_{\text{model}} \times 4 d_{\text{model}}}$ and $W_2 \in \R^{4 d_{\text{model}} \times d_{\text{model}}}$ are learnable matrices, and $b_1, b_2$ are learnable biases (sometimes omitted in modern variants).
+
+The 4× expansion ratio is empirical. Vaswani et al. chose it in 2017, subsequent architecture experiments mostly preserved it, and it has been the default for almost every transformer since. Smaller ratios (2×) save parameters but underperform; larger ratios (8×) help only marginally and double the parameter count. The choice is one of the most stable in the field — almost every production transformer uses 4 unless it has a specific reason not to.
+
+### Activation choice — GELU and SwiGLU
+
+The activation is where modern architecture has churned the most. Three choices dominate:
+
+- **ReLU** ($\text{ReLU}(x) = \max(0, x)$) — the original transformer's activation. Simple, fast, well-understood. Suffers from the "dying ReLU" problem at large scale: once a unit's pre-activation is consistently negative, its gradient is exactly zero and the unit stops learning.
+- **GELU** ($\text{GELU}(x) = x \cdot \Phi(x)$, where $\Phi$ is the standard normal CDF) — a smooth approximation of ReLU that does not vanish hard at zero. Introduced by Hendrycks & Gimpel (2016, [arxiv.org/abs/1606.08415](https://arxiv.org/abs/1606.08415)). Adopted by BERT, GPT-2, GPT-3, and most transformers through the 2020 era. The default empirical choice for several years.
+- **SwiGLU** ($\text{SwiGLU}(x) = \text{Swish}(x W_1) \odot (x W_2)$, then projected by $W_3$) — a gated variant from Shazeer (2020, [arxiv.org/abs/2002.05202](https://arxiv.org/abs/2002.05202)). Uses three linear projections rather than two; the extra branch acts as a multiplicative gate. Modest empirical improvement over GELU. Used by Llama, Mistral, and most modern open-source LLMs.
+
+GELU has a closed-form definition through the normal CDF, but the formula has no elementary form, so implementations use a tanh-based approximation that is accurate to about three decimal places:
+
+<Equation>
+$$\text{GELU}(x) \approx \frac{1}{2} x \left(1 + \tanh\!\left[\sqrt{\tfrac{2}{\pi}}\left(x + 0.044715 x^3\right)\right]\right)$$
+</Equation>
+
+The chapter implements GELU because it is the simpler of the two modern options and exposes the basic FFN structure cleanly. The differences between GELU and SwiGLU are real but small; readers who want SwiGLU can implement it as an exercise.
+
+### Implementation
+
+The FFN is mechanically simple — fewer than fifteen lines of numpy.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+def gelu(x):
+    """GELU activation, tanh approximation."""
+    return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x**3)))
+
+class FFN:
+    def __init__(self, d_model, d_ff=None, seed=42):
+        d_ff = d_ff or 4 * d_model
+        rng = np.random.default_rng(seed)
+        self.W1 = rng.normal(0, 0.02, (d_model, d_ff))
+        self.b1 = np.zeros(d_ff)
+        self.W2 = rng.normal(0, 0.02, (d_ff, d_model))
+        self.b2 = np.zeros(d_model)
+
+    def __call__(self, x):
+        h = gelu(x @ self.W1 + self.b1)
+        return h @ self.W2 + self.b2
+
+# Demo: 6-token sequence at d_model = 8
+d_model = 8
+ffn = FFN(d_model)
+X = np.random.default_rng(0).normal(0, 1, (6, d_model))
+out = ffn(X)
+print(f"Input shape:    {X.shape}")
+print(f"Hidden shape:   ({X.shape[0]}, {4 * d_model})  # 4x expansion inside the FFN")
+print(f"Output shape:   {out.shape}")
+print(f"Per-row L2 norm of output: {np.linalg.norm(out, axis=-1).round(3)}")
+`}
+  packages={["numpy"]}
+  height={420}
+/>
+
+Every modern transformer's FFN reduces to roughly that structure. Production code adds the gradient bookkeeping, fuses the matmuls with kernel calls, sometimes drops the biases, sometimes swaps GELU for SwiGLU — but the position-wise expand-then-contract shape is invariant.
+
+<Callout type="aside">
+Modern open-source LLMs (Llama, Mistral, Gemma) use SwiGLU rather than GELU. The performance gain over GELU is small but consistent, and the parameter cost is similar — SwiGLU uses three linear projections of $d_{\text{model}} \times (\tfrac{2}{3} \cdot 4 d_{\text{model}})$ each, which works out to roughly the same parameter count as the GELU FFN's two $d_{\text{model}} \times 4 d_{\text{model}}$ projections. The chapter implements GELU because the structural lesson is the same and the code is simpler; Exercise 4 in the closeout session implements SwiGLU as an extension.
+</Callout>
+
+So far the chapter has treated multi-head attention and the FFN as two separate operations. The next sections introduce what connects them inside the transformer block: residuals and layer norm.
+
+## Residual connections — why they matter
+
+Residual connections were not invented for transformers. He et al. (2016, [arxiv.org/abs/1512.03385](https://arxiv.org/abs/1512.03385)) introduced them for very deep CNNs ("ResNets"), and they had already become standard practice in image models before the transformer paper was written. The transformer inherited residual connections and applied one to each of its sublayers (attention and FFN). Without the residual, very deep transformers — anything beyond 6–8 layers — would be effectively untrainable.
+
+The pattern is mechanical. For any sublayer $f$ (attention or FFN), wrap the operation so the output is the *input plus the sublayer's contribution*:
+
+<Equation>
+$$h_{\text{out}} = h_{\text{in}} + f(h_{\text{in}})$$
+</Equation>
+
+The "residual" is the unchanged input flowing through alongside $f$'s output. The sublayer no longer produces the new representation from scratch; it produces a *correction* that gets added to the existing representation.
+
+The argument for why this helps is about gradient flow. Differentiate the output with respect to the input and the chain rule gives:
+
+<Equation>
+$$\frac{\partial \mathcal{L}}{\partial h_{\text{in}}} = \frac{\partial \mathcal{L}}{\partial h_{\text{out}}} \cdot \left(I + \frac{\partial f}{\partial h_{\text{in}}}\right) = \underbrace{\frac{\partial \mathcal{L}}{\partial h_{\text{out}}}}_{\text{identity path}} + \underbrace{\frac{\partial \mathcal{L}}{\partial h_{\text{out}}} \cdot \frac{\partial f}{\partial h_{\text{in}}}}_{\text{through } f}$$
+</Equation>
+
+The gradient has two paths back. One flows through the identity matrix — the residual short-circuit — and is preserved exactly. The other flows through $f$'s Jacobian, which may shrink it. Even if every sublayer's Jacobian had small singular values (the classic gradient-vanishing failure mode), the identity path would preserve the gradient regardless. The signal reaches the early layers as long as the residual is present.
+
+A useful framing is that residuals turn the network into a *highway* with on-ramps. Information flows forward through the identity path; gradients flow backward through the identity path. Each sublayer is an exit ramp that adds a small refinement to whatever is on the highway, but it does not have to carry the bulk of the signal itself. The "edit, don't replace" interpretation is also accurate: each block contributes an additive nudge to the running representation, and stacking blocks composes those nudges.
+
+At very deep networks — 50, 100, 200 layers — the residual is not optional. Pre-ResNet ImageNet networks plateaued at roughly 20 layers because gradient magnitudes vanished exponentially in depth. ResNets reached 152 layers in the original paper and 1000+ in later work. Transformers stack 12 (GPT-2 small) to 96 (GPT-3) to even more in some recent models, and every one of those layers has a residual around each sublayer. Pull the residuals out and the deep stack collapses.
+
+<Callout type="warning">
+A common framing of residuals is that they are "about depth" — that they let you go deeper. That is the *consequence*, not the *mechanism*. The actual mechanism is gradient flow: the identity short-circuit preserves the gradient regardless of what $f$'s Jacobian does. Even at moderate depths (12–24 layers) where the depth itself is not a stress test, residuals make training significantly more stable. "Deeper networks now work" is a downstream effect of cleaner gradients; the cleaner gradients are the cause.
+</Callout>
+
+The residual in code is a single `+` operator. Section 7's full transformer block puts the residuals in place — there is no separate code block for them because there is nothing to show in isolation.
+
+## Layer normalization
+
+### The formula
+
+The third piece of the transformer block, after multi-head attention and the FFN, is layer normalization. The role of layer norm is to keep activations at a stable scale as they propagate through the depth of the network. Without normalization, the magnitude of activations drifts during training: some sub-units saturate, others vanish, and the model becomes hard to train as a function of its own internal scale.
+
+Layer normalization takes a single token's feature vector and standardizes it across the feature dimension. For an input vector $x \in \R^d$ representing one position's $d$-dimensional features:
+
+<Equation>
+$$\text{LayerNorm}(x) = \gamma \odot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta$$
+</Equation>
+
+where $\mu = \frac{1}{d}\sum_i x_i$ and $\sigma^2 = \frac{1}{d}\sum_i (x_i - \mu)^2$ are the per-token mean and variance across the feature dimension. The $\gamma, \beta \in \R^d$ are learnable per-feature scale and shift parameters; $\epsilon \approx 10^{-5}$ is a small constant added for numerical stability when the variance is small.
+
+The operation is two-stage. Stage one is *standardization*: subtract the mean, divide by the standard deviation, producing a vector with mean zero and unit variance across its $d$ features. Stage two is *affine transformation*: scale by $\gamma$, shift by $\beta$, both learned. After standardization the model could not represent any deviation from unit-variance features even if it wanted to; the $\gamma, \beta$ give it that flexibility back. At initialization $\gamma$ is all ones and $\beta$ is all zeros, so layer norm starts as a pure standardization and learns its scale and shift as training progresses.
+
+What makes this a useful operation is the per-token nature. Each token's normalization is independent of every other token's. There is no statistic shared across the batch, no statistic shared across positions in the sequence. The token at position 1 might have features with mean +5 and standard deviation 3; the token at position 7 might have features with mean -2 and standard deviation 0.5; after layer norm both have mean zero and unit variance (before the learned $\gamma, \beta$). Every token enters the next sublayer at a known scale.
+
+### Why not batch norm
+
+Layer norm is sometimes confused with batch norm, which sits next to it in textbooks but does something materially different. Batch norm normalizes across the *batch* axis: for each feature, the statistics are computed across the many examples in a batch, so feature $j$ is normalized using the mean and variance of feature $j$ across all batch examples. This works well for image classification with large fixed batches but breaks for sequence models in several ways. Variable-length sequences make batch statistics ambiguous. Small batches give noisy statistics. Inference with batch size one has no batch statistics at all and has to fall back to running averages computed during training, which introduces a train-inference gap.
+
+Layer norm avoids every one of these problems by computing per-example statistics. The statistics depend only on the single token's features, not on anything else in the batch. Batch size and sequence length do not affect the operation. Inference behaves identically to training. For sequence models, layer norm is the right choice and batch norm is essentially unused.
+
+### Modern variant: RMSNorm
+
+Several modern open-source LLMs (Llama, T5) use a simplified variant called RMSNorm, introduced by Zhang & Sennrich (2019, [arxiv.org/abs/1910.07467](https://arxiv.org/abs/1910.07467)). RMSNorm drops the mean subtraction and normalizes by the root-mean-square of the features:
+
+<Equation>
+$$\text{RMSNorm}(x) = \gamma \odot \frac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2 + \epsilon}}$$
+</Equation>
+
+The argument for the simplification is that the mean subtraction in standard layer norm is not load-bearing — most of the benefit comes from the variance normalization, and skipping the mean saves a few operations per token. Empirically RMSNorm performs comparably to layer norm and runs slightly faster. The chapter implements full layer norm because it is the more general operation; RMSNorm is a special case worth knowing about, but the conceptual content is the same.
+
+### Implementation
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+class LayerNorm:
+    def __init__(self, d_model, eps=1e-5):
+        self.gamma = np.ones(d_model)
+        self.beta = np.zeros(d_model)
+        self.eps = eps
+
+    def __call__(self, x):
+        """x: (..., d_model). Normalizes along the last axis."""
+        mean = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        return self.gamma * (x - mean) / np.sqrt(var + self.eps) + self.beta
+
+# Demo: 4 tokens at d_model = 8, intentionally unstable scales
+d_model = 8
+ln = LayerNorm(d_model)
+X = np.random.default_rng(0).normal(0, 5, (4, d_model))   # large-scale input
+
+print("Input statistics per token (mean, std):")
+for i, row in enumerate(X):
+    print(f"  Token {i}: mean={row.mean():+.3f}, std={row.std():.3f}")
+
+X_normed = ln(X)
+print("\\nAfter layer norm:")
+for i, row in enumerate(X_normed):
+    print(f"  Token {i}: mean={row.mean():+.3f}, std={row.std():.3f}")
+`}
+  packages={["numpy"]}
+  height={400}
+/>
+
+Before layer norm, each token's per-feature mean and standard deviation vary widely — the input was drawn with $\sigma = 5$. After layer norm, every token has mean approximately 0 and standard deviation approximately 1, exactly as the formula promises. The $\gamma$ and $\beta$ are at their initialization values, so the operation is a pure standardization in this demo; once training kicks in, $\gamma$ and $\beta$ deviate from their initialization to give the model back the per-feature scale and shift it wants.
+
+<Callout type="warning">
+"Layer norm is just like batch norm" is a common confusion that turns out to be wrong about a load-bearing axis. They normalize across *different* dimensions: batch norm across the batch, layer norm across the features of one example. For sequence models with variable-length inputs and small or batch-size-1 inference, layer norm's per-example statistics are essential. Batch norm's batch statistics break in exactly those settings. The transformer paper used layer norm specifically because batch norm did not work for the variable-length translation task that motivated it.
+</Callout>
+
+The next section assembles everything — multi-head attention, FFN, residuals, layer norms — into the full transformer block.
+
+## The full transformer block — Pre-LN vs Post-LN
+
+The transformer block has four ingredients: multi-head attention, FFN, two residual connections (one around each sublayer), and two layer norms (one near each sublayer). The order in which the layer norm sits relative to the residual is not arbitrary — there are two natural arrangements, and which one you pick has measurable consequences for training stability.
+
+### Post-LN: norm after the residual
+
+The arrangement in the original transformer paper (Vaswani 2017) applies the layer norm *after* the residual addition. Each sublayer follows this pattern:
+
+<Equation>
+$$h = \text{LayerNorm}(h_{\text{in}} + \text{Sublayer}(h_{\text{in}}))$$
+</Equation>
+
+Read in order: take the input, run it through the sublayer, add the result back to the input (residual), then normalize the sum. This is "Post-LN" — the norm comes *after* the residual.
+
+### Pre-LN: norm before the sublayer
+
+The arrangement used by every major modern transformer (GPT-2, GPT-3, GPT-4, Llama, Mistral) applies the layer norm *before* the sublayer:
+
+<Equation>
+$$h = h_{\text{in}} + \text{Sublayer}(\text{LayerNorm}(h_{\text{in}}))$$
+</Equation>
+
+Read in order: take the input, normalize it, run the normalized input through the sublayer, then add the *unnormalized* input back via the residual. This is "Pre-LN" — the norm comes *before* the sublayer, and the residual wraps the unnormalized input.
+
+### Why modern transformers use Pre-LN
+
+The two arrangements look similar on paper and produce similar block outputs in expectation, but they behave very differently during training. Xiong et al. (2020, [arxiv.org/abs/2002.04745](https://arxiv.org/abs/2002.04745)) showed the difference rigorously and the field shifted as a result.
+
+The argument is about what the residual path carries. In Pre-LN, the residual is a pure identity: the unnormalized $h_{\text{in}}$ flows straight through and the gradient flows straight back. The layer norm sits *inside* the residual, on the path through the sublayer, where its scale-correcting effect helps the sublayer but does not interfere with the residual's gradient highway. In Post-LN, the layer norm sits *outside* the residual, on top of the sum: the gradient backward through the layer norm depends on the input statistics, which couples the gradient flow to the magnitude of the activations and the sublayer's output.
+
+The empirical consequence is that Post-LN requires careful learning-rate warmup schedules to train stably. Without warmup, Post-LN transformers diverge early in training as gradient magnitudes spike. Pre-LN transformers train stably with much simpler schedules — constant or cosine-decay learning rates — and remove a hyperparameter that was previously load-bearing.
+
+Modern usage has settled almost entirely on Pre-LN. The original transformer paper used Post-LN, but every major decoder-only model since GPT-2 has used Pre-LN, as have most encoder-decoder models from T5 onward. When implementing a transformer from scratch today, the default choice is Pre-LN. Post-LN is mostly historical context.
+
+### A working block
+
+The Pre-LN block in code is what every modern transformer's stacked layers look like. Two sublayers, each wrapped by a layer norm and a residual.
+
+<WidgetFrame title="Pre-LN transformer block" caption="Data flowing through one Pre-LN transformer block: input → LN → attention → residual → LN → FFN → residual → output. Each sublayer adds a refinement; the residual path carries the bulk of the signal through.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 25
+  </div>
+</WidgetFrame>
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def gelu(x):
+    return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x**3)))
+
+class LayerNorm:
+    def __init__(self, d_model, eps=1e-5):
+        self.gamma = np.ones(d_model)
+        self.beta = np.zeros(d_model)
+        self.eps = eps
+    def __call__(self, x):
+        mean = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        return self.gamma * (x - mean) / np.sqrt(var + self.eps) + self.beta
+
+class MultiHeadAttention:
+    def __init__(self, d_model, n_heads, seed=42):
+        assert d_model % n_heads == 0
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
+        rng = np.random.default_rng(seed)
+        self.W_Q = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_K = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_V = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_O = rng.normal(0, 0.02, (d_model, d_model))
+    def __call__(self, X, mask=None):
+        n, d_model = X.shape
+        Q = (X @ self.W_Q).reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        K = (X @ self.W_K).reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        V = (X @ self.W_V).reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        scores = (Q @ K.transpose(0, 2, 1)) / np.sqrt(self.d_k)
+        if mask is not None:
+            scores = scores + mask
+        weights = softmax(scores, axis=-1)
+        out = weights @ V
+        concat = out.transpose(1, 0, 2).reshape(n, d_model)
+        return concat @ self.W_O
+
+class FFN:
+    def __init__(self, d_model, d_ff=None, seed=42):
+        d_ff = d_ff or 4 * d_model
+        rng = np.random.default_rng(seed)
+        self.W1 = rng.normal(0, 0.02, (d_model, d_ff))
+        self.b1 = np.zeros(d_ff)
+        self.W2 = rng.normal(0, 0.02, (d_ff, d_model))
+        self.b2 = np.zeros(d_model)
+    def __call__(self, x):
+        h = gelu(x @ self.W1 + self.b1)
+        return h @ self.W2 + self.b2
+
+class TransformerBlock:
+    def __init__(self, d_model, n_heads, seed=42):
+        self.ln_1 = LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, n_heads, seed=seed)
+        self.ln_2 = LayerNorm(d_model)
+        self.ffn = FFN(d_model, seed=seed + 1)
+
+    def __call__(self, x, mask=None):
+        # Pre-LN: normalize first, sublayer next, residual wraps the unnormalized input
+        x = x + self.attn(self.ln_1(x), mask=mask)
+        x = x + self.ffn(self.ln_2(x))
+        return x
+
+# Demo: a 6-token sequence through one block
+n, d_model = 6, 32
+rng = np.random.default_rng(0)
+X = rng.normal(0, 1, (n, d_model))
+
+block = TransformerBlock(d_model, n_heads=4)
+out = block(X)
+print(f"Input shape:  {X.shape}")
+print(f"Output shape: {out.shape}")
+print(f"\\nPer-token output L2 norm (residual keeps things in the same neighborhood):")
+print(np.linalg.norm(out, axis=-1).round(3))
+`}
+  packages={["numpy"]}
+  height={720}
+/>
+
+That is a Pre-LN transformer block. Two sublayers (attention and FFN), each gated through its own layer norm, each wrapped by a residual that preserves the unnormalized input. The output has the same shape as the input — same number of tokens, same feature dimension — which is precisely the property that lets blocks stack.
+
+<Callout type="warning">
+"Pre-LN and Post-LN are interchangeable" is a common assumption that turns out to be wrong in a way that matters for training. They are mathematically distinct arrangements with measurably different gradient behavior. Post-LN requires careful learning-rate warmup to train stably; Pre-LN does not. The original 2017 paper used Post-LN, but every modern transformer uses Pre-LN. When implementing from scratch, default to Pre-LN unless there is a specific reason to deviate; the implicit complexity savings (no warmup schedule to tune) are substantial.
+</Callout>
+
+One block is one layer. Real transformers stack many.
+
+## Stacking blocks — depth and capability
+
+A transformer is what you get when you stack $N$ of these blocks on top of each other. Block 1 takes the input embeddings as input and produces a refined representation as output. Block 2 takes block 1's output as input and produces a further refined representation. And so on, $N$ times. Each block is identical in structure — same multi-head attention, same FFN, same residuals, same layer norms — but each block has its own learned parameters.
+
+Depth varies across model scales in a predictable pattern. GPT-2 small has 12 blocks; GPT-2 medium has 24; GPT-2 large has 36; GPT-3 has 96. Llama-3 8B has 32; Llama-3 70B has 80; Llama-3 405B has 126. Wider models typically also get deeper — both dimensions scale together — but the dimensions are independent in principle, and architecture papers occasionally push one without the other to study their effects in isolation.
+
+The "edit, don't replace" interpretation of residuals helps think about what depth buys. Each block is a learned correction to the running representation. The input embedding is one starting point; each block adds an additive nudge; the final block's output is the input plus the sum of $N$ nudges. Stacking is composition: the network learns a sequence of refinement steps, applied in order, each one nudging the representation toward whatever is useful for the final task.
+
+What the layers learn is poorly understood in detail and is the central question of mechanistic interpretability (Chapter 25). The crude picture is that early blocks process surface features — token identity, basic syntactic structure, local n-gram patterns — and later blocks process more abstract features — semantic relations, reasoning patterns, coreference chains. The picture is rough but useful, and probing experiments (Tenney et al. 2019 and many others) generally confirm a depth-wise progression from surface to abstract. But there is no clean per-layer "role" the field has agreed on; the actual specialization is messy, distributed, and only partially understood.
+
+<Callout type="note">
+The transformer block code in this chapter is a complete spec, not a sketch. Chapter 8 ("Building a small LLM") uses this exact block — same multi-head attention, same FFN, same Pre-LN structure — and wraps it with an embedding lookup, $N$ stacked blocks, and an output projection. That is a working language model. The block here is the LEGO brick; subsequent chapters assemble bricks. Read the brick carefully — it is the unit of every later chapter that touches model architecture.
+</Callout>
+
+The chapter has one final missing piece. The block in this chapter does not know the order of its inputs — shuffle the input sequence and the output is shuffled identically. Real language is not permutation-invariant.
+
+## What's missing — positional encoding
+
+Look at the block code one more time. Multi-head attention takes a sequence in, runs the same computation per position, and produces a sequence out. The position of each token in the sequence enters the computation *only* through the row index of the matrix — there is no per-position signal in the math itself. Permute the input rows and you permute the output rows the same way. The FFN is position-wise, so permutation invariance is even more obvious there — the same MLP is applied independently to each row regardless of its index.
+
+This is a real problem. The sentence "The dog bit the man" is not the same as "The man bit the dog." Word order encodes meaning. A model that processes the two sequences as permutations of the same multiset will produce essentially the same output for both, which is not the behavior any language model can afford.
+
+The standard fix is to inject position information *into the input embeddings*, before the first block runs. Each position gets a vector — fixed (sinusoidal) or learned, depending on the variant — that is added to or otherwise combined with the token embedding at that position. The token embedding says *which word*; the position vector says *where in the sequence*. The block then operates on a representation that already encodes both, and its operations no longer need to be position-aware themselves.
+
+Chapter 6 covers positional encoding in full. Sinusoidal encodings (the original transformer's choice), learned positional embeddings (GPT-2/3's choice), RoPE (the modern default, used by Llama, Mistral, and most recent open-source LLMs). The question this chapter ended on — *how does position enter the model when none of the operations inside the block see it?* — is the question Chapter 6 answers.
+
+The block from this chapter, stacked twelve times on top of an embedding layer with positional encoding, is GPT-2. Stacked ninety-six times, it is GPT-3. Stacked thirty-two times with RMSNorm in place of LayerNorm, SwiGLU in place of GELU, and RoPE in place of additive positional encoding, it is Llama-3 8B. The block is the unit. Everything else in modern LLM design is variants on these themes.
+
+What this chapter built is what every subsequent chapter on training, inference, alignment, and deployment assumes.
