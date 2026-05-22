@@ -1,0 +1,224 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.selectorRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.selectorLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.selector {
+  flex: 1;
+  min-width: 180px;
+  padding: 0.4rem 0.6rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.selector:focus-visible {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: 2px;
+  border-color: var(--cyan-500);
+}
+
+.originalPanel,
+.tokenizerPanel {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.65rem;
+}
+
+.originalText {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0.4rem 0;
+}
+
+.tokenList {
+  margin: 0.5rem 0;
+  line-height: 1.9;
+}
+
+.tokenChip {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 1px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  border-radius: 3px;
+  white-space: pre;
+}
+
+.tokenChipEven {
+  background: color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-primary));
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.tokenChipOdd {
+  background: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-elevated));
+  color: var(--cyan-300);
+  border: 1px solid color-mix(in srgb, var(--cyan-500) 30%, var(--border-default));
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.panelVocab {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.panelStats {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.panelStats strong {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.helpBar {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.tokenChipInline {
+  display: inline-block;
+  padding: 0 4px;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  color: var(--text-secondary);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.chipLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms, background 200ms;
+}
+.chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.chipOn {
+  color: var(--text-primary);
+  border-color: var(--chip-color);
+  background: color-mix(in srgb, var(--chip-color) 10%, transparent);
+}
+
+.chipSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: var(--chip-color);
+  border-radius: 50%;
+  opacity: 0.5;
+  transition: opacity 200ms;
+}
+.chipOn .chipSwatch {
+  opacity: 1;
+}
+
+.resetButton {
+  margin-left: auto;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.resetButton:hover {
+  color: var(--cyan-300);
+  border-color: var(--cyan-500);
+}
+
+@media (max-width: 640px) {
+  .selectorRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+  .selector {
+    min-width: 0;
+    width: 100%;
+  }
+  .panelHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+  .resetButton {
+    margin-left: 0;
+  }
+}

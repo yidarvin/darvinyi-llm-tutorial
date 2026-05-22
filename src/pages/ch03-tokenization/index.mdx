@@ -6,7 +6,7 @@ description: How raw text becomes the integer IDs that Chapter 2's embedding lay
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { BPETraining } from '@components/widgets';
+import { BPETraining, TokenizerComparison } from '@components/widgets';
 
 Chapter 2 ended with the embedding lookup: integer token IDs in, dense vectors out. Where those integer token IDs come from was a question we deferred.
 
@@ -397,10 +397,8 @@ Modern tokenizers are more careful about this. The `cl100k_base` vocabulary used
 
 The widget below shows the same input text tokenized under different tokenizers, with the token boundaries colored. The contrast between English, Korean, and code under GPT-2 and GPT-4's tokenizers is the easiest way to see the consequences for yourself.
 
-<WidgetFrame title="Compare tokenizers" caption="Type any text and see how it breaks into tokens under several real tokenizers. Numbers, non-English text, and code show the largest differences.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 16
-  </div>
+<WidgetFrame title="Compare tokenizers" caption="See how the same text breaks into tokens under three real tokenizers — GPT-2 (byte-level BPE), GPT-4 (cl100k_base), and SentencePiece (T5). Notice how token counts differ across languages and content types.">
+  <TokenizerComparison client:visible />
 </WidgetFrame>
 
 The runnable block below uses a fresh BPE training on a number-heavy corpus to demonstrate the number-tokenization pattern. The exact split depends on the training corpus and the vocabulary size; the point is that BPE has no notion of numbers as a special category. They are just byte sequences whose tokenization is governed by frequency.
@@ -462,6 +460,150 @@ for n in ['12', '99', '345', '999', '6789', '12345']:
 />
 
 The numbers that appeared in the corpus tokenize cleanly. The numbers that did not appear fragment into multiple tokens whose split is determined by which byte pairs the BPE training happened to merge. `12345` is not "the number twelve thousand three hundred forty-five" to the model; it is some sequence of token IDs whose joint meaning has to be reconstructed by everything downstream.
+
+## Exercises
+
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Examine BPE merges on a custom corpus
+
+Train BPE on a small corpus of your choice (5–10 sentences) and examine the first 10 merges learned. Confirm that high-frequency character pairs in the corpus appear in the first few merges.
+
+<details>
+<summary>Hint</summary>
+
+Use the `train_bpe` function structure from section 3's runnable code. Print each merge along with its frequency count. The first merge should be the highest-frequency adjacent character pair in your corpus.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`from collections import Counter, defaultdict
+
+# Copy the train_bpe function from section 3 of this chapter, or write your own.
+
+def train_bpe(words, vocab_size=270):
+    # TODO: implement BPE training (or copy from section 3)
+    # Return (merges, vocab)
+    pass
+
+# TODO: choose a corpus of 5-10 sentences (English or otherwise) and split into words
+my_corpus = [
+    # e.g. "the cat sat on the mat",
+    # ...
+]
+words = []
+for sentence in my_corpus:
+    words.extend(sentence.split())
+
+# TODO: train BPE and print the first 10 merges
+# merges, vocab = train_bpe(words, vocab_size=...)
+# for i, ((a, b), merged) in enumerate(merges[:10]):
+#     print(f"Merge {i+1}: {a!r} + {b!r} -> {merged!r}")
+`}
+  packages={[]}
+/>
+
+### Exercise 2 (medium) — Implement BPE encoding
+
+After training BPE (exercise 1), implement the encoding function: given a new string, apply the learned merges in priority order to produce a sequence of tokens.
+
+<details>
+<summary>Hint</summary>
+
+The key idea: at each step, look for the available merge with the lowest *learned* index (i.e., the merge learned earliest during training). Apply it. Repeat until no more learned merges are present in the token sequence.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def encode_bpe(word, merges):
+    """
+    Encode a word using a trained BPE tokenizer.
+    word: a string
+    merges: list of ((a, b), merged) tuples from training
+
+    Returns: list of tokens (bytes)
+    """
+    # TODO: convert word to bytes, split into list of single bytes
+    # TODO: build a merge priority map: {(a, b): index_learned_at}
+    # TODO: while there's an applicable merge, find the lowest-priority one and apply it
+    pass
+
+# Test (assuming you've trained merges via exercise 1):
+# encoded = encode_bpe("hello", merges)
+# print(encoded)
+`}
+  packages={[]}
+/>
+
+### Exercise 3 (medium) — Quantify language asymmetry
+
+Take the same BPE tokenizer (trained on English text in exercise 1) and tokenize three short sentences: one in English, one in Korean (use Google Translate if needed), and one in Russian. Report bytes-per-token for each. Comment on the result.
+
+<details>
+<summary>Hint</summary>
+
+Convert each sentence to UTF-8 bytes, then run it through your BPE tokenizer. `bytes_per_token = byte_count / token_count`. Expect English to be ~2-3 bytes/token, Korean ~1 byte/token (because each Korean character is 3 bytes and gets split), Russian somewhere in between.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`# Assuming you have a trained BPE tokenizer from exercise 1
+# (the one trained on English text).
+
+sentences = {
+    'English': "the cat sat on the mat",
+    'Korean':  "고양이가 매트 위에 앉았다",
+    'Russian': "Кошка сидит на коврике",
+}
+
+# TODO: for each sentence:
+#   - compute byte count
+#   - tokenize with your trained tokenizer
+#   - compute token count
+#   - report bytes/token
+# TODO: comment on the asymmetry — which language is most "expensive" per character?
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Implement WordPiece
+
+WordPiece is BPE's likelihood-based cousin (used by BERT). Instead of merging the most *frequent* pair, WordPiece merges the pair that most increases the unigram language model's likelihood. Implement a simple version: at each step, score each candidate pair by `count(a, b) / (count(a) * count(b))` and merge the highest-scoring pair.
+
+<details>
+<summary>Hint</summary>
+
+WordPiece's scoring function approximates the "lift" from merging. The numerator is the joint count; the denominator is what you'd expect under independence. Pairs that co-occur more than chance get high scores. The first merges will be different from BPE on the same corpus.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`from collections import Counter, defaultdict
+
+def train_wordpiece(words, vocab_size=270):
+    """
+    Train a WordPiece-like tokenizer. The merge criterion is likelihood-based:
+      score(a, b) = count(a, b) / (count(a) * count(b))
+    Higher score = more likely to merge.
+    """
+    # TODO: similar structure to BPE training, but with the new merge criterion
+    # 1. Build initial word_freq
+    # 2. Loop until vocab full:
+    #    a. Count pair frequencies AND single-token frequencies
+    #    b. Score each pair: count(a,b) / (count(a) * count(b))
+    #    c. Pick highest-scoring pair, create new token
+    #    d. Update word_freq
+    pass
+
+# Compare BPE and WordPiece on the same corpus.
+# Print the first 10 merges of each. They should differ.
+`}
+  packages={[]}
+/>
 
 ## From tokens to attention
 

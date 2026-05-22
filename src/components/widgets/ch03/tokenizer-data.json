@@ -1,0 +1,1269 @@
+{
+  "generatedAt": "2026-05-22T20:58:02.929845Z",
+  "tokenizers": [
+    {
+      "id": "gpt2",
+      "name": "GPT-2 (BPE)",
+      "vocabSize": 50257,
+      "description": "Byte-level BPE trained on WebText (~40GB). Used by GPT-2."
+    },
+    {
+      "id": "gpt4",
+      "name": "GPT-4 (cl100k_base)",
+      "vocabSize": 100277,
+      "description": "Byte-level BPE with improved number handling. Used by GPT-3.5+ and GPT-4."
+    },
+    {
+      "id": "sentencepiece-t5",
+      "name": "SentencePiece (T5)",
+      "vocabSize": 32100,
+      "description": "Unigram LM tokenizer (Kudo 2018). Used by T5, mT5, ALBERT."
+    }
+  ],
+  "examples": [
+    {
+      "id": "english-short",
+      "text": "Hello, world!",
+      "category": "english",
+      "label": "English: simple greeting",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "Hello",
+            ",",
+            "␣world",
+            "!"
+          ],
+          "tokenIds": [
+            15496,
+            11,
+            995,
+            0
+          ],
+          "tokenCount": 4,
+          "bytesPerToken": 3.25
+        },
+        "gpt4": {
+          "tokens": [
+            "Hello",
+            ",",
+            "␣world",
+            "!"
+          ],
+          "tokenIds": [
+            9906,
+            11,
+            1917,
+            0
+          ],
+          "tokenCount": 4,
+          "bytesPerToken": 3.25
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣Hello",
+            ",",
+            "␣world",
+            "!"
+          ],
+          "tokenIds": [
+            8774,
+            6,
+            296,
+            55
+          ],
+          "tokenCount": 4,
+          "bytesPerToken": 3.25
+        }
+      }
+    },
+    {
+      "id": "english-medium",
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "category": "english",
+      "label": "English: pangram",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "The",
+            "␣quick",
+            "␣brown",
+            "␣fox",
+            "␣jumps",
+            "␣over",
+            "␣the",
+            "␣lazy",
+            "␣dog",
+            "."
+          ],
+          "tokenIds": [
+            464,
+            2068,
+            7586,
+            21831,
+            18045,
+            625,
+            262,
+            16931,
+            3290,
+            13
+          ],
+          "tokenCount": 10,
+          "bytesPerToken": 4.4
+        },
+        "gpt4": {
+          "tokens": [
+            "The",
+            "␣quick",
+            "␣brown",
+            "␣fox",
+            "␣jumps",
+            "␣over",
+            "␣the",
+            "␣lazy",
+            "␣dog",
+            "."
+          ],
+          "tokenIds": [
+            791,
+            4062,
+            14198,
+            39935,
+            35308,
+            927,
+            279,
+            16053,
+            5679,
+            13
+          ],
+          "tokenCount": 10,
+          "bytesPerToken": 4.4
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣The",
+            "␣quick",
+            "␣brown",
+            "␣",
+            "fox",
+            "␣jump",
+            "s",
+            "␣over",
+            "␣the",
+            "␣lazy",
+            "␣dog",
+            "."
+          ],
+          "tokenIds": [
+            37,
+            1704,
+            4216,
+            3,
+            20400,
+            4418,
+            7,
+            147,
+            8,
+            19743,
+            1782,
+            5
+          ],
+          "tokenCount": 12,
+          "bytesPerToken": 3.6666666666666665
+        }
+      }
+    },
+    {
+      "id": "korean",
+      "text": "안녕하세요. 만나서 반갑습니다.",
+      "category": "multilingual",
+      "label": "Korean: greeting",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            ".",
+            "␣�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "␣�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "."
+          ],
+          "tokenIds": [
+            168,
+            243,
+            230,
+            167,
+            227,
+            243,
+            47991,
+            246,
+            168,
+            226,
+            116,
+            168,
+            248,
+            242,
+            13,
+            31619,
+            100,
+            234,
+            167,
+            224,
+            246,
+            168,
+            226,
+            250,
+            31619,
+            108,
+            246,
+            166,
+            108,
+            239,
+            168,
+            232,
+            113,
+            46695,
+            230,
+            46695,
+            97,
+            13
+          ],
+          "tokenCount": 38,
+          "bytesPerToken": 1.131578947368421
+        },
+        "gpt4": {
+          "tokens": [
+            "�",
+            "�",
+            "�",
+            "�",
+            "하세요",
+            ".",
+            "␣만",
+            "나",
+            "서",
+            "␣반",
+            "�",
+            "�",
+            "습니다",
+            "."
+          ],
+          "tokenIds": [
+            31495,
+            230,
+            75265,
+            243,
+            92245,
+            13,
+            63207,
+            61415,
+            27796,
+            64857,
+            14705,
+            239,
+            39331,
+            13
+          ],
+          "tokenCount": 14,
+          "bytesPerToken": 3.0714285714285716
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣",
+            "<unk>",
+            ".",
+            "␣",
+            "<unk>",
+            "␣",
+            "<unk>",
+            "."
+          ],
+          "tokenIds": [
+            3,
+            2,
+            5,
+            3,
+            2,
+            3,
+            2,
+            5
+          ],
+          "tokenCount": 8,
+          "bytesPerToken": 5.375
+        }
+      }
+    },
+    {
+      "id": "chinese",
+      "text": "你好,世界!这是一段中文。",
+      "category": "multilingual",
+      "label": "Chinese: hello world + sentence",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "�",
+            "�",
+            "�",
+            "�",
+            ",",
+            "�",
+            "�",
+            "�",
+            "�",
+            "!",
+            "�",
+            "�",
+            "是",
+            "一",
+            "�",
+            "�",
+            "�",
+            "中",
+            "�",
+            "�",
+            "。"
+          ],
+          "tokenIds": [
+            19526,
+            254,
+            25001,
+            121,
+            11,
+            10310,
+            244,
+            45911,
+            234,
+            0,
+            32573,
+            247,
+            42468,
+            31660,
+            162,
+            106,
+            113,
+            40792,
+            23877,
+            229,
+            16764
+          ],
+          "tokenCount": 21,
+          "bytesPerToken": 1.6666666666666667
+        },
+        "gpt4": {
+          "tokens": [
+            "你",
+            "好",
+            ",",
+            "�",
+            "�",
+            "界",
+            "!",
+            "这",
+            "是",
+            "一",
+            "段",
+            "中",
+            "文",
+            "。"
+          ],
+          "tokenIds": [
+            57668,
+            53901,
+            11,
+            3574,
+            244,
+            98220,
+            0,
+            44388,
+            21043,
+            15120,
+            38574,
+            16325,
+            17161,
+            1811
+          ],
+          "tokenCount": 14,
+          "bytesPerToken": 2.5
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣",
+            "<unk>",
+            ",",
+            "<unk>",
+            "!",
+            "<unk>"
+          ],
+          "tokenIds": [
+            3,
+            2,
+            6,
+            2,
+            55,
+            2
+          ],
+          "tokenCount": 6,
+          "bytesPerToken": 5.833333333333333
+        }
+      }
+    },
+    {
+      "id": "hindi",
+      "text": "नमस्ते दुनिया",
+      "category": "multilingual",
+      "label": "Hindi: hello world",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "␣�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "�",
+            "ा"
+          ],
+          "tokenIds": [
+            11976,
+            101,
+            11976,
+            106,
+            11976,
+            116,
+            24231,
+            235,
+            11976,
+            97,
+            24231,
+            229,
+            28225,
+            99,
+            24231,
+            223,
+            11976,
+            101,
+            11976,
+            123,
+            11976,
+            107,
+            48077
+          ],
+          "tokenCount": 23,
+          "bytesPerToken": 1.608695652173913
+        },
+        "gpt4": {
+          "tokens": [
+            "न",
+            "म",
+            "स",
+            "्�",
+            "�",
+            "े",
+            "␣�",
+            "�",
+            "ु",
+            "न",
+            "ि�",
+            "�",
+            "ा"
+          ],
+          "tokenIds": [
+            61196,
+            88344,
+            79468,
+            31584,
+            97,
+            35470,
+            15272,
+            99,
+            73753,
+            61196,
+            43411,
+            107,
+            24810
+          ],
+          "tokenCount": 13,
+          "bytesPerToken": 2.8461538461538463
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣",
+            "<unk>",
+            "␣",
+            "<unk>"
+          ],
+          "tokenIds": [
+            3,
+            2,
+            3,
+            2
+          ],
+          "tokenCount": 4,
+          "bytesPerToken": 9.25
+        }
+      }
+    },
+    {
+      "id": "russian",
+      "text": "Привет, мир!",
+      "category": "multilingual",
+      "label": "Russian: hello world",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "�",
+            "�",
+            "р",
+            "и",
+            "в",
+            "е",
+            "т",
+            ",",
+            "␣�",
+            "�",
+            "и",
+            "р",
+            "!"
+          ],
+          "tokenIds": [
+            140,
+            253,
+            21169,
+            18849,
+            38857,
+            16843,
+            20375,
+            11,
+            12466,
+            120,
+            18849,
+            21169,
+            0
+          ],
+          "tokenCount": 13,
+          "bytesPerToken": 1.6153846153846154
+        },
+        "gpt4": {
+          "tokens": [
+            "Пр",
+            "ив",
+            "ет",
+            ",",
+            "␣м",
+            "ир",
+            "!"
+          ],
+          "tokenIds": [
+            54745,
+            28089,
+            8341,
+            11,
+            11562,
+            78746,
+            0
+          ],
+          "tokenCount": 7,
+          "bytesPerToken": 3.0
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣",
+            "<unk>",
+            "ри",
+            "в",
+            "ет",
+            ",",
+            "␣",
+            "ми",
+            "р",
+            "!"
+          ],
+          "tokenIds": [
+            3,
+            2,
+            14709,
+            6609,
+            15042,
+            6,
+            3,
+            21325,
+            8452,
+            55
+          ],
+          "tokenCount": 10,
+          "bytesPerToken": 2.1
+        }
+      }
+    },
+    {
+      "id": "numbers-short",
+      "text": "I have 12 apples and 345 oranges.",
+      "category": "numbers",
+      "label": "Numbers: short",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "I",
+            "␣have",
+            "␣12",
+            "␣apples",
+            "␣and",
+            "␣345",
+            "␣oranges",
+            "."
+          ],
+          "tokenIds": [
+            40,
+            423,
+            1105,
+            22514,
+            290,
+            39937,
+            48389,
+            13
+          ],
+          "tokenCount": 8,
+          "bytesPerToken": 4.125
+        },
+        "gpt4": {
+          "tokens": [
+            "I",
+            "␣have",
+            "␣",
+            "12",
+            "␣apples",
+            "␣and",
+            "␣",
+            "345",
+            "␣oranges",
+            "."
+          ],
+          "tokenIds": [
+            40,
+            617,
+            220,
+            717,
+            41776,
+            323,
+            220,
+            12901,
+            85138,
+            13
+          ],
+          "tokenCount": 10,
+          "bytesPerToken": 3.3
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣I",
+            "␣have",
+            "␣12",
+            "␣apples",
+            "␣and",
+            "␣3",
+            "45",
+            "␣orange",
+            "s",
+            "."
+          ],
+          "tokenIds": [
+            27,
+            43,
+            586,
+            16981,
+            11,
+            220,
+            2128,
+            5470,
+            7,
+            5
+          ],
+          "tokenCount": 10,
+          "bytesPerToken": 3.3
+        }
+      }
+    },
+    {
+      "id": "numbers-long",
+      "text": "Pi is approximately 3.14159265358979323846.",
+      "category": "numbers",
+      "label": "Numbers: long (pi)",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "Pi",
+            "␣is",
+            "␣approximately",
+            "␣3",
+            ".",
+            "14",
+            "159",
+            "265",
+            "35",
+            "89",
+            "793",
+            "238",
+            "46",
+            "."
+          ],
+          "tokenIds": [
+            38729,
+            318,
+            6702,
+            513,
+            13,
+            1415,
+            19707,
+            22980,
+            2327,
+            4531,
+            44750,
+            23721,
+            3510,
+            13
+          ],
+          "tokenCount": 14,
+          "bytesPerToken": 3.0714285714285716
+        },
+        "gpt4": {
+          "tokens": [
+            "Pi",
+            "␣is",
+            "␣approximately",
+            "␣",
+            "3",
+            ".",
+            "141",
+            "592",
+            "653",
+            "589",
+            "793",
+            "238",
+            "46",
+            "."
+          ],
+          "tokenIds": [
+            35867,
+            374,
+            13489,
+            220,
+            18,
+            13,
+            9335,
+            20128,
+            21598,
+            22905,
+            24531,
+            13895,
+            2790,
+            13
+          ],
+          "tokenCount": 14,
+          "bytesPerToken": 3.0714285714285716
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣Pi",
+            "␣is",
+            "␣approximately",
+            "␣3.",
+            "14",
+            "15",
+            "92",
+            "65",
+            "35",
+            "89",
+            "79",
+            "32",
+            "38",
+            "46",
+            "."
+          ],
+          "tokenIds": [
+            2745,
+            19,
+            3241,
+            1877,
+            2534,
+            1808,
+            4508,
+            4122,
+            2469,
+            3914,
+            4440,
+            2668,
+            3747,
+            4448,
+            5
+          ],
+          "tokenCount": 15,
+          "bytesPerToken": 2.8666666666666667
+        }
+      }
+    },
+    {
+      "id": "python-code",
+      "text": "def hello():\n    print('world')\nhello()",
+      "category": "code",
+      "label": "Code: Python function",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "def",
+            "␣hello",
+            "():",
+            "↵",
+            "␣",
+            "␣",
+            "␣",
+            "␣print",
+            "('",
+            "world",
+            "')",
+            "↵",
+            "hello",
+            "()"
+          ],
+          "tokenIds": [
+            4299,
+            23748,
+            33529,
+            198,
+            220,
+            220,
+            220,
+            3601,
+            10786,
+            6894,
+            11537,
+            198,
+            31373,
+            3419
+          ],
+          "tokenCount": 14,
+          "bytesPerToken": 2.7857142857142856
+        },
+        "gpt4": {
+          "tokens": [
+            "def",
+            "␣hello",
+            "():↵",
+            "␣␣␣",
+            "␣print",
+            "('",
+            "world",
+            "')↵",
+            "hello",
+            "()"
+          ],
+          "tokenIds": [
+            755,
+            24748,
+            4019,
+            262,
+            1194,
+            493,
+            14957,
+            1329,
+            15339,
+            368
+          ],
+          "tokenCount": 10,
+          "bytesPerToken": 3.9
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣de",
+            "f",
+            "␣hello",
+            "()",
+            ":",
+            "␣print",
+            "(",
+            "'",
+            "world",
+            "'",
+            ")",
+            "␣hello",
+            "()"
+          ],
+          "tokenIds": [
+            20,
+            89,
+            21820,
+            9960,
+            10,
+            2281,
+            599,
+            31,
+            7276,
+            31,
+            61,
+            21820,
+            9960
+          ],
+          "tokenCount": 13,
+          "bytesPerToken": 3.0
+        }
+      }
+    },
+    {
+      "id": "json-like",
+      "text": "{\"name\": \"cat\", \"age\": 7, \"colors\": [\"black\", \"white\"]}",
+      "category": "code",
+      "label": "Code: JSON-like structure",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "{\"",
+            "name",
+            "\":",
+            "␣\"",
+            "cat",
+            "\",",
+            "␣\"",
+            "age",
+            "\":",
+            "␣7",
+            ",",
+            "␣\"",
+            "col",
+            "ors",
+            "\":",
+            "␣[\"",
+            "black",
+            "\",",
+            "␣\"",
+            "white",
+            "\"]",
+            "}"
+          ],
+          "tokenIds": [
+            4895,
+            3672,
+            1298,
+            366,
+            9246,
+            1600,
+            366,
+            496,
+            1298,
+            767,
+            11,
+            366,
+            4033,
+            669,
+            1298,
+            14631,
+            13424,
+            1600,
+            366,
+            11186,
+            8973,
+            92
+          ],
+          "tokenCount": 22,
+          "bytesPerToken": 2.5
+        },
+        "gpt4": {
+          "tokens": [
+            "{\"",
+            "name",
+            "\":",
+            "␣\"",
+            "cat",
+            "\",",
+            "␣\"",
+            "age",
+            "\":",
+            "␣",
+            "7",
+            ",",
+            "␣\"",
+            "colors",
+            "\":",
+            "␣[\"",
+            "black",
+            "\",",
+            "␣\"",
+            "white",
+            "\"]}"
+          ],
+          "tokenIds": [
+            5018,
+            609,
+            794,
+            330,
+            4719,
+            498,
+            330,
+            425,
+            794,
+            220,
+            22,
+            11,
+            330,
+            21712,
+            794,
+            4482,
+            11708,
+            498,
+            330,
+            5902,
+            93546
+          ],
+          "tokenCount": 21,
+          "bytesPerToken": 2.619047619047619
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣",
+            "<unk>",
+            "\"",
+            "name",
+            "\"",
+            ":",
+            "␣\"",
+            "cat",
+            "\",",
+            "␣\"",
+            "age",
+            "\"",
+            ":",
+            "␣7,",
+            "␣\"",
+            "color",
+            "s",
+            "\"",
+            ":",
+            "␣[",
+            "\"",
+            "black",
+            "\",",
+            "␣\"",
+            "white",
+            "\"",
+            "]",
+            "<unk>"
+          ],
+          "tokenIds": [
+            3,
+            2,
+            121,
+            4350,
+            121,
+            10,
+            96,
+            2138,
+            1686,
+            96,
+            545,
+            121,
+            10,
+            7973,
+            96,
+            9910,
+            7,
+            121,
+            10,
+            784,
+            121,
+            19699,
+            1686,
+            96,
+            13698,
+            121,
+            908,
+            2
+          ],
+          "tokenCount": 28,
+          "bytesPerToken": 1.9642857142857142
+        }
+      }
+    },
+    {
+      "id": "emoji",
+      "text": "🐱 🪑 🛏",
+      "category": "special",
+      "label": "Emoji: three emoji",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "�",
+            "�",
+            "�",
+            "␣�",
+            "�",
+            "�",
+            "␣�",
+            "�",
+            "�"
+          ],
+          "tokenIds": [
+            8582,
+            238,
+            109,
+            12520,
+            103,
+            239,
+            12520,
+            249,
+            237
+          ],
+          "tokenCount": 9,
+          "bytesPerToken": 1.5555555555555556
+        },
+        "gpt4": {
+          "tokens": [
+            "�",
+            "�",
+            "�",
+            "␣�",
+            "�",
+            "�",
+            "␣�",
+            "�",
+            "�"
+          ],
+          "tokenIds": [
+            9468,
+            238,
+            109,
+            11410,
+            103,
+            239,
+            11410,
+            249,
+            237
+          ],
+          "tokenCount": 9,
+          "bytesPerToken": 1.5555555555555556
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣",
+            "<unk>",
+            "␣",
+            "<unk>",
+            "␣",
+            "<unk>"
+          ],
+          "tokenIds": [
+            3,
+            2,
+            3,
+            2,
+            3,
+            2
+          ],
+          "tokenCount": 6,
+          "bytesPerToken": 2.3333333333333335
+        }
+      }
+    },
+    {
+      "id": "solidgoldmagikarp",
+      "text": " SolidGoldMagikarp",
+      "category": "special",
+      "label": "Glitch token: SolidGoldMagikarp",
+      "tokenizations": {
+        "gpt2": {
+          "tokens": [
+            "␣SolidGoldMagikarp"
+          ],
+          "tokenIds": [
+            43453
+          ],
+          "tokenCount": 1,
+          "bytesPerToken": 18.0
+        },
+        "gpt4": {
+          "tokens": [
+            "␣Solid",
+            "Gold",
+            "Mag",
+            "ik",
+            "arp"
+          ],
+          "tokenIds": [
+            22925,
+            26509,
+            34015,
+            1609,
+            8035
+          ],
+          "tokenCount": 5,
+          "bytesPerToken": 3.6
+        },
+        "sentencepiece-t5": {
+          "tokens": [
+            "␣Solid",
+            "Gold",
+            "Mag",
+            "i",
+            "kar",
+            "p"
+          ],
+          "tokenIds": [
+            12974,
+            23576,
+            22909,
+            23,
+            4031,
+            102
+          ],
+          "tokenCount": 6,
+          "bytesPerToken": 3.0
+        }
+      }
+    }
+  ]
+}
