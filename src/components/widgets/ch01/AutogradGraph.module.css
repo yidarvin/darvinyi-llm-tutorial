@@ -1,0 +1,220 @@
+.widget {
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.headerBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.phaseLabel {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.phaseFwd { color: var(--cyan-300); border-color: var(--cyan-500); }
+.phaseBwd { color: var(--amber-500); border-color: var(--amber-500); }
+
+.stageLabel {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.description {
+  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.45;
+  min-height: 2.5rem;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+}
+
+.svg :global(.node) {
+  cursor: pointer;
+  outline: none;
+}
+.svg :global(.node-rect) {
+  fill: var(--bg-elevated);
+  stroke: var(--border-default);
+  stroke-width: 1.5;
+  transition: stroke 250ms cubic-bezier(0.22, 1, 0.36, 1),
+              fill 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.svg :global(.node-forward .node-rect) {
+  stroke: var(--cyan-500);
+  stroke-width: 2;
+  fill: rgba(6, 182, 212, 0.10);
+}
+.svg :global(.node-backward .node-rect) {
+  stroke: var(--amber-500);
+  stroke-width: 2;
+  fill: rgba(245, 158, 11, 0.10);
+}
+.svg :global(.node-hovered .node-rect) {
+  stroke: var(--cyan-300);
+  stroke-width: 2;
+}
+
+.svg :global(.node-op) {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.svg :global(.node-divider) {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.svg :global(.node-data) {
+  fill: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.svg :global(.node-grad) {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+.svg :global(.node-grad-nonzero) {
+  fill: var(--amber-500);
+}
+.svg :global(.node-backward .node-grad) {
+  fill: var(--amber-500);
+}
+.svg :global(.node-hovered .node-data) {
+  fill: var(--cyan-300);
+}
+
+.svg :global(.edge) {
+  fill: none;
+  stroke: var(--border-default);
+  stroke-width: 1.5;
+  opacity: 0.5;
+  transition: opacity 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.svg :global(.edge-forward) {
+  stroke: var(--cyan-400);
+  opacity: 0.95;
+  stroke-dasharray: 5 5;
+  animation: flow-fwd 900ms linear infinite;
+}
+.svg :global(.edge-backward) {
+  stroke: var(--amber-500);
+  opacity: 0.95;
+  stroke-dasharray: 5 5;
+  animation: flow-bwd 900ms linear infinite;
+}
+
+@keyframes flow-fwd { to { stroke-dashoffset: -20; } }
+@keyframes flow-bwd { to { stroke-dashoffset: 20; } }
+
+.tooltipBox {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  min-height: 90px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.tooltipTitle {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.tooltipCode {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.controlPrimary {
+  padding: 0.5rem 1rem;
+  background: var(--cyan-500);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.controlPrimary:hover { background: var(--cyan-400); }
+
+.controlSecondary {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.controlSecondary:hover:not(:disabled) {
+  color: var(--cyan-300);
+  border-color: var(--cyan-500);
+}
+.controlSecondary:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svg :global(.edge-forward),
+  .svg :global(.edge-backward) {
+    animation: none;
+  }
+  .svg :global(.node-rect) {
+    transition: none;
+  }
+}

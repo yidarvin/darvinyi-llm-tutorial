@@ -6,7 +6,7 @@ description: The math and code of neural network primitives — affine maps, act
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { BackpropVisualizer, TrainingCurves } from '@components/widgets';
+import { BackpropVisualizer, TrainingCurves, AutogradGraph } from '@components/widgets';
 
 Before a transformer, any neural network. Before any neural network, four things: a way to combine inputs (the affine map), a way to break linearity (the activation), a way to measure wrongness (the loss), and a way to reduce it (gradient descent). Every architecture in the chapters that follow — attention blocks, FFNs, MoE routers, state-space models — composes these four things at greater scale.
 
@@ -583,11 +583,175 @@ From here on, this tutorial uses PyTorch wherever the production form matters. T
 
 Two extensions are worth knowing about before moving on. First, the engine above tracks scalar values; production frameworks track tensor values, and the local gradient rules generalize to tensor operations (matrix multiplication, broadcasting, reductions). The graph structure is identical; the per-node math is heavier. Second, building the graph dynamically on every forward pass — what PyTorch calls "eager mode" — has a cost: graph construction is Python-level and not free at scale. JAX's response is to trace the forward pass once and JIT-compile the resulting graph, paying the construction cost once and reusing the compiled artifact. The tradeoff is flexibility versus throughput; modern stacks combine both.
 
-<WidgetFrame title="Walk the computational graph" caption="Click through a small forward pass; then walk the backward pass step by step.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 10
-  </div>
+<WidgetFrame title="Walk the computational graph" caption="A six-node DAG showing scalar autograd. Step through forward to compute values; step through backward to watch gradients flow. Hover any node to see its _backward closure as Python code.">
+  <AutogradGraph client:visible />
 </WidgetFrame>
+
+## Exercises
+
+The exercises below build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first, peek only if you stall.
+
+### Exercise 1 (easy) — Verify softmax numerical stability
+
+Implement the naive softmax (`np.exp(z) / np.exp(z).sum()`) and the stable softmax (max-subtraction). For each, evaluate on `z = [1000, 999, 998]` and report what happens. The lesson is that the mathematically equivalent forms are *not* numerically equivalent in finite-precision arithmetic.
+
+<details>
+<summary>Hint</summary>
+
+The naive version overflows because `np.exp(1000)` returns `inf`, and `inf / inf` is `nan`. The stable version subtracts the max first, so all exponents are non-positive and `np.exp` returns a value in `(0, 1]`. The resulting probabilities should be approximately `[0.665, 0.244, 0.090]`.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax_naive(z):
+    # TODO: implement the naive (overflowing) version
+    pass
+
+def softmax_stable(z):
+    # TODO: implement the stable (max-subtraction) version
+    pass
+
+z = np.array([1000.0, 999.0, 998.0])
+print("naive:  ", softmax_naive(z))
+print("stable: ", softmax_stable(z))
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Extend the MLP to 3 hidden layers
+
+The MLP in section 5 has one hidden layer. Extend it to three hidden layers (input → h1 → h2 → h3 → output) and train it on the same quadrant task. Does it converge faster, slower, or similarly to the 1-hidden-layer version? The toy task is benign enough that the answer is interesting either way.
+
+<details>
+<summary>Hint</summary>
+
+You need three weight matrices and three bias vectors plus the output projection. The forward pass has three (affine + ReLU) blocks before the final logits. The backward pass has three corresponding gradient computations — each layer's `dz` depends on the next layer's weights and gradient, by the chain rule. Use He init (`std = sqrt(2 / fan_in)`) for each layer.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+def relu(x): return np.maximum(0, x)
+def relu_grad(x): return (x > 0).astype(x.dtype)
+
+class MLP3:
+    def __init__(self, d_in, d_h, d_out, seed=42):
+        rng = np.random.default_rng(seed)
+        # TODO: initialize W1, b1, W2, b2, W3, b3, W_out, b_out
+        # Use He init: std = sqrt(2 / fan_in)
+        pass
+
+    def forward(self, x):
+        # TODO: forward through three hidden layers + output
+        pass
+
+    def backward(self, y_true):
+        # TODO: backward through three hidden layers + output
+        pass
+
+# Compare to the 1-hidden-layer MLP from section 5.
+# Train both on the quadrant task. Report which converges faster.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Implement AdamW from scratch
+
+Take the Adam class from section 7 and modify it to implement AdamW (Loshchilov & Hutter 2017). The key difference: weight decay is applied to the parameter directly (`p -= lr * weight_decay * p`) AFTER the standard Adam update, NOT added to the gradient. Compare AdamW (with `weight_decay=0.01`) to plain Adam on the elongated quadratic from section 7.
+
+<details>
+<summary>Hint</summary>
+
+In `Adam.step`, after the line `p -= lr * m_hat / (np.sqrt(v_hat) + eps)`, add a second update: `p -= lr * weight_decay * p`. This decoupled decay means the magnitude of the decay isn't affected by Adam's per-parameter rescaling — which is exactly the property AdamW restores.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+class AdamW:
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
+        self.params = params
+        self.lr = lr
+        self.b1, self.b2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+        # TODO: initialize m and v as in Adam
+        self.t = 0
+
+    def step(self, grads):
+        # TODO: standard Adam update, then add decoupled weight decay
+        pass
+
+# Test it: minimize f(x, y) = x^2 + 10 * y^2 with weight_decay=0.01.
+# Compare trajectories to plain Adam (no weight decay).
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Build a tiny autograd engine
+
+Implement a minimal `Value` class in the micrograd style, supporting `+`, `*`, `relu`, and `backward()`. Use it to compute a tiny scalar expression and verify the gradients by hand. The point isn't speed — it's seeing that autograd is just careful graph traversal applied to the chain rule.
+
+<details>
+<summary>Hint</summary>
+
+Each `Value` object stores: `data`, `grad`, `_backward` (a closure), `_prev` (set of parent Values), and `_op` (a string label). Operations build the graph as they execute — each new `Value` records its parents. `backward()` does a topological sort then walks in reverse, calling each node's `_backward()`. The section 8 code block in the chapter shows the exact pattern.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import math
+
+class Value:
+    def __init__(self, data, _children=(), _op=''):
+        self.data = data
+        self.grad = 0.0
+        self._backward = lambda: None
+        self._prev = set(_children)
+        self._op = _op
+
+    def __add__(self, other):
+        # TODO: implement + with correct _backward
+        pass
+
+    def __mul__(self, other):
+        # TODO: implement * with correct _backward
+        pass
+
+    def relu(self):
+        # TODO: implement relu with correct _backward
+        pass
+
+    def backward(self):
+        # TODO: topo sort, then walk in reverse calling each node's _backward
+        pass
+
+# Test:
+x, w, b = Value(2.0), Value(-3.0), Value(1.0)
+L = (x * w + b).relu()
+L.backward()
+print(f"L = {L.data}")
+print(f"dL/dx = {x.grad}, dL/dw = {w.grad}, dL/db = {b.grad}")
+# Expected: L = 0.0 (because x*w + b = -5, and relu(-5) = 0)
+# So all grads should be 0 too.
+`}
+  packages={[]}
+/>
+
+If you finish Exercise 4 in working form, you have essentially recreated [Karpathy's micrograd](https://github.com/karpathy/micrograd) — the smallest serious autograd engine that ships. PyTorch, JAX, and TensorFlow are doing the same thing, just at scale.
 
 ## What we built
 
