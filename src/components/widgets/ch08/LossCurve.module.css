@@ -1,0 +1,180 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.controlPrimary,
+.controlSecondary {
+  padding: 0.4rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms, background 200ms;
+}
+.controlPrimary {
+  background: color-mix(in srgb, var(--cyan-500) 18%, transparent);
+  color: var(--cyan-300);
+  border: 1px solid var(--cyan-500);
+}
+.controlPrimary:hover { background: color-mix(in srgb, var(--cyan-500) 28%, transparent); }
+.controlSecondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+.controlSecondary:hover { color: var(--cyan-300); border-color: var(--cyan-500); }
+.scrubber { flex: 1; min-width: 200px; accent-color: var(--cyan-500); }
+.stepLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--cyan-300);
+  min-width: 100px;
+  text-align: right;
+}
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.curvePanel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+.curveSvg {
+  width: 100%;
+  height: auto;
+}
+
+.gridLine {
+  stroke: var(--border-subtle);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 4;
+}
+.axisLine {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+.tickLabel {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+.axisLabel {
+  fill: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.curvePath {
+  stroke: var(--cyan-400);
+  stroke-width: 2;
+}
+.markerLine {
+  stroke: var(--cyan-300);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+}
+.markerDot {
+  fill: var(--cyan-300);
+  stroke: var(--bg-primary);
+  stroke-width: 1.5;
+}
+.baselineRef {
+  stroke: var(--rose-400);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+.baselineLabel {
+  fill: var(--rose-400);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.statCell {
+  padding: 0.6rem 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.statLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.2rem;
+}
+.statValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.samplePanel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+}
+.sampleHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+.sampleTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.sampleDescription {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--cyan-300);
+  font-style: italic;
+}
+.sampleText {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+@media (max-width: 640px) {
+  .statsRow { grid-template-columns: 1fr; }
+  .controls { flex-direction: column; align-items: stretch; }
+  .stepLabel { text-align: left; }
+}

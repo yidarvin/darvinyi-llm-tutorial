@@ -13,3 +13,4 @@ export { default as SinusoidalPE } from './ch06/SinusoidalPE';
 export { default as RoPERotation } from './ch06/RoPERotation';
 export { default as DedupInteractive } from './ch07/DedupInteractive';
 export { default as QualityFilter } from './ch07/QualityFilter';
+export { default as LossCurve } from './ch08/LossCurve';

@@ -6,6 +6,7 @@ description: Chapters 1-6 built the architecture; Chapter 7 built the data pipel
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { LossCurve } from '@components/widgets';
 
 Seven chapters in, the pieces are on the bench. Chapters 1-6 built the architecture — embeddings, attention, the transformer block, positional encoding. Chapter 7 built the data pipeline — web text filtered, deduplicated, decontaminated into a clean corpus. What is missing is the part where the architecture *learns from* the data. That gap is this chapter.
 
@@ -419,10 +420,8 @@ That is the entire control flow. A "step" is one optimizer update — one pass t
 
 A trained reader has, after reading the prose so far, an architecture from Chapter 5 and a tokenized corpus from Chapter 7. With those two and a `TrainConfig`, the reference implementation runs end to end. The code below is intentionally close to nanoGPT — minimal, runnable, and structured to make every step traceable to the prose.
 
-<WidgetFrame title="Training trajectory" caption="A small character-level transformer training on Tiny Shakespeare (~1 MB of text). The loss curve drops from random initialization to a converged value; sample generations at each checkpoint show the model going from gibberish to grammatical Shakespearean English. Scrub through the training process to watch the model improve in real time.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 37 (marquee)
-  </div>
+<WidgetFrame title="Training trajectory" caption="A small character-level transformer training on Tiny Shakespeare for 5000 steps. The loss curve drops from random baseline (~4.4) to ~1.2. Sample text generations at 9 snapshots show the model progressing from pure random characters to coherent Shakespeare-style dialogue. Scrub through training to watch the model improve, or hit Play to auto-advance.">
+  <LossCurve client:visible />
 </WidgetFrame>
 
 <RunnableCode
