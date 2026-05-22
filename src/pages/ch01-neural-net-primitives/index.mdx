@@ -1,0 +1,599 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch01-neural-net-primitives
+description: The math and code of neural network primitives — affine maps, activations, gradient descent, backpropagation, and the autograd computational graph. Implemented in numpy from scratch.
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Before a transformer, any neural network. Before any neural network, four things: a way to combine inputs (the affine map), a way to break linearity (the activation), a way to measure wrongness (the loss), and a way to reduce it (gradient descent). Every architecture in the chapters that follow — attention blocks, FFNs, MoE routers, state-space models — composes these four things at greater scale.
+
+We build them in numpy from scratch so that PyTorch's autograd later reads as shorthand, not magic. Math first, code second, intuition throughout. A reader who already has these primitives in their bones can skim to Chapter 2. A reader who hasn't computed a backward pass by hand recently should slow down here — what we build is what every transformer training loop is doing underneath the autograd.
+
+## Affine + activation
+
+The only way information moves from one layer of a neural network to the next is an affine map: multiply by a matrix, add a vector.
+
+<Equation>
+$$
+y = Wx + b, \quad W \in \R^{m \times n}, \; b \in \R^m
+$$
+</Equation>
+
+That single operation does all the work of mixing inputs. $W$ is what the network learns; $b$ is a constant offset that lets the map shift away from passing through the origin. With $n$ inputs and $m$ outputs, there are $mn + m$ parameters in this layer, all of them trainable.
+
+A stack of affine maps alone would buy you nothing. Two affine maps composed are still an affine map:
+
+$$
+W_2 (W_1 x + b_1) + b_2 = (W_2 W_1)\, x + (W_2 b_1 + b_2) = W' x + b'.
+$$
+
+No matter how many layers you stack, the composition collapses to one matrix and one bias. The network would have no more expressive power than a single layer of regression. Depth would buy nothing.
+
+The fix is to break the linearity between affine maps with a pointwise nonlinearity. The dominant choice for hidden layers in modern networks is the rectified linear unit:
+
+$$
+\text{ReLU}(x) = \max(0, x).
+$$
+
+ReLU does three useful things at once. It is cheap (a single comparison per element). It does not saturate for positive inputs (gradients of magnitude 1 flow through unchanged). And it induces sparsity — about half of the activations at a randomly initialized layer are exactly zero, which acts as an implicit regularizer.
+
+There is a small zoo of alternatives. Sigmoid and tanh squash inputs into bounded ranges; they are historical defaults that still appear in attention gates and recurrent cells, but they saturate badly and make deep networks hard to train. GELU and SiLU are smooth ReLU-likes that show up in modern transformer FFN layers — Chapter 5 picks them up when we look at the SwiGLU variant Llama uses. For the implementations in this chapter, ReLU is what every hidden layer uses.
+
+The bias term deserves a sentence of its own. Without it, the affine map $y = Wx$ forces the output to pass through the origin: $x = 0 \Rightarrow y = 0$. For centered data this is benign; for almost everything else it isn't. Image pixels are in $[0, 1]$, not symmetric around zero. Token embeddings learn their own offsets but rely on biases downstream to recenter them. The conventional initialization for $b$ is zero — it contributes nothing to the first forward pass, and gradient descent fills it in.
+
+A note on terminology: "layer" in this chapter means one affine map plus its activation. Some references count them separately, so a "ten-layer MLP" might mean five affine-plus-activation pairs or ten alternating ones. We will be explicit when it matters; in this chapter "two-layer MLP" means two affine maps (with a ReLU between).
+
+<Callout type="aside">
+Modern transformer architectures often *omit* the bias on attention projections (query, key, value, output) — the saving in memory and compute is small but non-zero at scale, and the empirical loss is undetectable. They keep biases in the FFN layers. The Llama family is the standard reference for this pattern; the choice is empirical, not principled.
+</Callout>
+
+A single affine-plus-activation pair, by itself, is a one-layer network. Real architectures stack many of them. To train such a stack we need a way to ask, after one forward pass, *how wrong was this?* — and a way to translate the answer into an update to every parameter. Those are the next two sections.
+
+## Measuring wrongness — loss functions
+
+The forward pass produces a prediction; the loss is a scalar that measures how far that prediction is from the truth. Lower means better. Training reduces to *minimize this scalar over parameters*. Two losses cover the vast majority of cases.
+
+For regression — when the target $y$ is a real number — mean squared error is the obvious choice:
+
+<Equation>
+$$
+L_\text{MSE} = \frac{1}{B} \sum_{b=1}^{B} (y_b - \hat{y}_b)^2.
+$$
+</Equation>
+
+Differentiable everywhere, convex in the prediction, and the gradient with respect to $\hat{y}$ is just $\frac{2}{B}(\hat{y} - y)$. MSE is what you would invent on a whiteboard if you had not seen losses before.
+
+For classification — when the target is one of $K$ classes — MSE is the wrong choice. The model produces a distribution over classes, typically as a softmax over logits. MSE between distributions ignores the simplex structure and saturates: once the predicted probability is near zero or one, the squared-error gradient vanishes even when the prediction is confidently wrong. Cross-entropy fixes both problems.
+
+<Equation>
+$$
+L_\text{CE} = -\sum_{i} y_i \log p_i, \quad p = \softmax(z).
+$$
+</Equation>
+
+Here $y$ is the one-hot encoding of the true class and $p$ is the predicted probability vector. Because $y$ is one-hot, the sum picks out a single term: $L = -\log p_{i^*}$ for the true class $i^*$. The loss is small when the model assigns high probability to the right class and grows without bound as that probability approaches zero.
+
+This is the loss every LLM training loop is minimizing. Next-token prediction is classification over the vocabulary; cross-entropy is the loss; the logit vector at each position is what the transformer produces. A model that has memorized its training corpus assigns probability 1 to the correct next token and the cross-entropy is zero. A model that has learned nothing assigns the uniform distribution and the cross-entropy is $\log K$, where $K$ is the vocabulary size — about 11.5 nats for a 100K-token vocabulary. The training loss for an LLM lives between those extremes, and reductions in cross-entropy translate directly to perplexity ($\exp(L)$) and to held-out generalization.
+
+The runnable block below shows the numerically stable softmax (max-subtraction inside the exponent) and cross-entropy on a small logit vector. Different target classes produce wildly different losses — confident-and-right is near zero, confident-and-wrong is large.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+def cross_entropy(logits, target_class):
+    p = softmax(logits)
+    return -np.log(p[target_class])
+
+logits = np.array([2.5, 1.0, -0.5, 3.2])
+print("probs:           ", softmax(logits).round(3))
+print("CE if target=3:  ", cross_entropy(logits, 3).round(3))
+print("CE if target=0:  ", cross_entropy(logits, 0).round(3))
+print("CE if target=2:  ", cross_entropy(logits, 2).round(3))
+`}
+  packages={["numpy"]}
+/>
+
+There is a clean payoff hiding inside cross-entropy that we will earn in section 4: the gradient of $L_\text{CE}$ with respect to the *pre-softmax* logits is the unreasonably tidy $p - y$. No quotient rule, no chain through the softmax. It is the cleanest gradient in this chapter, and frameworks fuse softmax with cross-entropy precisely to take advantage of it. Take that as a teaser.
+
+The loss tells us *how wrong*. The next step is *how to fix it*.
+
+## Walking downhill — gradient descent
+
+Imagine standing on a hillside in fog. You cannot see the bottom of the valley, but at your feet you can feel which way is downhill. You take a step in that direction. You feel again. You step again. Eventually you reach a minimum — or you do not, and that failure mode tells you something about the terrain or your stride.
+
+That is gradient descent. The fog is the model's parameter space. The slope at your feet is the gradient of the loss. The step is the update rule.
+
+### One parameter at a time
+
+For a loss that depends on a single parameter $\theta$, the gradient $\partial L / \partial \theta$ is a single number that points in the direction of *increasing* loss. To decrease loss, step in the opposite direction:
+
+$$
+\theta \leftarrow \theta - \alpha \, \frac{\partial L}{\partial \theta}.
+$$
+
+The scalar $\alpha$ is the learning rate — the size of the step. Take the toy loss $L(\theta) = (\theta - 3)^2$, with the gradient $\partial L / \partial \theta = 2(\theta - 3)$. Starting from $\theta = 0$ with $\alpha = 0.1$, every step pulls $\theta$ toward 3. The learning rate is small enough that the steps shrink as $\theta$ approaches the minimum.
+
+<RunnableCode
+  client:load
+  defaultCode={`# Minimize L(theta) = (theta - 3)^2 starting from theta = 0
+theta = 0.0
+lr = 0.1
+for step in range(20):
+    grad = 2 * (theta - 3)
+    theta = theta - lr * grad
+    if step % 4 == 0:
+        loss = (theta - 3) ** 2
+        print(f"step {step:2d}  theta={theta:.4f}  loss={loss:.4f}")
+`}
+  packages={[]}
+/>
+
+<Callout type="note">
+The choice $\alpha = 0.1$ above is benign. Change it to $\alpha = 1.0$ and the steps overshoot the minimum, bouncing across it forever; the loss oscillates but does not diverge. At $\alpha = 1.5$ the steps grow on each iteration and $\theta$ flies off to infinity. Edit the code and try it — the learning rate is not a knob you can ignore.
+</Callout>
+
+### Many parameters at once
+
+A real network has millions to billions of parameters. The gradient becomes a vector: one partial derivative per parameter. We collect the parameters into $\theta \in \R^p$ and write the multivariable update as
+
+<Equation label="1.gd">
+$$
+\theta_{t+1} = \theta_t - \alpha \, \nabla_\theta L(\theta_t).
+$$
+</Equation>
+
+This is the same rule, applied componentwise. Each parameter updates using its own partial derivative, independently of the others. The gradient $\nabla_\theta L$ points in the direction of steepest ascent in the loss surface; the negative gradient is the direction of steepest descent. The vector update <EqRef id="1.gd" /> is what every optimizer in section 7 will modify, never replace.
+
+One conceptual hazard worth flagging: "direction of steepest descent" is *locally* true, not globally true. The gradient at $\theta_t$ is the best direction at that point. After one step, the local picture changes — the next gradient points somewhere else. Gradient descent is a sequence of local approximations, not a search for the global minimum, and on the non-convex loss surfaces of neural networks there is no guarantee that the sequence converges to anything you would call "optimal." Empirically, on the surfaces that come out of training deep networks with stochastic mini-batches, the local descent finds basins that generalize well. The theory of *why* it works at this scale is incomplete; the empirics are settled.
+
+Two practical complications appear immediately. First, evaluating $\nabla L$ on the *full* training set every step is too slow — modern datasets have billions of examples. Instead, we estimate the gradient on a mini-batch of a few dozen to a few thousand examples sampled uniformly at random. The estimate is noisier than the true gradient, but it is enormously cheaper, and the noise is mostly harmless in expectation — the random sampling means the estimator is unbiased, and the noise averages out across steps. The optimizer name *stochastic gradient descent* — SGD — refers to this noisy estimator. Batch size becomes a hyperparameter that trades compute per step against the variance of each step.
+
+Second, we need to be able to actually compute $\nabla L$ for a stack of affine maps and activations. The chain rule is what does it; backpropagation is what makes it efficient. That is the next section, and it is the longest one in this chapter.
+
+## Backpropagation — the chain rule, applied carefully
+
+A deep network is a function composition. If the network has $n$ layers, the forward pass is
+
+$$
+\hat{y} = f_n(f_{n-1}(\cdots f_1(x; \theta_1); \cdots); \theta_n),
+$$
+
+and the loss $L$ is some scalar function of $\hat{y}$ and the target. To run gradient descent, we need $\partial L / \partial \theta_k$ for every layer $k$. A naive approach would compute each of those derivatives independently, recomputing all the intermediate quantities from scratch. The cost scales quadratically with depth, which is unacceptable for a network of any size.
+
+Backpropagation is the observation that the chain rule lets us reuse work. Compute gradients once, in reverse layer order, and the cost scales *linearly* with depth — the same as the forward pass.
+
+### The chain rule, scalar form
+
+Compose two scalar functions, $L = f(g(\theta))$. The chain rule says
+
+$$
+\frac{\partial L}{\partial \theta} = \frac{\partial L}{\partial g} \cdot \frac{\partial g}{\partial \theta}.
+$$
+
+That is all. The derivative of a composition is the product of derivatives. For three functions composed, the chain rule becomes a product of three; for a hundred functions composed, a product of a hundred. Every backward pass through a neural network is an unrolled application of this rule.
+
+A toy example clarifies. Let $g(\theta) = \theta^2$ and $f(u) = e^u$, so $L = e^{\theta^2}$. The chain rule gives $\partial L / \partial \theta = e^{\theta^2} \cdot 2\theta$. We could have differentiated directly, but the chain-rule decomposition is what generalizes: each "layer" reports its local derivative — $f$ knows $\partial f / \partial g$, $g$ knows $\partial g / \partial \theta$ — and the global gradient is their product.
+
+For a neural network, "layer" generalizes to any operation: matrix multiply, addition, ReLU, softmax, square. Each operation has a hand-coded local gradient rule. Backpropagation is the systematic application of those local rules in reverse, with the chain rule combining them.
+
+### The computational graph
+
+For a network with branches, products, and sums, the linear chain rule above is not enough. The structure to work with is a directed acyclic graph in which nodes are tensor values and edges represent operations. The forward pass walks the graph in topological order, evaluating each operation to produce its output. The backward pass walks the graph in *reverse* topological order, asking each operation a single question: *given the gradient of the loss with respect to my output, what is the gradient with respect to each of my inputs?*
+
+Think of the forward pass as executing a recipe — take ingredients, apply steps, produce a dish. The backward pass reads the recipe in reverse: at each step, attribute how much each ingredient contributed to the final taste. The chain rule is what propagates that attribution back through the recipe. Nothing is symbolic. The graph stores numerical operations on specific values, and each operation has a hand-coded rule for how its gradient passes through.
+
+This is reverse-mode automatic differentiation, and it is what every modern framework's `.backward()` does. Section 8 implements a minimal version in about thirty lines of Python. The data structure is the graph; the algorithm is a topological sort followed by a reverse traversal.
+
+There is a counterpart called *forward-mode* autodiff that walks the graph in the same direction as the forward pass, propagating tangent vectors instead of gradients. Forward mode is cheaper when the output is high-dimensional and the input is low-dimensional — exactly the opposite of the neural-network case. For neural networks, the loss is one scalar and there are millions of parameters, so reverse mode is the right asymptotic choice. Backpropagation is reverse mode applied to a particular kind of graph (a feedforward computation with a scalar output); it is not a different algorithm.
+
+<Callout type="insight">
+Cross-entropy and softmax are designed to compose cleanly under backprop. The gradient of $L_\text{CE}$ with respect to the *post*-softmax probabilities is messy (and numerically dicey, since dividing by tiny probabilities blows up). The gradient with respect to the *pre*-softmax logits is $p - y$ — clean, bounded, easy to compute. PyTorch's `cross_entropy(logits, targets)` fuses softmax and cross-entropy into one operation for exactly this reason: both efficiency and numerical stability come for free.
+</Callout>
+
+### The cross-entropy gradient (and why it's clean)
+
+The cleanness deserves a derivation. The setup: logits $z \in \R^K$, probabilities $p = \softmax(z)$, one-hot target $y$, loss $L = -\sum_i y_i \log p_i$. The goal is $\partial L / \partial z_j$.
+
+Chain rule first:
+
+$$
+\frac{\partial L}{\partial z_j} = -\sum_i y_i \frac{\partial \log p_i}{\partial z_j} = -\sum_i \frac{y_i}{p_i} \frac{\partial p_i}{\partial z_j}.
+$$
+
+The softmax derivative is the only nontrivial step. With $p_i = e^{z_i} / \sum_k e^{z_k}$, applying the quotient rule term by term gives
+
+$$
+\frac{\partial p_i}{\partial z_j} = p_i \bigl([i = j] - p_j\bigr),
+$$
+
+where $[i = j]$ is 1 if $i = j$ and 0 otherwise. Substituting back, the $p_i$ in numerator and denominator cancel:
+
+$$
+\frac{\partial L}{\partial z_j} = -\sum_i y_i \bigl([i = j] - p_j\bigr) = -y_j + p_j \sum_i y_i.
+$$
+
+The target is one-hot, so $\sum_i y_i = 1$. What survives is the boxed result that every classification loop assumes:
+
+<Equation label="1.ce-grad">
+$$
+\boxed{\frac{\partial L}{\partial z_j} = p_j - y_j.}
+$$
+</Equation>
+
+Read it geometrically. The gradient at logit $j$ is the prediction error: the model said $p_j$, the truth was $y_j$, and the gradient drives the logit in the direction that closes the gap. If the model is right, the gradient is zero; if the model is confidently wrong, the gradient is close to one in magnitude. Nothing in the rest of this chapter has a cleaner form.
+
+### Matrix form for a 2-layer MLP
+
+Now the same algebra, applied to a real network. Take a two-layer MLP: input $x$ of shape $B \times d_\text{in}$ (batch of $B$ examples), one hidden layer of width $d_h$ with ReLU, output dimension $K$ for cross-entropy classification. The forward pass:
+
+$$
+\begin{aligned}
+z_1 &= x W_1 + b_1 \quad (B \times d_h), \\
+a_1 &= \text{ReLU}(z_1), \\
+z_2 &= a_1 W_2 + b_2 \quad (B \times K), \\
+p &= \softmax(z_2, \text{axis}{=}{-}1), \\
+L &= -\tfrac{1}{B} \textstyle\sum_b \sum_k y_{bk} \log p_{bk}.
+\end{aligned}
+$$
+
+Define $\delta_2 = \partial L / \partial z_2$. By <EqRef id="1.ce-grad" />, dividing by $B$ to fold in the batch mean,
+
+$$
+\delta_2 = \tfrac{1}{B}(p - y) \quad (B \times K).
+$$
+
+The remaining gradients fall out of repeated chain-rule application, each line consistent with the shape annotations on the right:
+
+$$
+\begin{aligned}
+\frac{\partial L}{\partial W_2} &= a_1^\top \delta_2 \quad (d_h \times K), \\
+\frac{\partial L}{\partial b_2} &= \textstyle\sum_b (\delta_2)_b \quad (K,), \\
+\frac{\partial L}{\partial a_1} &= \delta_2 W_2^\top \quad (B \times d_h), \\
+\delta_1 = \frac{\partial L}{\partial z_1} &= \frac{\partial L}{\partial a_1} \odot \mathbb{1}[z_1 > 0] \quad (B \times d_h), \\
+\frac{\partial L}{\partial W_1} &= x^\top \delta_1 \quad (d_\text{in} \times d_h), \\
+\frac{\partial L}{\partial b_1} &= \textstyle\sum_b (\delta_1)_b \quad (d_h,).
+\end{aligned}
+$$
+
+Two patterns are worth memorizing. The gradient with respect to a weight matrix is always the outer product of the *incoming* activation and the *outgoing* delta: $\partial L / \partial W_k = a_{k-1}^\top \delta_k$. The gradient with respect to a bias is always the sum of the corresponding delta over the batch. The shapes force the order: $\partial L / \partial W_2$ has shape $(d_h \times K)$, so it must be $(d_h \times B)(B \times K) = a_1^\top \delta_2$, not the other way around. When in doubt, check the dimensions.
+
+The ReLU step deserves a glance. The gradient through ReLU is one wherever the input was positive and zero elsewhere — equivalent to multiplying $\partial L / \partial a_1$ elementwise by the binary mask $\mathbb{1}[z_1 > 0]$. At $z_1 = 0$ exactly, the function is not differentiable; in practice we pick $f'(0) = 0$ and move on. The probability of $z_1$ landing exactly on zero in float arithmetic is essentially nil, and even when it happens the next batch perturbs the activation. This is one of those theoretical worries that does not cash out empirically.
+
+What the matrix form makes obvious is the linear cost of backprop. Each gradient computation is a single matrix product or a single broadcast — the same order of compute as the corresponding forward operation. Total cost: roughly twice the forward pass, regardless of network depth. That is why backprop scales; that is why every framework is built around it.
+
+The widget below animates exactly this trace — forward pass, then backward pass, with shapes labeled at every step. Hover any operation to see the gradient flowing through it.
+
+<WidgetFrame title="Backprop through a 2-layer MLP" caption="Animated trace of the forward and backward pass through a small MLP. Hover over any operation to see the gradient flowing through it.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 08
+  </div>
+</WidgetFrame>
+
+The math is in place. Time to run it.
+
+## Putting it together — an MLP in numpy
+
+The full MLP is a hundred lines of numpy. It implements exactly the equations above: forward pass that caches intermediates for the backward pass, backward pass that traces the matrix-form gradients, and a training loop that calls them in sequence on mini-batches.
+
+### Forward pass
+
+The forward pass is a straight pipeline: affine, ReLU, affine, return logits. The `MLP` constructor allocates four parameter arrays — two weight matrices and two biases — and initializes them with He variance for ReLU. The forward method threads the batch through the pipeline and caches the intermediates we need for backward: the input $x$, the pre-activation $z_1$, and the hidden activation $a_1$. Without the cache, the backward pass would have to recompute the forward pass to recover those tensors. With the cache, backward becomes a sequence of matrix products on tensors we already have.
+
+The forward method does *not* apply softmax. Softmax is folded into the loss for numerical stability, and the backward pass needs raw logits to use the clean gradient $\partial L / \partial z_2 = (p - y) / B$ from section 4. Mixing softmax into the forward path here would force us to compute a less stable gradient through the softmax separately.
+
+### Backward pass
+
+The backward pass implements the matrix-form derivation directly. Reading top to bottom, each line corresponds to one gradient equation from section 4. We start at the loss and walk backward: compute $p$ from the cached logits, build the one-hot target, form $\delta_2 = (p - y) / B$, then chain $\delta_2$ backward through the second affine, through ReLU, through the first affine. The cleanest check that the implementation is right is dimensional: every output gradient has the same shape as the parameter it corresponds to. If `dW1` is not $(d_\text{in} \times d_h)$, something is transposed wrong.
+
+A subtler check is the gradient through the activation. The line `dz1 = da1 * relu_grad(self.z1)` is the elementwise multiplication of an upstream gradient with the ReLU derivative — exactly the $\delta_1 = \partial L / \partial a_1 \odot \mathbb{1}[z_1 > 0]$ from the derivation. The mask is computed from $z_1$, not $a_1$ — the gradient of ReLU is one wherever the *input* was positive, regardless of what the output looks like.
+
+### Training on a toy task
+
+The toy task is to classify 2D points by quadrant — four classes, two input dimensions, sixteen hidden units. We sample a thousand points from a unit Gaussian, label them by which quadrant they fall in (encoded 0–3), and train on mini-batches of size 64 for five hundred steps. The expected behavior: loss drops from $\approx \log 4 \approx 1.39$ at random initialization (the cross-entropy of a uniform distribution over four classes) toward zero, and accuracy on the mini-batch passes 95% within the first few hundred steps. If the loss were stuck at 1.39 after a hundred steps, something would be wrong — most likely a sign error in the gradient or a transposed matrix product.
+
+The reduction convention matters: we divide $\delta_2$ by the batch size $B$, which means the reported loss and the gradient magnitude are both *means* over the batch. Doubling the batch size leaves the effective per-step gradient roughly unchanged, which is what you want — the learning rate stays stable across batch sizes. Some implementations sum instead of average and pay the price elsewhere, often by scaling the learning rate by $1/B$ to compensate. Pick one convention and stay with it; mixing them is a reliable source of mysterious bugs.
+
+What this script does *not* do is anything fancy. There is no momentum, no learning rate schedule, no gradient clipping, no validation split, no early stopping. The numbers in the loss are noisy because the gradient is estimated on small mini-batches. The accuracy is computed on the same batch we just trained on, which overstates how well the model generalizes. All of those omissions are deliberate: we want the minimum viable training loop visible in one screen of code. Production training stacks add the missing pieces one at a time, and Chapter 8 walks through them when the scale demands it.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+def relu(x):
+    return np.maximum(0, x)
+
+def relu_grad(x):
+    return (x > 0).astype(x.dtype)
+
+class MLP:
+    def __init__(self, d_in, d_h, d_out, seed=42):
+        rng = np.random.default_rng(seed)
+        # He init for ReLU: variance 2 / fan_in
+        self.W1 = rng.normal(0, np.sqrt(2.0 / d_in),  size=(d_in, d_h))
+        self.b1 = np.zeros(d_h)
+        self.W2 = rng.normal(0, np.sqrt(2.0 / d_h),   size=(d_h, d_out))
+        self.b2 = np.zeros(d_out)
+
+    def forward(self, x):
+        self.x  = x
+        self.z1 = x @ self.W1 + self.b1
+        self.a1 = relu(self.z1)
+        self.z2 = self.a1 @ self.W2 + self.b2
+        return self.z2
+
+    def backward(self, y_true):
+        B, K = self.z2.shape
+        p = softmax(self.z2)
+        y_onehot = np.eye(K)[y_true]
+        dz2 = (p - y_onehot) / B
+        dW2 = self.a1.T @ dz2
+        db2 = dz2.sum(axis=0)
+        da1 = dz2 @ self.W2.T
+        dz1 = da1 * relu_grad(self.z1)
+        dW1 = self.x.T @ dz1
+        db1 = dz1.sum(axis=0)
+        return dW1, db1, dW2, db2
+
+# Toy task: classify 2D points by quadrant (4 classes)
+rng = np.random.default_rng(0)
+N = 1000
+x_data = rng.normal(0, 1, size=(N, 2))
+y_data = ((x_data[:, 0] > 0).astype(int) +
+          (x_data[:, 1] > 0).astype(int) * 2)
+
+mlp = MLP(d_in=2, d_h=16, d_out=4, seed=42)
+lr = 0.05
+for step in range(500):
+    idx = rng.integers(0, N, size=64)
+    xb, yb = x_data[idx], y_data[idx]
+    logits = mlp.forward(xb)
+    grads = mlp.backward(yb)
+    for p, g in zip([mlp.W1, mlp.b1, mlp.W2, mlp.b2], grads):
+        p -= lr * g
+    if step % 50 == 0:
+        pred = logits.argmax(axis=-1)
+        acc = (pred == yb).mean()
+        p_full = softmax(logits)
+        loss = -np.log(p_full[np.arange(len(yb)), yb] + 1e-12).mean()
+        print(f"step {step:3d}  loss {loss:.4f}  acc {acc:.2%}")
+`}
+  packages={["numpy"]}
+  height={420}
+/>
+
+<Callout type="note">
+The update step above is plain SGD — no momentum, no adaptive scaling. It works because the loss surface for the quadrant task is benign. On a real LLM, plain SGD would be painfully slow and unstable. Section 7 walks through the optimizers (momentum, Adam, AdamW) that production training uses, and why.
+</Callout>
+
+The widget below visualizes how training curves differ between SGD, SGD with momentum, and Adam on this same setup. Run the cell above to convince yourself the model trains; the widget makes the comparison visual.
+
+<WidgetFrame title="Training curves — SGD vs Momentum vs Adam" caption="Same MLP, same data, three optimizers. Note how Adam reaches lower loss faster but isn't always best at the end.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 09
+  </div>
+</WidgetFrame>
+
+What we glossed over: initialization and optimizers. Both matter exponentially as networks get deep. The next two sections cover them.
+
+## Initialization — why it matters more than you think
+
+The MLP above used the line `np.sqrt(2.0 / d_in)` for the weight standard deviation without comment. That choice is *He initialization*, and it is not arbitrary.
+
+Consider a deep network of randomly initialized linear layers. If the weight variance is too small, the activations at each layer shrink toward zero — by the time you reach the output, the signal is gone and gradients vanish. If the weight variance is too large, the activations explode — gradients overflow and training diverges within a step or two. Either failure mode happens before the optimizer has a chance to do anything useful.
+
+The variance-preservation argument fixes the scale. Assume the input activations have mean zero and variance $\sigma^2$. For the output of a linear layer $y = Wx$ to have the same variance, the weight variance must be $\sigma^2 / n_\text{in}$, where $n_\text{in}$ is the input dimension. This is the *Glorot* (or Xavier) initialization — designed for symmetric activations like tanh and sigmoid:
+
+<Equation>
+$$
+W \sim \mathcal{N}\!\left(0, \, \frac{2}{n_\text{in} + n_\text{out}}\right) \quad \text{(Glorot)}.
+$$
+</Equation>
+
+The symmetric average of $n_\text{in}$ and $n_\text{out}$ keeps both the forward and backward signals well-scaled.
+
+ReLU breaks the assumption. Because ReLU zeros out roughly half its inputs, the activation variance halves at every layer under Glorot init. He, Zhang, Ren, and Sun's 2015 paper added the missing factor of 2:
+
+<Equation>
+$$
+W \sim \mathcal{N}\!\left(0, \, \frac{2}{n_\text{in}}\right) \quad \text{(He)}.
+$$
+</Equation>
+
+This is what every ReLU-family network uses today, including transformers (which use GELU or SiLU — both ReLU-family enough that He init still applies). There is a long literature on alternatives (orthogonal, Fixup, LSUV) but for the architectures in this tutorial, He is the answer 99% of the time.
+
+<Callout type="warning">
+A common assumption: *initialization barely matters; the optimizer will figure it out.* This is wrong, and the failure mode is silent. With He init, a hundred-layer ReLU network trains. With $W \sim \mathcal{N}(0, 0.01)$ at the same depth, the activations vanish in the first few layers and the network *never* trains — the loss stays at its initial value forever. The deeper the network, the more init matters, and the curve is exponential.
+</Callout>
+
+The MLP in section 5 was shallow enough that the He factor of 2 is not strictly necessary. At a depth of two it still trains under Glorot, or even under unit-variance init. It is the discipline of using the right thing at small scale that prevents a hundred-hour debugging session at large scale.
+
+## Better optimizers — momentum, Adam, AdamW
+
+SGD takes each mini-batch gradient at face value. That gradient is a noisy estimate of the *true* gradient over the full dataset — useful in expectation, but noisy in any given step. SGD's noise tolerance is mostly empirical: on convex problems with well-conditioned loss surfaces, it converges fine. On the loss surfaces of deep networks, plain SGD is fragile, slow, and sensitive to the learning rate. Two ideas — momentum and adaptive learning rates — collapse most of the variance.
+
+### Momentum
+
+The momentum update accumulates an exponentially weighted average of gradients into a velocity term, and steps in the velocity direction rather than the instantaneous gradient direction:
+
+<Equation>
+$$
+v_t = \mu v_{t-1} + g_t, \quad \theta_t = \theta_{t-1} - \alpha v_t.
+$$
+</Equation>
+
+The decay coefficient $\mu \in [0, 1)$ controls how much past gradients matter; a typical value is $\mu = 0.9$, meaning each gradient contributes to roughly ten steps of velocity before decaying out. The physical picture: a ball rolling down a noisy hillside. Pure SGD is a sticky ball that follows every micro-bump. With momentum, the ball builds velocity in consistent directions and rolls through small perturbations rather than reacting to them. The result, in practice, is a faster effective step in directions where the gradient is stable and a damped step in directions where it is noisy.
+
+### Adam
+
+Adam (Kingma & Ba 2014) goes further. It maintains *two* exponentially weighted moments per parameter — the mean of past gradients $m_t$ (like momentum) and the mean of squared past gradients $v_t$ (the uncentered variance). The update divides by the square root of the second moment, which scales the step inversely with the historical gradient magnitude. Parameters with consistently large gradients receive smaller steps; parameters whose gradients have been small or rare receive larger steps. The effect is a per-parameter learning rate, computed for free from the gradient history.
+
+<Equation>
+$$
+\begin{aligned}
+m_t &= \beta_1 m_{t-1} + (1 - \beta_1) g_t, \\
+v_t &= \beta_2 v_{t-1} + (1 - \beta_2) g_t^2, \\
+\hat{m}_t &= \frac{m_t}{1 - \beta_1^t}, \quad \hat{v}_t = \frac{v_t}{1 - \beta_2^t}, \\
+\theta_t &= \theta_{t-1} - \alpha \, \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}.
+\end{aligned}
+$$
+</Equation>
+
+Defaults: $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$, $\alpha = 10^{-3}$. The bias-correction factors $1 / (1 - \beta^t)$ matter early — without them, the first ${\sim}100$ steps run at an effectively much smaller learning rate because $m_t$ and $v_t$ start at zero and only accumulate slowly. With $\beta_1 = 0.9$, the uncorrected $m_1$ equals $0.1 g_1$, which understates the true running mean by a factor of ten. Bias correction divides through by $1 - \beta_1 = 0.1$, restoring the right scale. After a few hundred steps, $1 - \beta_1^t \approx 1$ and the correction drops out; the early-training correctness is the whole point.
+
+Adam is the default for transformer training. Its initial convergence is fast, it tolerates a wider range of learning rates than SGD, and its per-parameter scaling handles the wildly different gradient magnitudes that appear in deep networks. The cost is two extra tensors per parameter — first and second moments — which doubles optimizer memory relative to SGD. At LLM scale this matters, but it is the price every modern training stack pays.
+
+### AdamW
+
+AdamW (Loshchilov & Hutter 2017) is one line of code different from Adam but the difference matters. The original Adam paper suggested L2 regularization via the loss: add $\tfrac{\lambda}{2} \|\theta\|^2$, which contributes $\lambda \theta$ to the gradient. That works fine in SGD. In Adam, the per-parameter scaling distorts it — parameters with large adaptive scaling get *less* effective decay than parameters with small scaling, which is backwards from what L2 regularization is supposed to do.
+
+AdamW decouples weight decay from the gradient. The Adam update runs on the raw gradient (no L2 term added in); decay is applied separately, after the adaptive step, as $\theta \leftarrow \theta - \alpha \lambda \theta$. The effect is the principled weight decay one would have wanted from L2 in SGD, restored. Modern transformers — Llama, GPT, Mistral, Gemma — all use AdamW with $\lambda$ somewhere between 0.01 and 0.1.
+
+<Callout type="aside">
+A subtle consequence of AdamW's decay being scaled by $\alpha$: weight decay automatically follows the learning rate schedule. When a cosine schedule warms the learning rate down toward the end of training, the effective weight decay shrinks too. Some implementations decouple this further (decay independent of LR), but most do not — and arguably the coupled behavior is what you want most of the time.
+</Callout>
+
+The runnable block below puts an Adam implementation on a different problem — a simple elongated quadratic, $f(x, y) = x^2 + 10 y^2$ — to make the per-parameter scaling visible. Plain SGD on this loss takes large $x$-steps and small $y$-steps. Adam normalizes them.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+class Adam:
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+        self.params = params
+        self.lr = lr
+        self.b1, self.b2 = betas
+        self.eps = eps
+        self.m = [np.zeros_like(p) for p in params]
+        self.v = [np.zeros_like(p) for p in params]
+        self.t = 0
+
+    def step(self, grads):
+        self.t += 1
+        for i, (p, g) in enumerate(zip(self.params, grads)):
+            self.m[i] = self.b1 * self.m[i] + (1 - self.b1) * g
+            self.v[i] = self.b2 * self.v[i] + (1 - self.b2) * g**2
+            m_hat = self.m[i] / (1 - self.b1**self.t)
+            v_hat = self.v[i] / (1 - self.b2**self.t)
+            p -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
+# f(x, y) = x^2 + 10 * y^2 — an elongated bowl
+params = [np.array([5.0, 5.0])]
+opt = Adam(params, lr=0.1)
+for step in range(50):
+    x, y = params[0]
+    grad = np.array([2 * x, 20 * y])
+    opt.step([grad])
+    if step % 10 == 0:
+        loss = x**2 + 10 * y**2
+        print(f"step {step:2d}  x={params[0][0]:6.3f}  y={params[0][1]:6.3f}  loss={loss:.4f}")
+`}
+  packages={["numpy"]}
+  height={360}
+/>
+
+## Autograd — the computational graph in production
+
+The MLP in section 5 hard-codes its backward pass. For each new model — a different architecture, a different operation, a different shape — we would have to derive backward by hand and write it out. That does not scale. Attention has ten primitive operations between input and output, FFN has six more, and a transformer has dozens of blocks. The arithmetic is doable but not survivable.
+
+Autograd automates the derivation. As the forward pass runs, the autograd engine records a computational graph: every operation becomes a node, and its inputs become its children. When `.backward()` is called on the loss, the engine traverses the graph in reverse topological order and applies each operation's hand-coded local gradient rule. The chain rule does the composition.
+
+Each node stores four things: its data (the forward value), its grad (the accumulated gradient, initially zero), a closure called `_backward` that knows how to propagate the gradient through this operation's local rule, and a set of parent nodes it depends on. Karpathy's micrograd repository is the canonical reference, in about 150 lines of Python. The block below implements a minimal version — addition, multiplication, ReLU, and the topological-sort backward pass — in under fifty lines.
+
+<RunnableCode
+  client:load
+  defaultCode={`class Value:
+    """A single scalar value with autograd support — micrograd-style."""
+
+    def __init__(self, data, _children=(), _op=''):
+        self.data = data
+        self.grad = 0.0
+        self._backward = lambda: None
+        self._prev = set(_children)
+        self._op = _op
+
+    def __add__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data + other.data, (self, other), '+')
+        def _backward():
+            self.grad  += 1.0 * out.grad
+            other.grad += 1.0 * out.grad
+        out._backward = _backward
+        return out
+
+    def __mul__(self, other):
+        other = other if isinstance(other, Value) else Value(other)
+        out = Value(self.data * other.data, (self, other), '*')
+        def _backward():
+            self.grad  += other.data * out.grad
+            other.grad += self.data  * out.grad
+        out._backward = _backward
+        return out
+
+    def relu(self):
+        out = Value(max(0, self.data), (self,), 'relu')
+        def _backward():
+            self.grad += (1.0 if self.data > 0 else 0.0) * out.grad
+        out._backward = _backward
+        return out
+
+    def backward(self):
+        topo, visited = [], set()
+        def build(v):
+            if v in visited: return
+            visited.add(v)
+            for child in v._prev: build(child)
+            topo.append(v)
+        build(self)
+        self.grad = 1.0
+        for v in reversed(topo): v._backward()
+
+# A tiny computation: L = (x * w + b).relu()
+x = Value(2.0)
+w = Value(-3.0)
+b = Value(1.0)
+L = (x * w + b).relu()
+L.backward()
+print(f"L     = {L.data}")
+print(f"dL/dx = {x.grad}")
+print(f"dL/dw = {w.grad}")
+print(f"dL/db = {b.grad}")
+`}
+  packages={[]}
+  height={500}
+/>
+
+The structure is the entire idea. Every framework — PyTorch, JAX, TensorFlow — implements this pattern with more primitives, GPU kernels, broadcasting, and a great deal of engineering, but the conceptual core is what is on the screen. PyTorch's eager mode builds this graph dynamically on every forward pass, then walks it on `.backward()`. JAX traces the graph once and JIT-compiles it. The data structure and the algorithm are identical.
+
+<Callout type="insight">
+Autograd is not symbolic differentiation. It does not manipulate the expression "$x^2$" to produce "$2x$" as a symbolic formula. It records that "we computed `x * x` with `x = 1.7`" and applies the chain rule numerically: when the gradient flows back through that multiplication, it picks up a factor of $1.7$ (the other operand) and a factor of $1.7$ again. The graph stores *numerical operations on specific values*, not algebraic expressions. This distinction sounds pedantic and turns out to be the central fact about how the system works.
+</Callout>
+
+From here on, this tutorial uses PyTorch wherever the production form matters. The numpy-from-scratch tour ends here. What we built in this chapter is exactly what PyTorch's autograd is doing under the hood — same chain rule, same graph traversal, same matrix-form gradients. The framework is a fast, GPU-aware implementation of the structure above, not a different idea.
+
+Two extensions are worth knowing about before moving on. First, the engine above tracks scalar values; production frameworks track tensor values, and the local gradient rules generalize to tensor operations (matrix multiplication, broadcasting, reductions). The graph structure is identical; the per-node math is heavier. Second, building the graph dynamically on every forward pass — what PyTorch calls "eager mode" — has a cost: graph construction is Python-level and not free at scale. JAX's response is to trace the forward pass once and JIT-compile the resulting graph, paying the construction cost once and reusing the compiled artifact. The tradeoff is flexibility versus throughput; modern stacks combine both.
+
+<WidgetFrame title="Walk the computational graph" caption="Click through a small forward pass; then walk the backward pass step by step.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 10
+  </div>
+</WidgetFrame>
+
+## What we built
+
+Affine maps, activations, cross-entropy and MSE losses, gradient descent, backpropagation by hand on a 2-layer MLP, He initialization, SGD with and without momentum, Adam, AdamW, and a minimal autograd engine. Every transformer training loop in the chapters that follow is doing this same set of operations, scaled up: the affine maps become attention projections and feed-forward layers; the activations become GELU and SiLU; the loss stays cross-entropy because next-token prediction is classification over the vocabulary; backprop stays the same chain-rule traversal; AdamW stays the optimizer; He stays the initialization.
+
+What changes is the architecture. Chapters 4 through 6 build attention, the multi-head transformer block, and positional encoding. Before any of that, though, we need a way to turn words into vectors that a network can consume. That is Chapter 2.
