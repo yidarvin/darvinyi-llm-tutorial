@@ -6,6 +6,7 @@ description: Modern LLMs are trained on trillions of tokens of web text, but raw
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { DedupInteractive } from '@components/widgets';
 
 Six chapters in, the architecture is complete. Tokens go in. Embeddings get added to positional encodings. Attention runs, blocks stack, the last layer projects back to vocabulary space and a softmax produces probabilities. The forward pass is exactly the forward pass of every modern decoder-only LLM. What sits inside the weight matrices, though, is still random noise. The model from Chapters 1–6 is inert — a parameterized function with no preferences, no knowledge, no behavior.
 
@@ -179,10 +180,8 @@ $$\Pr[\text{candidate}] \approx 1 - (1 - s^r)^b.$$
 
 The curve is sigmoid-shaped. Below the threshold it stays near zero; above the threshold it rises sharply to one. The transition is approximately at $s^* \approx (1/b)^{1/r}$. Choose $b$ and $r$ so that $s^*$ sits near the similarity threshold you actually want — usually somewhere in $[0.7, 0.9]$ for "near-duplicate" decisions. A common production choice is $k = 200$, $b = 50$, $r = 4$, which puts the transition near $s \approx 0.38$ and reliably catches near-duplicates above $s = 0.5$. Choosing $b$ and $r$ is a tuning exercise; the chapter does not derive the curve.
 
-<WidgetFrame title="MinHash near-duplicate detection" caption="A small corpus with some intentional near-duplicates. Each document is fingerprinted via MinHash; documents with similar fingerprints get grouped as near-duplicates. Adjust the similarity threshold to see how aggressive dedup affects the kept set.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 33 (marquee)
-  </div>
+<WidgetFrame title="MinHash near-duplicate detection" caption="Eight sample documents with intentional near-duplicates. Hand-computed Jaccard similarity from character 5-shingles (MinHash with k=200 would give estimates within ~7%). Adjust the threshold to see how aggressive dedup affects the kept set. Group A and B are intentional near-duplicate clusters; documents 6, 7 are distinct; document 8 is spam.">
+  <DedupInteractive client:visible />
 </WidgetFrame>
 
 ### Implementation
