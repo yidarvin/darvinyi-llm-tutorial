@@ -20,7 +20,7 @@ export const PARTS: Part[] = [
     title: 'Foundations',
     chapters: [
       { num: 1, slug: 'ch01-neural-net-primitives', title: 'Neural network primitives', partNum: 1, status: 'published' },
-      { num: 2, slug: 'ch02-embeddings', title: 'Embeddings & representation', partNum: 1, status: 'draft' },
+      { num: 2, slug: 'ch02-embeddings', title: 'Embeddings & representation', partNum: 1, status: 'published' },
       { num: 3, slug: 'ch03-tokenization', title: 'Tokenization', partNum: 1, status: 'planned' },
     ],
   },

@@ -6,7 +6,7 @@ description: How discrete tokens become continuous vectors that a neural network
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { EmbeddingSpace } from '@components/widgets';
+import { EmbeddingSpace, Word2VecDynamics } from '@components/widgets';
 
 Chapter 1 ended with a neural network that could classify 2D points by quadrant. Coordinates in, class label out. Both ends continuous. Both ends were always going to play nicely with backprop.
 
@@ -276,10 +276,8 @@ print(f"sat <-> napped: {cos(U[word_to_id['sat']], U[word_to_id['napped']]):.3f}
 
 The widget below scales the same idea to a slightly larger toy and animates training. Each click advances a step of SGD; positive pairs visibly pull together and negative pairs push apart in a 2D projection of the embedding space.
 
-<WidgetFrame title="Skip-gram dynamics" caption="A small vocabulary of 12 words trained with skip-gram negative sampling. Click through training steps to watch related words pull together and random negatives push apart in a 2D projection.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 13
-  </div>
+<WidgetFrame title="Skip-gram dynamics" caption="A 15-word corpus trained with skip-gram negative sampling in 2D. Drag the scrubber or hit Play to watch the embeddings evolve. Categories separate; connector words stay in the middle.">
+  <Word2VecDynamics client:visible />
 </WidgetFrame>
 
 Word2vec was a 2013 paper, and most of what it produces — vectors trained on a single self-supervised objective and used downstream as fixed features — has been replaced by the embedding tables of end-to-end-trained LLMs. What did *not* go away is the geometric structure the paper revealed, and the most striking consequence of that structure is the topic of the next section.
@@ -432,6 +430,145 @@ Tying is the default in most open-source LLMs. GPT-2 ties. Llama ties. Mistral t
 <Callout type="aside">
 The parameter savings from tying are dramatic at small scale (~30% of a GPT-2-small) and diminish at large scale. For a 7B-parameter model, tied versus untied is a ~1% parameter difference — barely visible against the FFN and attention blocks that dominate. Tying remains the default at all scales mostly because it costs nothing and occasionally helps perplexity by a small margin (Press and Wolf reported ~5%). The marginal gain is empirical and not always reproducible; the parameter savings are mechanical and always real.
 </Callout>
+
+## Exercises
+
+The exercises below build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Verify category separation by cosine similarity
+
+Train the toy skip-gram model from section 4 (the 12-word corpus). Then compute cosine similarities for several pairs: within-category (e.g., `cat ↔ dog`), across-category (e.g., `cat ↔ rug`), and to connector words (e.g., `cat ↔ sat`). Report which pairs are most/least similar.
+
+<details>
+<summary>Hint</summary>
+
+After training, the `U` matrix has the word embeddings. Compute `cos(a, b) = (a @ b) / (|a| * |b|)`. Same-category words should have higher cosine than cross-category. Connector words (`sat`, `on`, `the`) should be moderately similar to many words — they co-occur with everything.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+# Re-create the toy SGNS setup from section 4 (or copy your trained U from that block)
+# Then compute cosine similarity matrix for a subset of words.
+
+def cos(a, b):
+    return (a @ b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+# TODO: train the toy SGNS model (or use the trained U from section 4's code block)
+# TODO: compute cosine similarity for these pairs:
+#       (cat, dog), (cat, mat), (cat, the), (mat, rug), (dog, mat)
+# TODO: report which pair is most similar and which is least
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Intruder detection
+
+Given a list of 4 words, identify the one that doesn't belong using only embedding similarities. For example, in `[cat, dog, fish, car]`, the intruder is `car`. The basic approach: compute the average pairwise similarity within the list, then check which word has the lowest average similarity to the others.
+
+<details>
+<summary>Hint</summary>
+
+For each candidate word $w$ in the list, compute its average cosine similarity to all other words in the list. The word with the LOWEST average similarity is the intruder. (This works because the other three words mutually reinforce each other's "category-ness.")
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+# Assume you have a trained embedding matrix E and word_to_id dict from section 4 or 6.
+
+def find_intruder(words, E, word_to_id):
+    """Return the word in the list with lowest avg similarity to the others."""
+    # TODO: for each word, compute its average cosine similarity to the other words
+    # TODO: return the word with the lowest avg
+    pass
+
+# Test cases — train embeddings first, then test:
+# find_intruder(['cat', 'dog', 'fish', 'car'], E, word_to_id)  → 'car'
+# find_intruder(['red', 'blue', 'green', 'cat'], E, word_to_id) → 'cat'
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Implement CBOW
+
+CBOW (Continuous Bag of Words) is word2vec's other variant. Instead of predicting context from a center word, CBOW predicts the center word from the *average* of its context word embeddings. Implement CBOW with negative sampling. Compare the resulting embeddings to skip-gram on the same toy corpus.
+
+<details>
+<summary>Hint</summary>
+
+For each (center, context_set) pair: average the context-word embeddings into a single vector $\bar{u}$. Then run the SGNS-style update with $\bar{u}$ in place of a single word embedding, predicting the *center* word as positive and random negatives. Gradient w.r.t. $\bar{u}$ distributes equally back to each context word.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def sigmoid(x): return 1 / (1 + np.exp(-np.clip(x, -30, 30)))
+
+# Use the same toy corpus as section 4. Then implement CBOW negative sampling.
+
+def cbow_step(U, W, center_id, context_ids, neg_ids, lr=0.05):
+    """
+    U: (vocab, dim) — context-word embeddings (this is what CBOW averages)
+    W: (vocab, dim) — center-word embeddings (predicted)
+    center_id: int — the true center word
+    context_ids: list of ints — the surrounding context words
+    neg_ids: list of ints — negative samples
+    """
+    # TODO: average the context word embeddings into u_bar
+    # TODO: compute positive and negative logits
+    # TODO: compute gradients w.r.t. u_bar, W[center_id], W[neg_ids]
+    # TODO: distribute the u_bar gradient back to each U[context_ids[i]]
+    pass
+
+# Compare to skip-gram: train both on the same corpus, then report
+# which produces tighter category clusters (by within-vs-cross-category cosine similarity).
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Linear analogy search
+
+Given three words $a$, $b$, $c$, find the word $d$ such that $\vec{d} - \vec{c} \approx \vec{b} - \vec{a}$, i.e., $d$ completes the analogy "$a$ is to $b$ as $c$ is to ?". Implement this search using your trained embeddings.
+
+<details>
+<summary>Hint</summary>
+
+Compute the target vector $t = b - a + c$. Then search the vocabulary for the word whose embedding is closest to $t$ (excluding $a$, $b$, $c$ themselves — they often score highest by accident). Use cosine similarity. With a tiny corpus, the results may be noisy; with real word2vec on Wikipedia, the king/queen result emerges.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def find_analogy(a, b, c, E, word_to_id, vocab):
+    """
+    Solve "a is to b as c is to ?"
+    Returns the word whose embedding is most similar to (E[b] - E[a] + E[c]).
+    Excludes a, b, c from candidates.
+    """
+    # TODO: compute target = E[word_to_id[b]] - E[word_to_id[a]] + E[word_to_id[c]]
+    # TODO: compute cosine similarity from target to every word in vocab
+    # TODO: exclude a, b, c, return the highest-scoring word
+    pass
+
+# Test:
+# find_analogy('cat', 'dog', 'fish', E, word_to_id, vocab)
+# (On the toy corpus, the result may not be meaningful — that's fine.
+# The point is to implement the algorithm; with real word2vec on 6B words,
+# 'king' / 'man' / 'woman' produces 'queen'.)
+`}
+  packages={["numpy"]}
+/>
+
+If you finish Exercise 4 with a working implementation and want to see it succeed on real data, download a pre-trained GloVe or word2vec model from [nlp.stanford.edu/projects/glove](https://nlp.stanford.edu/projects/glove/), load the vectors with numpy, and run your analogy search on a 6-billion-word vocabulary. With real embeddings, `king - man + woman` returns `queen` with high probability — the empirical result that put word vectors on the map.
 
 ## From token to context
 
