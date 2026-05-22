@@ -6,7 +6,7 @@ description: The math and code of neural network primitives — affine maps, act
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { BackpropVisualizer } from '@components/widgets';
+import { BackpropVisualizer, TrainingCurves } from '@components/widgets';
 
 Before a transformer, any neural network. Before any neural network, four things: a way to combine inputs (the affine map), a way to break linearity (the activation), a way to measure wrongness (the loss), and a way to reduce it (gradient descent). Every architecture in the chapters that follow — attention blocks, FFNs, MoE routers, state-space models — composes these four things at greater scale.
 
@@ -379,10 +379,8 @@ The update step above is plain SGD — no momentum, no adaptive scaling. It work
 
 The widget below visualizes how training curves differ between SGD, SGD with momentum, and Adam on this same setup. Run the cell above to convince yourself the model trains; the widget makes the comparison visual.
 
-<WidgetFrame title="Training curves — SGD vs Momentum vs Adam" caption="Same MLP, same data, three optimizers. Note how Adam reaches lower loss faster but isn't always best at the end.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 09
-  </div>
+<WidgetFrame title="Training curves — SGD vs Momentum vs Adam" caption="Three optimizers, same MLP, same data. Scrub the time slider to watch the decision boundary form; observe the loss curves to see why Adam reaches lower training loss faster.">
+  <TrainingCurves client:visible />
 </WidgetFrame>
 
 What we glossed over: initialization and optimizers. Both matter exponentially as networks get deep. The next two sections cover them.
