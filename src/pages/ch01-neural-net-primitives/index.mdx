@@ -6,6 +6,7 @@ description: The math and code of neural network primitives — affine maps, act
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { BackpropVisualizer } from '@components/widgets';
 
 Before a transformer, any neural network. Before any neural network, four things: a way to combine inputs (the affine map), a way to break linearity (the activation), a way to measure wrongness (the loss), and a way to reduce it (gradient descent). Every architecture in the chapters that follow — attention blocks, FFNs, MoE routers, state-space models — composes these four things at greater scale.
 
@@ -271,10 +272,8 @@ What the matrix form makes obvious is the linear cost of backprop. Each gradient
 
 The widget below animates exactly this trace — forward pass, then backward pass, with shapes labeled at every step. Hover any operation to see the gradient flowing through it.
 
-<WidgetFrame title="Backprop through a 2-layer MLP" caption="Animated trace of the forward and backward pass through a small MLP. Hover over any operation to see the gradient flowing through it.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 08
-  </div>
+<WidgetFrame title="Backprop through a 2-layer MLP" caption="Animated trace of the forward and backward pass through a small MLP. Switch between input presets to see how different inputs flow through the network. Hover any node or edge for the math at that point.">
+  <BackpropVisualizer client:visible />
 </WidgetFrame>
 
 The math is in place. Time to run it.
