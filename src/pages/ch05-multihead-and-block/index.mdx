@@ -6,7 +6,7 @@ description: Multi-head attention generalizes Chapter 4's single-head attention 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { MultiHeadDecomposition } from '@components/widgets';
+import { MultiHeadDecomposition, TransformerBlockFlow } from '@components/widgets';
 
 Chapter 4 was about one attention head. Real transformers have many — eight, twelve, ninety-six, depending on the model. Each head has its own learned projections, computes its own attention pattern, and produces its own slice of output. The slices are concatenated and projected back into the model's feature space. The motivation is that different heads can specialize in different relationships — locality, syntax, coreference — without the architectural complexity of separate networks.
 
@@ -382,10 +382,8 @@ Modern usage has settled almost entirely on Pre-LN. The original transformer pap
 
 The Pre-LN block in code is what every modern transformer's stacked layers look like. Two sublayers, each wrapped by a layer norm and a residual.
 
-<WidgetFrame title="Pre-LN transformer block" caption="Data flowing through one Pre-LN transformer block: input → LN → attention → residual → LN → FFN → residual → output. Each sublayer adds a refinement; the residual path carries the bulk of the signal through.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 25
-  </div>
+<WidgetFrame title="Pre-LN transformer block" caption="Data flowing through one Pre-LN transformer block: input → LN → attention → residual → LN → FFN → residual → output. The two residual arrows (in cyan) form the gradient 'highway' — each sublayer's output is added back to the unchanged input, preserving the path for backprop.">
+  <TransformerBlockFlow client:visible />
 </WidgetFrame>
 
 <RunnableCode

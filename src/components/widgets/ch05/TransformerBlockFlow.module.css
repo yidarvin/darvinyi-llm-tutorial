@@ -1,0 +1,228 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.controlPrimary {
+  padding: 0.5rem 1rem;
+  background: var(--cyan-500);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.controlPrimary:hover {
+  background: var(--cyan-400);
+}
+
+.controlSecondary {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.controlSecondary:hover {
+  color: var(--cyan-300);
+  border-color: var(--cyan-500);
+}
+
+.scrubber {
+  flex: 1;
+  min-width: 140px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border-default);
+  border-radius: 2px;
+  outline: none;
+}
+.scrubber:focus-visible {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: 4px;
+}
+.scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--cyan-500);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-primary);
+}
+.scrubber::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--cyan-500);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-primary);
+}
+
+.stepLabel {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+
+.stageTitle {
+  margin: 0.75rem 0 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.svgDiagram {
+  width: 100%;
+  height: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.opBox text {
+  fill: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+.opBox rect {
+  transition: fill 250ms, stroke 250ms, opacity 250ms;
+}
+.boxLabel {
+  pointer-events: none;
+}
+
+.boxCompleted rect {
+  fill: var(--bg-primary);
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  opacity: 0.75;
+}
+.boxActive rect {
+  fill: color-mix(in srgb, var(--cyan-500) 25%, var(--bg-primary));
+  stroke: var(--cyan-500);
+  stroke-width: 2;
+  opacity: 1;
+}
+.boxPending rect {
+  fill: var(--bg-primary);
+  stroke: var(--border-default);
+  stroke-width: 1;
+  opacity: 0.4;
+}
+
+.flowArrow {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+
+.residualArrow path {
+  stroke: var(--cyan-400);
+  stroke-width: 2;
+  opacity: 0.7;
+  transition: opacity 250ms, stroke-width 250ms;
+}
+.residualArrowHighlight path {
+  stroke-width: 3;
+  opacity: 1;
+}
+.residualLabel {
+  fill: var(--cyan-400);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.dataPanel {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.6rem;
+  font-weight: 500;
+}
+
+.dataGrid {
+  display: grid;
+  gap: 1px;
+  background: var(--border-default);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 1px;
+}
+.dataCell {
+  height: 28px;
+  cursor: pointer;
+  transition: outline-color 150ms;
+}
+.dataCell:hover {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: -2px;
+}
+
+.colLabel,
+.rowLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+.rowLabel {
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.description {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  min-height: 4rem;
+}
+
+@media (max-width: 640px) {
+  .dataCell {
+    height: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opBox rect,
+  .residualArrow path,
+  .dataCell {
+    transition: none;
+  }
+}
