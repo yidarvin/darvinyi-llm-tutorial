@@ -1,0 +1,200 @@
+/* Headings — name the thing; no acts-of-discussing-the-thing */
+h1 {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 48px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+}
+
+h2 {
+  font-size: 36px;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-top: 4rem;
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+}
+
+h4 {
+  font-size: 22px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+h5, h6 {
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Body */
+p {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  max-width: var(--container-prose);
+  margin: 0;
+}
+
+p + p {
+  margin-top: 1.5rem;
+}
+
+em { font-style: italic; }
+strong { font-weight: 500; }    /* 500, not 600 — heavier reads heavier on dark */
+
+/* Links */
+a {
+  color: var(--cyan-500);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+a:hover {
+  color: var(--cyan-300);
+  border-bottom-color: currentColor;
+}
+
+/* Lists */
+ul, ol {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  max-width: var(--container-prose);
+  padding-left: 1.5rem;
+  margin: 1rem 0;
+}
+ul { list-style: disc; }
+ol { list-style: decimal; }
+li { margin: 0; }
+li + li { margin-top: 0.5rem; }
+
+/* Blockquote */
+blockquote {
+  border-left: 2px solid var(--cyan-500);
+  background: var(--bg-elevated);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  color: var(--text-secondary);
+  max-width: var(--container-prose);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+blockquote p { color: inherit; }
+
+/* Inline code */
+:not(pre) > code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 0.92em;
+  background: var(--bg-inline);
+  color: var(--cyan-300);
+  padding: 0.125em 0.4em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Code blocks */
+pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 1.5rem 0;
+  max-width: var(--container-wide);
+}
+pre code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: inherit;
+}
+
+/* Horizontal rule */
+hr {
+  border: none;
+  border-top: 1px solid var(--border-default);
+  margin: 3rem 0;
+  max-width: var(--container-prose);
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+/* Tables (used rarely; styled minimally) */
+table {
+  width: auto;
+  max-width: var(--container-prose);
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 14px;
+}
+th, td {
+  border: 1px solid var(--border-default);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+td {
+  color: var(--text-secondary);
+}
+
+/* Skip link (accessibility) */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  background: var(--bg-elevated);
+  color: var(--cyan-300);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cyan-500);
+  z-index: var(--z-tooltip);
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

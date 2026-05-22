@@ -1,0 +1,45 @@
+---
+import '@/styles/global.css';
+
+export interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'LLM Tutorial',
+  description = 'A comprehensive tutorial from numpy primitives to LLM agent frameworks. By Darvin Yi.',
+} = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site).toString();
+const fullTitle = title === 'LLM Tutorial' ? title : `${title} · LLM Tutorial`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#0a0a0a" />
+
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+
+    <link rel="canonical" href={canonicalURL} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:site_name" content="LLM Tutorial" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+  </head>
+  <body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <slot />
+  </body>
+</html>

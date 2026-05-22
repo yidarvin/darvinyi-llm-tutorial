@@ -1,0 +1,35 @@
+/* Inter — variable, weights 100-900 */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter/Inter-Variable.woff2') format('woff2-variations'),
+       url('/fonts/inter/Inter-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter/Inter-Variable-Italic.woff2') format('woff2-variations'),
+       url('/fonts/inter/Inter-Variable-Italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* JetBrains Mono — variable, weights 100-800 (TTF; no WOFF2 in upstream release) */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Variable.ttf') format('truetype-variations'),
+       url('/fonts/jetbrains-mono/JetBrainsMono-Variable.ttf') format('truetype');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Variable-Italic.ttf') format('truetype-variations'),
+       url('/fonts/jetbrains-mono/JetBrainsMono-Variable-Italic.ttf') format('truetype');
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
