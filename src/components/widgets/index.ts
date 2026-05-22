@@ -5,3 +5,4 @@ export { default as EmbeddingSpace } from './ch02/EmbeddingSpace';
 export { default as Word2VecDynamics } from './ch02/Word2VecDynamics';
 export { default as BPETraining } from './ch03/BPETraining';
 export { default as TokenizerComparison } from './ch03/TokenizerComparison';
+export { default as AttentionHeatmap } from './ch04/AttentionHeatmap';

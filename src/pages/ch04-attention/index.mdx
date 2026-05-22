@@ -6,6 +6,7 @@ description: Scaled dot-product attention — the operation that defines the mod
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { AttentionHeatmap } from '@components/widgets';
 
 The transformer is mostly attention. The rest — embeddings, feedforward layers, normalizations, residuals — is supporting cast. Attention is what does the work of letting one position in a sequence look at every other position and decide what to take from each.
 
@@ -136,10 +137,8 @@ print(f"\\nRow sums: {weights.sum(axis=-1)}")
 
 The widget below ties the formula to a concrete sequence. The same six-position input flows through the same four operations the code above implements — $Q$ and $K$ projected from the input, their dot product producing the scores matrix, the scaling and softmax turning scores into weights, the weights blending the values into the output.
 
-<WidgetFrame title="Scaled dot-product attention" caption="Watch attention compute step by step on a 6-token sequence. Q · Kᵀ produces attention scores; softmax produces weights; weighted sum with V produces the output.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 19 (marquee)
-  </div>
+<WidgetFrame title="Scaled dot-product attention" caption="Watch attention compute step by step on the sentence 'the cat sat on the mat'. Hand-tuned Q, K, V matrices produce an interpretable local-attention pattern at the softmax stage — each token attends primarily to its neighbor.">
+  <AttentionHeatmap client:visible />
 </WidgetFrame>
 
 <Callout type="note">
