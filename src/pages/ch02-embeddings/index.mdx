@@ -6,6 +6,7 @@ description: How discrete tokens become continuous vectors that a neural network
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { EmbeddingSpace } from '@components/widgets';
 
 Chapter 1 ended with a neural network that could classify 2D points by quadrant. Coordinates in, class label out. Both ends continuous. Both ends were always going to play nicely with backprop.
 
@@ -313,10 +314,8 @@ Linear analogies are *evidence* that learned embeddings encode compositional str
 
 The widget below shows a 2D projection of pre-computed word2vec embeddings colored by semantic category, with analogy overlays drawn on top. The clusters (animals, colors, countries) are clearly visible; the parallel-arrows pattern for analogies is visible too, with the usual caveat that 2D projection compresses information and the parallelism in the projection underestimates the structure in the full 300-dimensional space.
 
-<WidgetFrame title="Word2vec embedding space" caption="A 2D projection of pre-computed word2vec embeddings, colored by semantic category. Toggle the analogy overlays to see the approximate parallelism of vector pairs (king/queen vs man/woman vs uncle/aunt).">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 12 (marquee)
-  </div>
+<WidgetFrame title="Word2vec embedding space" caption="A 2D projection of pre-computed word2vec-like embeddings, colored by semantic category. Toggle the analogy overlays to see the approximate parallelism of vector pairs.">
+  <EmbeddingSpace client:visible />
 </WidgetFrame>
 
 Word2vec is the historical anchor for this material. It is not, however, how the embeddings inside a modern LLM are trained. The next section is the corrective.
