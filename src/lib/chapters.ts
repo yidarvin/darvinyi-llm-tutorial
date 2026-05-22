@@ -28,7 +28,7 @@ export const PARTS: Part[] = [
     num: 2,
     title: 'The Transformer',
     chapters: [
-      { num: 4, slug: 'ch04-attention', title: 'Attention mechanism', partNum: 2, status: 'draft' },
+      { num: 4, slug: 'ch04-attention', title: 'Attention mechanism', partNum: 2, status: 'published' },
       { num: 5, slug: 'ch05-multihead-and-block', title: 'Multi-head attention & the transformer block', partNum: 2, status: 'planned' },
       { num: 6, slug: 'ch06-positional-encoding', title: 'Positional encoding', partNum: 2, status: 'planned' },
     ],

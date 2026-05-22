@@ -91,6 +91,73 @@ export interface Stage {
   highlight: ('X' | 'Q' | 'K' | 'V' | 'scores' | 'scaled' | 'weights' | 'output')[];
 }
 
+// ---------------------------------------------------------------------------
+// Causal mask computation (appended for session 20)
+// ---------------------------------------------------------------------------
+
+/**
+ * The causal mask: 0 on or below the diagonal; -Infinity strictly above.
+ * Added to scores before softmax — illegal positions become 0 in the
+ * post-softmax weights.
+ */
+export const CAUSAL_MASK: number[][] = (() => {
+  const m: number[][] = [];
+  for (let i = 0; i < N; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < N; j++) {
+      row.push(j > i ? -Infinity : 0);
+    }
+    m.push(row);
+  }
+  return m;
+})();
+
+/**
+ * For display purposes: a numeric representation of the mask that's friendly
+ * to the diverging color scale. -Infinity is hard to render; we use a sentinel
+ * value (-1000) that the widget interprets as "blocked".
+ */
+export const CAUSAL_MASK_DISPLAY: number[][] = (() => {
+  const m: number[][] = [];
+  for (let i = 0; i < N; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < N; j++) {
+      row.push(j > i ? -1000 : 0);
+    }
+    m.push(row);
+  }
+  return m;
+})();
+
+/** Scaled scores with the causal mask added (still pre-softmax). */
+export const MASKED_SCALED_SCORES: number[][] = SCALED_SCORES.map((row, i) =>
+  row.map((v, j) => j > i ? -Infinity : v)
+);
+
+/** Post-softmax attention weights with the causal mask applied. */
+export const MASKED_ATTENTION_WEIGHTS: number[][] = (() => {
+  return MASKED_SCALED_SCORES.map(row => {
+    const validMax = Math.max(...row.filter(v => v !== -Infinity));
+    const exps = row.map(v => v === -Infinity ? 0 : Math.exp(v - validMax));
+    const sum = exps.reduce((a, b) => a + b, 0);
+    return exps.map(v => sum === 0 ? 0 : v / sum);
+  });
+})();
+
+/** Output computed from the masked attention weights. */
+export const MASKED_OUTPUT: number[][] = (() => {
+  const m = MASKED_ATTENTION_WEIGHTS.length, n = V[0]!.length, p = V.length;
+  const out: number[][] = Array.from({ length: m }, () => new Array(n).fill(0));
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < n; j++) {
+      let s = 0;
+      for (let k = 0; k < p; k++) s += MASKED_ATTENTION_WEIGHTS[i]![k]! * V[k]![j]!;
+      out[i]![j] = s;
+    }
+  }
+  return out;
+})();
+
 export const STAGES: Stage[] = [
   {
     id: 'input',

@@ -1,0 +1,145 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+  position: relative;
+}
+
+.toggleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.toggleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+}
+.toggleButton {
+  padding: 0.4rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 200ms, border-color 200ms, background 200ms;
+}
+.toggleButton:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.toggleButtonActive {
+  color: var(--cyan-300);
+  border-color: var(--cyan-500);
+  background: color-mix(in srgb, var(--cyan-500) 12%, transparent);
+}
+
+.maskPanel,
+.attentionPanel {
+  padding: 0.9rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: opacity 300ms;
+}
+.maskPanel { margin-bottom: 1rem; }
+.attentionRow {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.attentionPanel { flex: 1 1 0; min-width: 240px; }
+
+.maskPanelActive, .panelActive { opacity: 1; }
+.maskPanelDimmed, .panelDimmed { opacity: 0.45; }
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.6rem;
+  font-weight: 500;
+}
+.panelHint {
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.matrixGrid {
+  display: grid;
+  gap: 1px;
+  background: var(--border-default);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 1px;
+}
+
+.cell, .maskCell {
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  transition: outline-color 150ms;
+}
+.cell:hover, .maskCell:hover {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: -2px;
+}
+.cell {
+  background-color: var(--bg-primary);
+}
+.maskCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+
+.colLabel, .rowLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+}
+.rowLabel { padding-right: 6px; justify-content: flex-end; }
+
+.description {
+  margin-top: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.description strong { color: var(--cyan-300); font-weight: 500; }
+
+.hoverReadout {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 10;
+}
+.hoverReadout strong { color: var(--cyan-300); }
+
+@media (max-width: 640px) {
+  .attentionRow { flex-direction: column; }
+  .cell, .maskCell { width: 28px; height: 28px; }
+  .colLabel, .rowLabel { min-height: 28px; }
+}

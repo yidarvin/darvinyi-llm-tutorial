@@ -6,7 +6,7 @@ description: Scaled dot-product attention — the operation that defines the mod
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { AttentionHeatmap } from '@components/widgets';
+import { AttentionHeatmap, CausalMask } from '@components/widgets';
 
 The transformer is mostly attention. The rest — embeddings, feedforward layers, normalizations, residuals — is supporting cast. Attention is what does the work of letting one position in a sequence look at every other position and decide what to take from each.
 
@@ -305,10 +305,8 @@ print(f"\\nMasked row sums: {masked.sum(axis=-1)}")
 
 The masked attention matrix is strictly lower-triangular: row $i$ has non-zero weights only at columns $1$ through $i$. Each row still sums to one. The first position can only attend to itself (a trivial single-position distribution); the last position can attend to anywhere in the sequence. Same shape, same softmax, same matrix multiplication — only one additive matrix changes.
 
-<WidgetFrame title="Causal masking" caption="Toggle the causal mask on and off; see how it changes the attention pattern. Without the mask, each position attends to the whole sequence. With it, each position only attends to itself and earlier positions.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 20
-  </div>
+<WidgetFrame title="Causal masking" caption="Toggle between bidirectional and causally-masked attention on the same 6-token sequence. The mask matrix (top) shows which positions are blocked; the two attention matrices below show the difference in the resulting patterns.">
+  <CausalMask client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
@@ -385,6 +383,177 @@ The attention this chapter has built has one $W^Q$, one $W^K$, one $W^V$. One pr
 The natural next move is to run several attention operations in parallel. Each "head" has its own learned $W^Q$, $W^K$, $W^V$ projections, into smaller subspaces (typically $d_k = d_v = d_{\text{model}} / h$ for $h$ heads). Each head computes its own attention pattern over the same input sequence — but with different learned projections, the heads can specialize. In a trained transformer, different heads end up doing visibly different jobs: one head may focus mostly on recent positions, another on subject-verb relationships across long spans, another on coreference, another on syntax. The model gets $h$ different views of the sequence for roughly the same compute as one $d_k$-dimensional attention, because the per-head dimension shrinks proportionally.
 
 The outputs of the $h$ heads are concatenated into a single $(n, h \cdot d_v) = (n, d_{\text{model}})$ matrix and passed through one more learned linear projection $W^O$ that mixes the heads into the output. Chapter 5 derives all of this — the shapes, the parameter count, the empirical evidence that heads specialize, and the implementation. Everything Chapter 5 builds is single-head attention from this chapter, replicated $h$ times in parallel and stitched back together.
+
+## Exercises
+
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Verify scaled dot-product attention
+
+Implement scaled dot-product attention from scratch and verify two properties: (a) the attention weights for each row sum to 1, (b) without the $\sqrt{d_k}$ scaling, the softmax produces a much more peaked distribution at large $d_k$.
+
+<details>
+<summary>Hint</summary>
+
+Use the implementation from section 3 as a starting point. For property (a), compute `weights.sum(axis=-1)` — should be all 1s. For property (b), compare `softmax(scores)` to `softmax(scores / sqrt(d_k))` at d_k = 8 vs d_k = 512. The max weight should be much higher without scaling.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def scaled_dot_product_attention(Q, K, V):
+    """Return (output, weights). No mask."""
+    # TODO: implement scaled dot-product attention
+    pass
+
+# Test (a): rows sum to 1
+n = 6
+d_k = 8
+rng = np.random.default_rng(0)
+Q = rng.normal(0, 1, (n, d_k))
+K = rng.normal(0, 1, (n, d_k))
+V = rng.normal(0, 1, (n, d_k))
+
+# TODO: compute attention; check sum
+# out, weights = scaled_dot_product_attention(Q, K, V)
+# print(f"Row sums: {weights.sum(axis=-1)}")  # expect [1, 1, 1, 1, 1, 1]
+
+# Test (b): peaked softmax at large d_k without scaling
+# TODO: at d_k = 8 vs d_k = 512, compare unscaled vs scaled softmax max
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Implement causal masking
+
+Extend your scaled dot-product attention from Exercise 1 to support causal masking. Verify that each position only attends to itself and earlier positions; verify that masked rows still sum to 1.
+
+<details>
+<summary>Hint</summary>
+
+Construct an `(n, n)` mask matrix with 0 on or below the diagonal and `-np.inf` strictly above. Add this mask to the scaled scores before softmax. `np.triu(arr, k=1)` produces a matrix with the upper triangle (excluding diagonal); use it to construct the `-inf` mask.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def causal_mask(n):
+    """Return (n, n) mask: 0 on/below diagonal, -inf above."""
+    # TODO: build the mask
+    pass
+
+def causal_attention(Q, K, V):
+    """Scaled dot-product attention with causal masking applied."""
+    # TODO: compute scores, scale, add mask, softmax, multiply V
+    pass
+
+# Test
+n = 5
+d_k = 8
+rng = np.random.default_rng(0)
+Q = rng.normal(0, 1, (n, d_k))
+K = rng.normal(0, 1, (n, d_k))
+V = rng.normal(0, 1, (n, d_k))
+
+# out, weights = causal_attention(Q, K, V)
+# print(f"Upper triangle should be all 0:")
+# print(weights.round(3))
+# print(f"Row sums: {weights.sum(axis=-1)}")  # expect [1, 1, 1, 1, 1]
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Quantify the O(n²) memory cost
+
+Compute the memory required for attention at various sequence lengths. Compare to the memory required for the FFN's largest tensor at the same sequence length. Find the crossover point where attention's memory exceeds FFN's.
+
+<details>
+<summary>Hint</summary>
+
+Attention's main memory consumer is the (n, n) scores/weights matrix. FFN's main memory consumer is the intermediate hidden states of shape (n, 4 * d_model) where the factor of 4 is the standard FFN expansion ratio. At d_model = 4096, the crossover is approximately at n ≈ 4 * 4096 = 16384.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def attention_memory_bytes(n, dtype_bytes=2):
+    """Memory for the n x n attention matrix."""
+    # TODO: return the memory in bytes
+    pass
+
+def ffn_memory_bytes(n, d_model, dtype_bytes=2, expansion=4):
+    """Memory for the intermediate FFN tensor: (n, expansion * d_model)."""
+    # TODO: return the memory in bytes
+    pass
+
+d_model = 4096
+for n in [256, 1024, 4096, 16384, 65536]:
+    attn = attention_memory_bytes(n)
+    ffn = ffn_memory_bytes(n, d_model)
+    print(f"n = {n:>6d}: attn = {attn/1e9:>5.2f} GB, ffn = {ffn/1e9:>5.2f} GB, ratio = {attn/ffn:>5.2f}")
+
+# TODO: find the n where attn = ffn (approximately)
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Implement cross-attention
+
+Implement cross-attention: queries come from one sequence; keys and values from another. Demonstrate it on a toy encoder-decoder setup where the decoder (length 4) attends to an encoder output (length 6). Verify shapes and that the attention works regardless of the two sequences having different lengths.
+
+<details>
+<summary>Hint</summary>
+
+The formula is identical to self-attention — `softmax(QK^T / sqrt(d_k)) V` — but Q has shape `(n_dec, d_k)` while K and V have shape `(n_enc, d_k)`. The attention matrix is `(n_dec, n_enc)`, not square. There's no causal masking in standard cross-attention; the decoder attends to the entire encoder output.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def cross_attention(Q, K, V):
+    """
+    Cross-attention: Q from one sequence, K and V from another.
+    Q: (n_dec, d_k)
+    K: (n_enc, d_k)
+    V: (n_enc, d_v)
+    Returns: (n_dec, d_v) output and (n_dec, n_enc) attention weights
+    """
+    # TODO: compute scaled dot-product attention
+    pass
+
+# Toy setup: decoder of length 4 attending to encoder output of length 6
+n_dec, n_enc = 4, 6
+d_k = 8
+rng = np.random.default_rng(42)
+Q_dec = rng.normal(0, 1, (n_dec, d_k))
+K_enc = rng.normal(0, 1, (n_enc, d_k))
+V_enc = rng.normal(0, 1, (n_enc, d_k))
+
+# out, weights = cross_attention(Q_dec, K_enc, V_enc)
+# print(f"Output shape: {out.shape}  (expect (4, 8))")
+# print(f"Weights shape: {weights.shape}  (expect (4, 6))")
+# print(f"Row sums: {weights.sum(axis=-1)}  (expect [1, 1, 1, 1])")
+`}
+  packages={["numpy"]}
+/>
 
 Scaled dot-product attention is the operation that defines the modern LLM. $Q$, $K$, $V$ are three learned views of the same input. Dot product scores their similarity. Division by $\sqrt{d_k}$ keeps the scores from saturating softmax. Softmax turns scores into a probability distribution over positions. Multiplying by $V$ blends values according to that distribution. Causal masking restricts the attention to the past for autoregressive generation. The whole operation runs in $O(n^2)$ in the sequence length, both in compute and memory.
 
