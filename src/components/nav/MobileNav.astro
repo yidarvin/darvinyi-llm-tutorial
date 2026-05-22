@@ -1,0 +1,205 @@
+---
+import { PARTS } from '@lib/chapters';
+const currentPath = Astro.url.pathname;
+const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
+---
+<button id="mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <line x1="3" y1="6"  x2="21" y2="6" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+</button>
+
+<div id="mobile-nav-overlay" class="mobile-nav-overlay" hidden>
+  <div class="mobile-nav-panel">
+    <div class="mobile-nav-header">
+      <a href="/" class="mobile-nav-brand">LLM Tutorial</a>
+      <button id="mobile-nav-close" class="mobile-nav-close" aria-label="Close menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="6" y1="6"  x2="18" y2="18" />
+          <line x1="18" y1="6" x2="6"  y2="18" />
+        </svg>
+      </button>
+    </div>
+    <nav class="mobile-nav-list" aria-label="Chapter index">
+      {PARTS.map(part => (
+        <div class="mobile-nav-part">
+          <h3 class="mobile-nav-part-title">Part {part.num} · {part.title}</h3>
+          <ul>
+            {part.chapters.map(ch => {
+              const href = `/${ch.slug}/`;
+              const isCurrent = currentSlug === ch.slug;
+              const isDisabled = ch.status === 'planned';
+              return (
+                <li>
+                  {isDisabled ? (
+                    <span class="mobile-nav-chapter mobile-nav-chapter-disabled">
+                      <span class="mobile-nav-chapter-num">{String(ch.num).padStart(2, '0')}</span>
+                      {ch.title}
+                    </span>
+                  ) : (
+                    <a href={href} class:list={['mobile-nav-chapter', { 'mobile-nav-chapter-current': isCurrent }]}>
+                      <span class="mobile-nav-chapter-num">{String(ch.num).padStart(2, '0')}</span>
+                      {ch.title}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  </div>
+</div>
+
+<script is:inline>
+  (() => {
+    const toggle  = document.getElementById('mobile-nav-toggle');
+    const overlay = document.getElementById('mobile-nav-overlay');
+    const close   = document.getElementById('mobile-nav-close');
+    if (!toggle || !overlay || !close) return;
+
+    const open = () => {
+      overlay.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+    };
+    const closeNav = () => {
+      overlay.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    };
+
+    toggle.addEventListener('click', open);
+    close.addEventListener('click', closeNav);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeNav();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !overlay.hidden) closeNav();
+    });
+
+    overlay.querySelectorAll('a[href]').forEach(a => {
+      a.addEventListener('click', () => setTimeout(closeNav, 50));
+    });
+  })();
+</script>
+
+<style>
+  .mobile-nav-toggle {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: var(--z-nav);
+    width: 40px;
+    height: 40px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 200ms;
+  }
+  .mobile-nav-toggle:hover {
+    border-color: var(--cyan-500);
+  }
+  @media (min-width: 1024px) {
+    .mobile-nav-toggle { display: none; }
+  }
+
+  .mobile-nav-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(4px);
+    display: flex;
+    justify-content: flex-end;
+  }
+  .mobile-nav-overlay[hidden] { display: none; }
+
+  .mobile-nav-panel {
+    width: min(360px, 90vw);
+    height: 100%;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-default);
+    overflow-y: auto;
+    padding-bottom: 4rem;
+  }
+
+  .mobile-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .mobile-nav-brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cyan-500);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    border-bottom: none;
+  }
+  .mobile-nav-close {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+  }
+  .mobile-nav-close:hover { color: var(--cyan-300); }
+
+  .mobile-nav-list { padding: 1rem 0.5rem; }
+  .mobile-nav-part { margin-bottom: 1.5rem; }
+  .mobile-nav-part-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    padding: 0 0.75rem;
+    margin: 0 0 0.5rem 0;
+    font-weight: 500;
+  }
+  .mobile-nav-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-width: none;
+  }
+  .mobile-nav-chapter {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    border-bottom: none;
+  }
+  .mobile-nav-chapter-current {
+    color: var(--text-primary);
+    font-weight: 500;
+    border-left-color: var(--cyan-500);
+    background: rgba(6, 182, 212, 0.05);
+  }
+  .mobile-nav-chapter-disabled { color: var(--text-disabled); cursor: not-allowed; }
+  .mobile-nav-chapter-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+  }
+</style>

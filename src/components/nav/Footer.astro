@@ -1,0 +1,74 @@
+---
+const year = new Date().getFullYear();
+---
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <div class="footer-brand">LLM Tutorial</div>
+      <p class="footer-tagline">From numpy to agents.</p>
+    </div>
+    <div class="footer-col">
+      <div class="footer-heading">Related</div>
+      <ul>
+        <li><a href="https://darvinyi.com">darvinyi.com</a></li>
+        <li><a href="https://textbook.darvinyi.com">Textbook</a></li>
+        <li><a href="https://github.com/yidarvin/darvinyi-llm-tutorial">GitHub repo</a></li>
+      </ul>
+    </div>
+    <div class="footer-col footer-col-right">
+      <div class="footer-heading">© {year} Darvin Yi</div>
+      <p class="footer-tagline">Built with Astro, MDX, and a lot of coffee.</p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    margin-top: 8rem;
+    border-top: 1px solid var(--border-default);
+    padding: 2.5rem 1.5rem;
+  }
+  .footer-inner {
+    max-width: var(--container-wide);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+  }
+  @media (min-width: 768px) {
+    .footer-inner { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  .footer-brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--cyan-500);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
+  .footer-tagline {
+    margin: 0;
+    color: var(--text-tertiary);
+    max-width: none;
+  }
+  .footer-heading {
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+  .footer-col ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-width: none;
+  }
+  .footer-col li { margin: 0.25rem 0; }
+  .footer-col-right { text-align: left; }
+  @media (min-width: 768px) {
+    .footer-col-right { text-align: right; }
+  }
+</style>

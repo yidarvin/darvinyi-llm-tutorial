@@ -1,0 +1,94 @@
+---
+---
+<aside class="toc" aria-label="On this page">
+  <h4 class="toc-title">On this page</h4>
+  <nav id="toc-nav" class="toc-nav"></nav>
+</aside>
+
+<script is:inline>
+  (() => {
+    const tocNav = document.getElementById('toc-nav');
+    const main   = document.querySelector('main.chapter-content');
+    if (!tocNav || !main) return;
+
+    const headings = main.querySelectorAll('h2, h3');
+    if (headings.length === 0) return;
+
+    headings.forEach((h) => {
+      if (!h.id) return;
+      const link = document.createElement('a');
+      link.href = '#' + h.id;
+      link.textContent = h.textContent || '';
+      link.className = h.tagName === 'H2' ? 'toc-link toc-link-h2' : 'toc-link toc-link-h3';
+      tocNav.appendChild(link);
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const id = e.target.id;
+        if (!id) return;
+        tocNav.querySelectorAll('a').forEach((a) => a.classList.remove('toc-link-active'));
+        const link = tocNav.querySelector(`a[href="#${id}"]`);
+        if (link) link.classList.add('toc-link-active');
+      });
+    }, { rootMargin: '-20% 0px -60% 0px' });
+
+    headings.forEach((h) => { if (h.id) observer.observe(h); });
+  })();
+</script>
+
+<style>
+  .toc {
+    display: none;
+    width: var(--toc-width);
+    flex-shrink: 0;
+    position: sticky;
+    top: 3rem;
+    height: fit-content;
+    max-height: calc(100vh - 6rem);
+    overflow-y: auto;
+    padding-left: 1.5rem;
+  }
+  @media (min-width: 1280px) {
+    .toc { display: block; }
+  }
+
+  .toc-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin: 0 0 0.75rem 0;
+    font-weight: 500;
+  }
+
+  .toc-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .toc-nav :global(a.toc-link) {
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: none;
+    line-height: 1.4;
+    transition: color 200ms;
+  }
+  .toc-nav :global(a.toc-link:hover) {
+    color: var(--cyan-300);
+    border-bottom: none;
+  }
+  .toc-nav :global(a.toc-link-h3) {
+    padding-left: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+  }
+  .toc-nav :global(a.toc-link-active) {
+    color: var(--cyan-400);
+    font-weight: 500;
+  }
+</style>

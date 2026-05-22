@@ -1,0 +1,93 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Sidebar from '@components/nav/Sidebar.astro';
+import MobileNav from '@components/nav/MobileNav.astro';
+import TableOfContents from '@components/nav/TableOfContents.astro';
+import ChapterNav from '@components/nav/ChapterNav.astro';
+import Footer from '@components/nav/Footer.astro';
+import { getChapter } from '@lib/chapters';
+
+export interface Props {
+  slug: string;
+  description?: string;
+}
+const { slug, description } = Astro.props;
+const chapter = getChapter(slug);
+const pageTitle = chapter ? `${chapter.num}. ${chapter.title}` : 'Chapter';
+---
+<BaseLayout title={pageTitle} description={description}>
+  <div class="chapter-layout">
+    <Sidebar />
+    <MobileNav />
+
+    <div class="chapter-layout-main">
+      <main id="main" class="chapter-content">
+        {chapter && (
+          <header class="chapter-header">
+            <div class="chapter-eyebrow">Chapter {chapter.num}</div>
+            <h1 class="chapter-title">{chapter.title}</h1>
+            {description && <p class="chapter-description">{description}</p>}
+          </header>
+        )}
+
+        <slot />
+
+        <ChapterNav currentSlug={slug} />
+      </main>
+
+      <TableOfContents />
+    </div>
+  </div>
+
+  <Footer />
+</BaseLayout>
+
+<style>
+  .chapter-layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .chapter-layout-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0 1.5rem;
+  }
+  @media (min-width: 1024px) {
+    .chapter-layout-main { padding: 0 2.5rem; }
+  }
+
+  .chapter-content {
+    flex: 1;
+    min-width: 0;
+    max-width: calc(var(--container-prose) + 4rem);
+    padding: 4rem 0;
+  }
+
+  .chapter-header {
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .chapter-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--cyan-500);
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+  }
+  .chapter-title {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+  }
+  .chapter-description {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+    margin: 0;
+    max-width: var(--container-prose);
+  }
+</style>

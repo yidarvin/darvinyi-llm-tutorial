@@ -1,0 +1,104 @@
+---
+import { getAdjacentChapters } from '@lib/chapters';
+
+export interface Props {
+  currentSlug: string;
+}
+const { currentSlug } = Astro.props;
+const { prev, next } = getAdjacentChapters(currentSlug);
+---
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  {prev ? (
+    prev.status === 'planned' ? (
+      <div class="chapter-nav-card chapter-nav-disabled" aria-disabled="true">
+        <div class="chapter-nav-direction">← Previous</div>
+        <div class="chapter-nav-title">{prev.title}</div>
+      </div>
+    ) : (
+      <a href={`/${prev.slug}/`} class="chapter-nav-card">
+        <div class="chapter-nav-direction">← Previous</div>
+        <div class="chapter-nav-title">{prev.title}</div>
+      </a>
+    )
+  ) : (
+    <div class="chapter-nav-spacer"></div>
+  )}
+
+  {next ? (
+    next.status === 'planned' ? (
+      <div class="chapter-nav-card chapter-nav-disabled chapter-nav-right" aria-disabled="true">
+        <div class="chapter-nav-direction">Next →</div>
+        <div class="chapter-nav-title">{next.title}</div>
+      </div>
+    ) : (
+      <a href={`/${next.slug}/`} class="chapter-nav-card chapter-nav-right">
+        <div class="chapter-nav-direction">Next →</div>
+        <div class="chapter-nav-title">{next.title}</div>
+      </a>
+    )
+  ) : (
+    <div class="chapter-nav-spacer"></div>
+  )}
+</nav>
+
+<style>
+  .chapter-nav {
+    display: flex;
+    gap: 1rem;
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-default);
+    max-width: var(--container-prose);
+  }
+
+  .chapter-nav-spacer { flex: 1; }
+
+  .chapter-nav-card {
+    flex: 1;
+    display: block;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: border-color 200ms, background 200ms;
+  }
+  .chapter-nav-card:hover {
+    border-color: rgba(6, 182, 212, 0.4);
+    background: rgba(6, 182, 212, 0.03);
+    border-bottom: 1px solid rgba(6, 182, 212, 0.4);
+    color: var(--text-primary);
+  }
+  .chapter-nav-card.chapter-nav-right {
+    text-align: right;
+  }
+
+  .chapter-nav-direction {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin-bottom: 0.25rem;
+  }
+  .chapter-nav-title {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .chapter-nav-card:hover .chapter-nav-title {
+    color: var(--cyan-300);
+  }
+
+  .chapter-nav-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .chapter-nav-disabled:hover {
+    border-color: var(--border-default);
+    background: transparent;
+  }
+  .chapter-nav-disabled .chapter-nav-title {
+    color: var(--text-disabled);
+  }
+</style>

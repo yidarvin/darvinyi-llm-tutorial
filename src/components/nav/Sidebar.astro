@@ -1,0 +1,151 @@
+---
+import { PARTS } from '@lib/chapters';
+
+const currentPath = Astro.url.pathname;
+const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
+---
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <a href="/" class="sidebar-brand">LLM Tutorial</a>
+    <p class="sidebar-tagline">From numpy to agents</p>
+  </div>
+
+  <nav class="sidebar-nav" aria-label="Chapter index">
+    {PARTS.map(part => (
+      <div class="sidebar-part">
+        <h3 class="sidebar-part-title">
+          Part {part.num} · {part.title}
+        </h3>
+        <ul class="sidebar-chapter-list">
+          {part.chapters.map(ch => {
+            const href = `/${ch.slug}/`;
+            const isCurrent = currentSlug === ch.slug;
+            const isDisabled = ch.status === 'planned';
+            const numLabel = String(ch.num).padStart(2, '0');
+            return (
+              <li>
+                {isDisabled ? (
+                  <span class="sidebar-chapter sidebar-chapter-disabled" aria-disabled="true">
+                    <span class="sidebar-chapter-num">{numLabel}</span>
+                    <span class="sidebar-chapter-title">{ch.title}</span>
+                  </span>
+                ) : (
+                  <a href={href} class:list={['sidebar-chapter', { 'sidebar-chapter-current': isCurrent }]} aria-current={isCurrent ? 'page' : undefined}>
+                    <span class="sidebar-chapter-num">{numLabel}</span>
+                    <span class="sidebar-chapter-title">{ch.title}</span>
+                  </a>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    ))}
+  </nav>
+</aside>
+
+<style>
+  .sidebar {
+    display: none;
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border-default);
+    background: var(--bg-primary);
+  }
+  @media (min-width: 1024px) {
+    .sidebar { display: block; }
+  }
+
+  .sidebar-header {
+    padding: 1.5rem 1.25rem;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .sidebar-brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cyan-500);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    border-bottom: none;
+  }
+  .sidebar-brand:hover { color: var(--cyan-300); border-bottom: none; }
+  .sidebar-tagline {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    margin: 0.25rem 0 0 0;
+    max-width: none;
+  }
+
+  .sidebar-nav {
+    padding: 1rem 0.5rem 4rem 0.5rem;
+  }
+
+  .sidebar-part { margin-bottom: 1.5rem; }
+  .sidebar-part-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    padding: 0 0.75rem;
+    margin: 0 0 0.5rem 0;
+    font-weight: 500;
+  }
+
+  .sidebar-chapter-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-width: none;
+  }
+  .sidebar-chapter-list li { margin: 0; }
+
+  .sidebar-chapter {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    border-bottom: none;
+    transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                background 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .sidebar-chapter:hover {
+    color: var(--cyan-300);
+    background: var(--bg-elevated);
+    border-bottom: none;
+  }
+  .sidebar-chapter-current {
+    color: var(--text-primary);
+    font-weight: 500;
+    border-left-color: var(--cyan-500);
+    background: rgba(6, 182, 212, 0.05);
+  }
+  .sidebar-chapter-current:hover {
+    color: var(--text-primary);
+    background: rgba(6, 182, 212, 0.08);
+  }
+  .sidebar-chapter-disabled {
+    cursor: not-allowed;
+    color: var(--text-disabled);
+  }
+  .sidebar-chapter-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+  }
+  .sidebar-chapter-disabled .sidebar-chapter-num { color: var(--text-disabled); }
+  .sidebar-chapter-title {
+    line-height: 1.35;
+  }
+</style>

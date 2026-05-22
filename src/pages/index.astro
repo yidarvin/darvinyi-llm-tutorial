@@ -1,90 +1,267 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import Footer from '@components/nav/Footer.astro';
+import { PARTS, ALL_CHAPTERS, getFirstPublishedChapter } from '@lib/chapters';
+
+const totalChapters = ALL_CHAPTERS.length;
+const startHere = getFirstPublishedChapter();
 ---
-<BaseLayout title="Typography test" description="Temporary page to verify the design system renders correctly.">
-  <main id="main" class="max-w-prose mx-auto px-6 py-16">
-    <p class="text-fg-tertiary text-sm font-mono uppercase tracking-wider mb-3">
-      Session 02 · Design system test
-    </p>
+<BaseLayout>
+  <main id="main">
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="hero-content">
+        <p class="hero-eyebrow">LLM Tutorial</p>
+        <h1 class="hero-title">
+          Build a modern LLM.<br />
+          <span class="hero-title-accent">From numpy to agents.</span>
+        </h1>
+        <p class="hero-subtitle">
+          A comprehensive tutorial in {totalChapters} chapters covering every aspect of how modern language models actually work.
+        </p>
+        <div class="hero-actions">
+          {startHere ? (
+            <a href={`/${startHere.slug}/`} class="hero-cta">Start with Chapter {startHere.num} →</a>
+          ) : (
+            <span class="hero-cta hero-cta-disabled">Chapters coming soon</span>
+          )}
+          <a href="#curriculum" class="hero-link">View curriculum</a>
+        </div>
+      </div>
+    </section>
 
-    <h1>The Transformer architecture</h1>
+    <section class="info">
+      <div class="info-grid">
+        <div>
+          <h2>What you'll learn</h2>
+          <ul>
+            <li>Numpy implementations of every primitive — attention, transformers, RoPE, MoE routing, selective scan</li>
+            <li>The transformer end-to-end, plus alternative architectures (Mamba, state-space models)</li>
+            <li>Pre-training: data, training infrastructure, distributed training, scaling laws</li>
+            <li>Post-training: SFT, RLHF, DPO, RLVR, Constitutional AI, LoRA, distillation</li>
+            <li>Inference: KV caches, FlashAttention, PagedAttention, quantization, speculative decoding</li>
+            <li>Agents: tool use, retrieval, reasoning, building harnesses and frameworks from scratch</li>
+          </ul>
+        </div>
+        <div>
+          <h2>Who this is for</h2>
+          <ul>
+            <li>ML engineers who want to go from "I use the model" to "I understand the model"</li>
+            <li>Students past intro ML who want comprehensive, current LLM knowledge</li>
+            <li>Builders working on agentic systems who want first-principles depth</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-    <p class="text-lg text-fg-secondary">
-      A typography test page. Replace this with the real landing in session 04.
-      Everything visible below is a base style coming directly from <code>base.css</code>.
-    </p>
+    <section id="curriculum" class="curriculum">
+      <h2>Curriculum</h2>
+      <div class="curriculum-grid">
+        {PARTS.map(part => {
+          const firstAvailable = part.chapters.find(c => c.status !== 'planned');
+          const partHref = firstAvailable ? `/${firstAvailable.slug}/` : undefined;
+          return (
+            partHref ? (
+              <a href={partHref} class="part-card">
+                <div class="part-card-eyebrow">Part {part.num}</div>
+                <div class="part-card-title">{part.title}</div>
+                <div class="part-card-meta">{part.chapters.length} chapter{part.chapters.length === 1 ? '' : 's'}</div>
+              </a>
+            ) : (
+              <div class="part-card part-card-disabled">
+                <div class="part-card-eyebrow">Part {part.num}</div>
+                <div class="part-card-title">{part.title}</div>
+                <div class="part-card-meta">{part.chapters.length} chapter{part.chapters.length === 1 ? '' : 's'} · planned</div>
+              </div>
+            )
+          );
+        })}
+      </div>
+    </section>
 
-    <h2>Self-attention</h2>
-    <p>
-      Attention is the operation that lets a token look at every other token in the sequence
-      and decide how much each contributes to its own representation. The math is unreasonably
-      simple for how much it enables. Inline code looks like <code>softmax(QK^T / sqrt(d))V</code>,
-      and links look like <a href="https://arxiv.org/abs/1706.03762">this one</a> to the
-      original paper.
-    </p>
-    <p>
-      A second paragraph follows the rhythm rule: <code>p + p</code> gets a top margin so
-      consecutive paragraphs breathe. Inline <em>emphasis</em> and <strong>strong</strong>
-      both use a 500 weight on dark backgrounds — 600 would feel like a heading.
-    </p>
-
-    <h3>A subsection</h3>
-    <p>The third-level heading is smaller and tighter. Lists work too:</p>
-    <ul>
-      <li>Query, key, and value projections</li>
-      <li>Scaled dot product, normalized by <code>sqrt(d_k)</code></li>
-      <li>Softmax over the key dimension, not the query dimension</li>
-    </ul>
-
-    <h4>Notes on phrasing</h4>
-    <p>Headings name the thing, not the act of discussing it.</p>
-    <ol>
-      <li>Multi-head attention</li>
-      <li>RoPE</li>
-      <li>Why √d scaling</li>
-    </ol>
-
-    <blockquote>
-      The softmax in attention isn't there because it's the only way to get a probability
-      distribution — it's there because exponentiating before normalizing makes the largest
-      score dominate, which is what lets attention sharpen onto a single key when needed.
-    </blockquote>
-
-    <h3>A code block</h3>
-    <p>Code blocks have monospace, an elevated background, and a thin border:</p>
-
-    <pre><code>def attention(Q, K, V, mask=None):
-    d_k = K.shape[-1]
-    scores = Q @ K.swapaxes(-1, -2) / d_k ** 0.5
-    if mask is not None:
-        scores = scores + (1 - mask) * -1e9
-    weights = softmax(scores, axis=-1)
-    return weights @ V</code></pre>
-
-    <p>
-      Code-block syntax highlighting via Shiki gets fully wired up in session 03 alongside MDX.
-      Right now this is a plain <code>&lt;pre&gt;&lt;code&gt;</code> block — monospace, but no
-      color tokens.
-    </p>
-
-    <hr />
-
-    <h4>A table, for completeness</h4>
-    <table>
-      <thead>
-        <tr><th>Method</th><th>Year</th><th>Key idea</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Sinusoidal PE</td><td>2017</td><td>Fixed encoding</td></tr>
-        <tr><td>RoPE</td><td>2021</td><td>Rotation in 2D subspaces</td></tr>
-        <tr><td>ALiBi</td><td>2022</td><td>Linear attention bias</td></tr>
-      </tbody>
-    </table>
-
-    <p class="text-fg-tertiary text-sm mt-12">
-      If everything above renders correctly — Inter for prose, JetBrains Mono for code,
-      cyan links, cyan-bordered blockquote, elevated code block, proper heading rhythm —
-      the design system is wired up. Move to session 03.
-    </p>
+    <section class="author">
+      <h2>Written by Darvin Yi</h2>
+      <p>Director of Machine Learning at Upwork. Stanford PhD in Biomedical Informatics. Adjunct faculty at UIC.</p>
+      <div class="author-links">
+        <a href="https://darvinyi.com">darvinyi.com</a>
+        <a href="https://textbook.darvinyi.com">textbook</a>
+        <a href="https://github.com/yidarvin/darvinyi-llm-tutorial">github</a>
+      </div>
+    </section>
   </main>
+
+  <Footer />
 </BaseLayout>
+
+<style>
+  /* Hero */
+  .hero {
+    position: relative;
+    padding: 8rem 1.5rem;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 30%, var(--cyan-glow), transparent 60%);
+  }
+  .hero-content {
+    position: relative;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--cyan-500);
+    margin: 0 0 1.5rem 0;
+    max-width: none;
+  }
+  .hero-title {
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin: 0 0 1.5rem 0;
+  }
+  .hero-title-accent { color: var(--cyan-400); }
+  .hero-subtitle {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto 2.5rem auto;
+    line-height: 1.5;
+  }
+  .hero-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .hero-cta {
+    display: inline-block;
+    padding: 0.875rem 1.5rem;
+    background: var(--cyan-500);
+    color: var(--bg-primary);
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    border-bottom: none;
+    transition: background 200ms;
+  }
+  .hero-cta:hover {
+    background: var(--cyan-400);
+    color: var(--bg-primary);
+    border-bottom: none;
+  }
+  .hero-cta-disabled {
+    background: var(--bg-elevated);
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+    border: 1px solid var(--border-default);
+  }
+  .hero-cta-disabled:hover { background: var(--bg-elevated); color: var(--text-tertiary); }
+  .hero-link {
+    display: inline-block;
+    padding: 0.875rem 1.5rem;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+  }
+  .hero-link:hover {
+    border-color: rgba(6, 182, 212, 0.5);
+    color: var(--cyan-300);
+    border-bottom: 1px solid rgba(6, 182, 212, 0.5);
+  }
+
+  /* Info section */
+  .info {
+    padding: 5rem 1.5rem;
+    max-width: var(--container-wide);
+    margin: 0 auto;
+  }
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+  @media (min-width: 768px) {
+    .info-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* Curriculum */
+  .curriculum {
+    padding: 5rem 1.5rem;
+    max-width: var(--container-wide);
+    margin: 0 auto;
+  }
+  .curriculum-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 640px) { .curriculum-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1024px) { .curriculum-grid { grid-template-columns: repeat(3, 1fr); } }
+
+  .part-card {
+    display: block;
+    padding: 1.25rem;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: border-color 200ms, background 200ms;
+  }
+  .part-card:hover {
+    border-color: rgba(6, 182, 212, 0.5);
+    background: rgba(6, 182, 212, 0.03);
+    border-bottom: 1px solid rgba(6, 182, 212, 0.5);
+    color: var(--text-primary);
+  }
+  .part-card-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--cyan-500);
+    margin-bottom: 0.5rem;
+  }
+  .part-card-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+  }
+  .part-card:hover .part-card-title { color: var(--cyan-300); }
+  .part-card-meta {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+  }
+  .part-card-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .part-card-disabled:hover {
+    border-color: var(--border-default);
+    background: transparent;
+  }
+
+  /* Author */
+  .author {
+    padding: 5rem 1.5rem;
+    max-width: var(--container-prose);
+    margin: 0 auto;
+    text-align: center;
+  }
+  .author p { margin: 0 auto; max-width: none; }
+  .author-links {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+  }
+</style>
