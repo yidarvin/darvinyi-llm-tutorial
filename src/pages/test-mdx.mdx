@@ -5,6 +5,7 @@ description: Temporary page to verify math, code, and MDX components.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
 
 <main id="main" class="max-w-prose mx-auto px-6 py-16">
 
@@ -57,6 +58,47 @@ def attention(Q, K, V, mask=None):
 ```
 
 Inline code reads like `softmax(x, axis=-1)`.
+
+## Runnable code
+
+A `<RunnableCode>` block. First click on "Run" anywhere on the page loads Pyodide (~3-8s);
+subsequent runs anywhere on the page are instant.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+# A tiny attention example
+Q = np.array([[1.0, 0.0, 0.0, 0.0]])
+K = np.array([[1.0, 0.0, 0.0, 0.0],
+              [0.0, 1.0, 0.0, 0.0],
+              [0.0, 0.0, 1.0, 0.0]])
+V = np.array([[10.0, 20.0],
+              [30.0, 40.0],
+              [50.0, 60.0]])
+
+scores = Q @ K.T / np.sqrt(4)
+print("scores:", scores)
+
+weights = np.exp(scores) / np.exp(scores).sum(axis=-1, keepdims=True)
+print("weights:", weights.round(3))
+
+print("output:", (weights @ V).round(2))
+`}
+  packages={["numpy"]}
+/>
+
+A `<RunnableCode>` with a deliberate error to verify error rendering:
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+# This will raise a ValueError
+np.array([1, 2]) + np.array([1, 2, 3])
+`}
+  packages={["numpy"]}
+/>
 
 ## Callouts — four types
 
