@@ -1,0 +1,165 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.controlPrimary, .controlSecondary {
+  padding: 0.4rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.controlPrimary {
+  background: color-mix(in srgb, var(--cyan-500) 18%, transparent);
+  color: var(--cyan-300);
+  border: 1px solid var(--cyan-500);
+}
+.controlPrimary:hover { background: color-mix(in srgb, var(--cyan-500) 28%, transparent); }
+.controlSecondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+.controlSecondary:hover { color: var(--cyan-300); border-color: var(--cyan-500); }
+.scrubber { flex: 1; min-width: 180px; }
+.stepLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--cyan-300);
+  min-width: 100px;
+  text-align: right;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+.toggleLabel {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.toggleItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: color 200ms;
+}
+.checkbox { width: 14px; height: 14px; cursor: pointer; }
+
+.plotPanel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.svg { width: 100%; height: auto; }
+
+.gridLine { stroke: var(--border-subtle); stroke-width: 0.5; stroke-dasharray: 2 4; }
+.axisLine { stroke: var(--border-default); stroke-width: 1; }
+.tickLabel { fill: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+.axisLabel { fill: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+.contour {
+  fill: none;
+  stroke: color-mix(in srgb, var(--cyan-500) 30%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.minimumMarker line { stroke: var(--text-primary); stroke-width: 2; }
+.minimumLabel {
+  fill: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.originDot { fill: var(--text-tertiary); }
+.originLabel {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+}
+
+.startMarker { fill: var(--text-secondary); stroke: var(--bg-primary); stroke-width: 1.5; }
+.startLabel {
+  fill: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.statCard {
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 200ms, opacity 200ms;
+}
+.statCard:hover { border-color: var(--border-strong); }
+.statCardFocused {}
+.statCardHidden { opacity: 0.45; }
+
+.statHeader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+.statValueRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  margin-bottom: 0.15rem;
+}
+.statLabel { color: var(--text-tertiary); }
+.statValue { color: var(--text-secondary); font-weight: 500; }
+
+.description {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.description strong { font-weight: 500; }
+
+@media (max-width: 640px) {
+  .statsGrid { grid-template-columns: 1fr; }
+  .controls { flex-direction: column; align-items: stretch; }
+  .stepLabel { text-align: left; }
+}

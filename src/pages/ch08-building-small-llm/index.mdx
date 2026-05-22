@@ -6,7 +6,7 @@ description: Chapters 1-6 built the architecture; Chapter 7 built the data pipel
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { LossCurve } from '@components/widgets';
+import { LossCurve, OptimizerComparison } from '@components/widgets';
 
 Seven chapters in, the pieces are on the bench. Chapters 1-6 built the architecture — embeddings, attention, the transformer block, positional encoding. Chapter 7 built the data pipeline — web text filtered, deduplicated, decontaminated into a clean corpus. What is missing is the part where the architecture *learns from* the data. That gap is this chapter.
 
@@ -201,10 +201,8 @@ The first term is the decoupled decay: shrink $\theta$ by a constant factor $(1 
 
 Empirically AdamW produces measurably better-trained models than Adam + L2 at the same nominal hyperparameters. The Loshchilov-Hutter paper showed the gap clearly on image classification; subsequent transformer practice (GPT-3, LLaMA, Mistral, every open frontier model) confirmed it for language modeling. The convention has flipped: AdamW is the default, Adam-plus-L2 is the historical mistake, and weight decay rates for LLMs are now meaningfully higher ($\lambda = 0.1$ is standard) than they were in pre-2018 practice.
 
-<WidgetFrame title="Optimizer comparison" caption="SGD, Adam, and AdamW on a simple 2D loss landscape. Watch how each optimizer navigates: SGD oscillates and is slow; Adam smooths over noise; AdamW handles weight decay correctly (decoupled from gradient scaling). The trajectories show why adaptive per-parameter rates and decoupled decay produce better-trained models in practice.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 38 (secondary)
-  </div>
+<WidgetFrame title="Optimizer comparison" caption="Three optimizers navigating the same ill-conditioned 2D loss landscape: SGD, Adam, and AdamW. The function has 10× more curvature in x than y. Watch how SGD oscillates badly, Adam smooths the path via adaptive scaling, and AdamW takes the same smooth path but ends at a point slightly pulled toward the origin — the visible effect of decoupled weight decay. Click any optimizer card to focus on it.">
+  <OptimizerComparison client:visible />
 </WidgetFrame>
 
 The numpy AdamW is fifteen lines. Two state buffers per parameter, the EMAs, the bias correction, the decoupled decay step.
