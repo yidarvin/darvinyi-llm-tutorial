@@ -6,7 +6,7 @@ description: Modern LLMs are trained on trillions of tokens of web text, but raw
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { DedupInteractive } from '@components/widgets';
+import { DedupInteractive, QualityFilter } from '@components/widgets';
 
 Six chapters in, the architecture is complete. Tokens go in. Embeddings get added to positional encodings. Attention runs, blocks stack, the last layer projects back to vocabulary space and a softmax produces probabilities. The forward pass is exactly the forward pass of every modern decoder-only LLM. What sits inside the weight matrices, though, is still random noise. The model from Chapters 1–6 is inert — a parameterized function with no preferences, no knowledge, no behavior.
 
@@ -268,10 +268,8 @@ The 2024 leap was FineWeb-Edu's **educational-quality classifier**. The training
 
 The most expensive filters use an LLM directly to score document quality. The LLM looks at each document and produces a quality judgment — sometimes a score, sometimes a category, sometimes a longer rationale. DCLM's curation pipeline uses model-based scoring for at least part of its filtering. The cost-per-token is much higher than heuristics or small classifiers, but the model can catch subtleties (a well-written page that argues a conspiracy theory; a page that looks educational but is factually wrong) that the cheaper filters miss. As LLM inference gets cheaper, model-based filtering becomes more attractive; in 2024+ pipelines, it is increasingly common as a final-stage filter applied to whatever survived the cheaper stages.
 
-<WidgetFrame title="Quality filtering in action" caption="A panel of sample texts with various properties. Toggle filter rules on and off (length, language, repetition, classifier) to see which texts get kept. Each filter alone catches a different problem; together they produce a curated subset.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 34 (secondary)
-  </div>
+<WidgetFrame title="Quality filters" caption="Ten text samples spanning the quality spectrum. Toggle each filter (length, language, repetition, classifier) on or off to see which samples are kept. The 'drops alone' count shows how many samples that filter would catch by itself — informative for seeing what each filter catches that others miss.">
+  <QualityFilter client:visible />
 </WidgetFrame>
 
 A handful of heuristic rules already does meaningful work. The implementation below — length, ASCII-letter ratio as a crude English proxy, and unique-word ratio — catches the obvious noise across a small handful of sample documents. Production pipelines layer dozens of such rules plus classifiers on top, but the heuristic pass alone removes a noticeable fraction of CommonCrawl noise at almost no compute cost.
@@ -412,5 +410,209 @@ What this chapter assembled is a recipe for producing a training-ready corpus fr
 What this chapter did not produce is a model. The architecture from Chapters 1–6 still has random initial weights — every Q matrix, every K matrix, every embedding row, every FFN bias is a sample from a small normal distribution. A forward pass on this untrained model produces near-uniform probability distributions over the vocabulary. The model is the *function*, ready to be specialized; the corpus is the *data*, ready to specialize it. The specialization is training.
 
 Chapter 8 picks up here. It builds the training loop: cross-entropy loss over the predicted token distribution, AdamW as the optimizer, a learning-rate schedule with warmup and cosine decay, gradient clipping, mixed-precision arithmetic, data loading from the corpus into batches, and the engineering of running this loop for billions of steps without losing numerical stability. After Chapter 8, the architecture from Chapters 1–6 and the corpus from this chapter are joined into a working small LLM — small in scale, but real in the architecture and the data pipeline that produced it.
+
+## Exercises
+
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+
+### Exercise 1 (medium) — Implement MinHash and verify the Jaccard estimate
+
+Implement MinHash from scratch and verify its accuracy as a Jaccard similarity estimator. Compare the MinHash estimate to true Jaccard for several pairs of documents; verify the standard error decreases with more hash functions (k).
+
+<details>
+<summary>Hint</summary>
+
+A MinHash function is parameterized by random coefficients `a, b` and a prime `p`: `h(x) = (a*x + b) mod p`. For `k` hash functions, generate `k` independent (a, b) pairs. The signature of a document is the min hash value over its shingle set for each hash function. Estimate Jaccard as the fraction of matching signature positions.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import hashlib
+import numpy as np
+
+def shingle(text, k=5):
+    return {text[i:i+k] for i in range(len(text) - k + 1)} if len(text) >= k else {text}
+
+def true_jaccard(a, b):
+    return len(a & b) / len(a | b)
+
+def minhash_signature(shingles, num_hashes=200, seed=42):
+    # TODO: implement
+    # 1. Generate num_hashes random (a, b) coefficient pairs
+    # 2. For each shingle: hash with MD5, take first 16 hex chars as integer x
+    # 3. For each of num_hashes hash functions: compute (a*x + b) mod p where p = 2^61 - 1
+    # 4. Track per-function minimum across all shingles
+    pass
+
+def estimate_jaccard(sig_a, sig_b):
+    # TODO: return fraction of matching positions
+    pass
+
+# Verify
+text_a = "The capital of France is Paris."
+text_b = "The capital of France is paris."
+text_c = "Quantum mechanics is hard."
+
+# shingles_a = shingle(text_a); shingles_b = shingle(text_b); shingles_c = shingle(text_c)
+# sig_a = minhash_signature(shingles_a); sig_b = minhash_signature(shingles_b); sig_c = minhash_signature(shingles_c)
+
+# print(f"True J(a,b) = {true_jaccard(shingles_a, shingles_b):.3f}")
+# print(f"MinHash J(a,b) ≈ {estimate_jaccard(sig_a, sig_b):.3f}")
+# print(f"True J(a,c) = {true_jaccard(shingles_a, shingles_c):.3f}")
+# print(f"MinHash J(a,c) ≈ {estimate_jaccard(sig_a, sig_c):.3f}")
+
+# Standard error should be ≈ 1/sqrt(num_hashes)
+# Try with num_hashes = 50 vs 500 — error should be smaller with more hashes
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — LSH banding S-curve
+
+Implement LSH banding: divide a MinHash signature into `b` bands of `r` rows, hash each band, and use bucket collisions to find candidate near-duplicates. Plot the S-curve: probability of being a candidate vs true similarity, for several choices of `(b, r)`.
+
+<details>
+<summary>Hint</summary>
+
+For chosen (b, r), the probability that two documents become candidates given true similarity `s` is approximately `1 - (1 - s^r)^b`. This is an S-curve — flat near 0 for low similarity, sharp transition near `s ≈ (1/b)^(1/r)`, flat near 1 for high similarity. Plot the curve for (b=50, r=4), (b=20, r=10), and (b=100, r=2) to see how (b, r) shapes the cutoff.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def lsh_candidate_prob(similarity, b, r):
+    """Probability of being an LSH candidate at given true Jaccard similarity."""
+    # TODO: implement P = 1 - (1 - s^r)^b
+    pass
+
+# Plot S-curves for several (b, r) choices
+similarities = np.linspace(0, 1, 50)
+
+configs = [
+    (50, 4),    # transition near s ≈ 0.38
+    (20, 10),   # transition near s ≈ 0.74
+    (100, 2),   # transition near s ≈ 0.10
+]
+
+print(f"{'sim':>5} {'(50,4)':>8} {'(20,10)':>8} {'(100,2)':>8}")
+print("-" * 32)
+for s in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+    # row = [lsh_candidate_prob(s, b, r) for b, r in configs]
+    # print(f"{s:>5.2f} {row[0]:>8.3f} {row[1]:>8.3f} {row[2]:>8.3f}")
+    pass
+
+# Interpretation:
+# - (50, 4) — good for finding moderately similar pairs (threshold ~0.4)
+# - (20, 10) — only finds very similar pairs (threshold ~0.74)
+# - (100, 2) — too permissive — flags weakly similar as candidates
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Build a multi-filter quality pipeline
+
+Combine multiple quality heuristics (length, language, repetition, profanity) into a single pipeline. Apply to a small corpus; report per-filter rejection counts and the final kept set.
+
+<details>
+<summary>Hint</summary>
+
+Each filter is a function `Document -> bool`. Compose them: a document passes the pipeline if it passes *all* filters. Track per-filter rejection counts to identify which filter does the most work. In practice, you'd order filters cheapest-first (length check before classifier inference).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def length_filter(text, min_len=100, max_len=10000):
+    return min_len < len(text) < max_len
+
+def language_filter(text, min_ascii_ratio=0.6):
+    if not text:
+        return False
+    ascii_letters = sum(1 for c in text if c.isascii() and c.isalpha())
+    return ascii_letters / len(text) > min_ascii_ratio
+
+def repetition_filter(text, min_unique_ratio=0.3):
+    words = text.split()
+    if not words:
+        return False
+    return len(set(words)) / len(words) > min_unique_ratio
+
+def profanity_filter(text, profanity_words={'spam', 'click', 'buy', 'free', 'now'}):
+    """Drop documents with too high profanity/spam-word density."""
+    words = text.lower().split()
+    if not words:
+        return False
+    profanity_count = sum(1 for w in words if w in profanity_words)
+    return profanity_count / len(words) < 0.3
+
+def quality_pipeline(text):
+    """Return (passes, per_filter_results)."""
+    # TODO: run all 4 filters
+    # TODO: return overall pass status + dict of which each filter said
+    pass
+
+# Test corpus
+corpus = [
+    "A normal sentence about training data quality and pretraining.",
+    "buy buy buy click here free now click click click",
+    "短いテキスト",
+    "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore.",
+    "the the the the the the the the the the the the the the",
+    "Quantum entanglement is a phenomenon where particles share correlated quantum states.",
+]
+
+# TODO: apply pipeline to each, count per-filter rejections, print summary
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Decontamination and its limitations
+
+Implement n-gram-based decontamination: given benchmark text, identify training documents containing matching n-grams. Then demonstrate the limitation: paraphrased versions of the benchmark question slip through.
+
+<details>
+<summary>Hint</summary>
+
+Build a set of all `n`-grams (default n=13 words) from the benchmark text. For each training document, compute its n-gram set and check for intersection. To demonstrate the limitation: paraphrase the benchmark question (rearrange words, substitute synonyms) and verify the paraphrased version doesn't match the original's n-gram fingerprints.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def ngrams(text, n=13):
+    """Word-level n-grams."""
+    words = text.split()
+    if len(words) < n:
+        return {tuple(words)}
+    return {tuple(words[i:i+n]) for i in range(len(words) - n + 1)}
+
+def contains_benchmark(doc, benchmark_ngrams, n=13):
+    """Check if doc contains any n-gram from benchmark."""
+    return len(ngrams(doc, n) & benchmark_ngrams) > 0
+
+# Original benchmark question
+benchmark = "What is the chemical symbol for gold ? Answer : The chemical symbol for gold is Au"
+benchmark_ngrams_set = ngrams(benchmark, n=13)
+
+# Training corpus — some clean, some contaminated, some paraphrased
+training_docs = [
+    "Gold is a precious metal used in jewelry for thousands of years.",                          # safe
+    "What is the chemical symbol for gold ? Answer : The chemical symbol for gold is Au — atomic number 79.",  # contaminated (exact)
+    "The chemical symbol for gold, denoted Au from Latin 'aurum', appears on the periodic table.",  # PARAPHRASE
+]
+
+# TODO: check each document against benchmark
+# Expected: doc 0 = safe; doc 1 = contaminated; doc 2 = MISSED (paraphrase)
+
+# After: explain why the paraphrase wasn't caught
+# - Different word order
+# - "denoted Au from Latin 'aurum'" vs "the chemical symbol for gold is Au"
+# - Even though semantically equivalent, the 13-gram overlap is zero
+`}
+  packages={[]}
+/>
 
 The takeaway from this chapter is the empirical one. The architecture is the recipe; the data is the ingredients. With great data, a small model can be remarkable. With bad data, a huge model is mediocre. Modern pretraining is as much data engineering as it is machine learning, and the leaderboards reflect that — DCLM-Baseline beating LLaMA-3 with a quarter of the tokens is what data engineering, done seriously, can buy.
