@@ -507,4 +507,217 @@ Chapter 6 covers positional encoding in full. Sinusoidal encodings (the original
 
 The block from this chapter, stacked twelve times on top of an embedding layer with positional encoding, is GPT-2. Stacked ninety-six times, it is GPT-3. Stacked thirty-two times with RMSNorm in place of LayerNorm, SwiGLU in place of GELU, and RoPE in place of additive positional encoding, it is Llama-3 8B. The block is the unit. Everything else in modern LLM design is variants on these themes.
 
+## Exercises
+
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Implement LayerNorm and verify properties
+
+Implement layer normalization from scratch. Verify that (a) each token's features have approximately zero mean and unit standard deviation after normalization, (b) the learnable γ and β parameters allow scaling and shifting after normalization.
+
+<details>
+<summary>Hint</summary>
+
+The formula is straightforward: `LN(x) = γ * (x - mean) / sqrt(var + eps) + β` where mean and var are computed across the *last axis* (the feature dimension), not the batch axis. For property (a), check `x_normed.mean(axis=-1)` ≈ 0 and `x_normed.std(axis=-1)` ≈ 1. For property (b), test with `γ = 2`, `β = 1` and verify the output mean = 1 and std = 2.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+class LayerNorm:
+    def __init__(self, d_model, eps=1e-5):
+        # TODO: initialize gamma (ones) and beta (zeros)
+        pass
+
+    def __call__(self, x):
+        """x: (..., d_model). Normalize along the last axis."""
+        # TODO: compute mean and variance along axis=-1
+        # TODO: normalize, then scale and shift
+        pass
+
+# Test (a): zero mean, unit std after normalization
+ln = LayerNorm(d_model=8)
+rng = np.random.default_rng(42)
+X = rng.normal(0, 5, (4, 8))   # large-scale input
+
+# X_normed = ln(X)
+# print(f"Per-token mean (expect ≈ 0): {X_normed.mean(axis=-1)}")
+# print(f"Per-token std (expect ≈ 1): {X_normed.std(axis=-1)}")
+
+# TODO: Test (b): set gamma=2, beta=1, verify scaled-and-shifted output
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Multi-head attention with correct reshape
+
+Implement multi-head attention. The trickiest part is the reshape and transpose: you need to split the `(n, d_model)` Q/K/V matrices into `(n_heads, n, d_k)` per-head matrices, run attention per head, then concatenate back. Verify that the output shape matches `(n, d_model)`.
+
+<details>
+<summary>Hint</summary>
+
+After computing `Q = X @ W_Q` of shape `(n, d_model)`, reshape to `(n, n_heads, d_k)` then transpose to `(n_heads, n, d_k)`. Do the same for K and V. Then per-head attention is `(Q @ K.T) / sqrt(d_k)` broadcasting over the `n_heads` axis — softmax along the last axis, multiply by V. Concatenate by reverse transpose + reshape to `(n, d_model)`. Multiply by W_O at the end.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+class MultiHeadAttention:
+    def __init__(self, d_model, n_heads, seed=42):
+        assert d_model % n_heads == 0
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
+        rng = np.random.default_rng(seed)
+        # TODO: initialize W_Q, W_K, W_V, W_O each shape (d_model, d_model)
+        pass
+
+    def __call__(self, X, mask=None):
+        n, d_model = X.shape
+        # TODO: compute Q, K, V; reshape and transpose to (n_heads, n, d_k)
+        # TODO: per-head attention; combine across heads
+        # TODO: concatenate heads back to (n, d_model)
+        # TODO: project through W_O
+        pass
+
+# Test
+n, d_model = 6, 16
+mha = MultiHeadAttention(d_model, n_heads=4)
+X = np.random.default_rng(0).normal(0, 1, (n, d_model))
+
+# out = mha(X)
+# print(f"Input shape:  {X.shape}")
+# print(f"Output shape: {out.shape}  (expect (6, 16))")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Build a full Pre-LN transformer block
+
+Combine your LayerNorm (Exercise 1), MultiHeadAttention (Exercise 2), and FFN (from chapter section 4) into a full Pre-LN transformer block. Verify the output shape matches the input shape, and that the per-token output magnitude is reasonable (not exploding or vanishing).
+
+<details>
+<summary>Hint</summary>
+
+The block has 4 components: LN₁, MHA, LN₂, FFN. The Pre-LN forward pass is:
+
+```
+x = x + MHA(LN_1(x))
+x = x + FFN(LN_2(x))
+return x
+```
+
+Note the structure: normalize *before* each sublayer, residual wraps the unnormalized input.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def gelu(x):
+    return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x**3)))
+
+# Assume LayerNorm and MultiHeadAttention from Exercises 1 and 2 are available
+
+class FFN:
+    def __init__(self, d_model, d_ff=None, seed=42):
+        d_ff = d_ff or 4 * d_model
+        rng = np.random.default_rng(seed)
+        self.W1 = rng.normal(0, 0.02, (d_model, d_ff))
+        self.b1 = np.zeros(d_ff)
+        self.W2 = rng.normal(0, 0.02, (d_ff, d_model))
+        self.b2 = np.zeros(d_model)
+
+    def __call__(self, x):
+        h = gelu(x @ self.W1 + self.b1)
+        return h @ self.W2 + self.b2
+
+class TransformerBlock:
+    def __init__(self, d_model, n_heads, seed=42):
+        # TODO: initialize ln_1, attn, ln_2, ffn
+        pass
+
+    def __call__(self, x, mask=None):
+        # TODO: Pre-LN forward pass
+        # x = x + self.attn(self.ln_1(x), mask=mask)
+        # x = x + self.ffn(self.ln_2(x))
+        pass
+
+# Test
+n, d_model = 6, 16
+block = TransformerBlock(d_model, n_heads=4)
+X = np.random.default_rng(0).normal(0, 1, (n, d_model))
+
+# out = block(X)
+# print(f"Input shape:  {X.shape}")
+# print(f"Output shape: {out.shape}")
+# print(f"Per-token output norms: {np.linalg.norm(out, axis=-1).round(3)}")
+# print(f"  (should be in a reasonable range — not zero, not exploding)")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Implement SwiGLU
+
+SwiGLU is the FFN variant used by LLaMA and Mistral. Instead of a single up-projection followed by GELU, SwiGLU uses two parallel up-projections; one is gated by a Swish (sigmoid-linear) activation. The two are element-wise multiplied before the down-projection. Implement SwiGLU and compare its parameter count to a standard GELU FFN at the same effective hidden dimension.
+
+<details>
+<summary>Hint</summary>
+
+The SwiGLU FFN structure:
+- Three linear layers: W_gate, W_up, W_down (vs two in standard FFN)
+- Forward: `down(Swish(gate(x)) * up(x))` where `*` is element-wise multiplication
+- Swish(x) = x * sigmoid(x)
+- For an equivalent parameter budget to a standard 4x-expansion GELU FFN, SwiGLU typically uses a 2.66x expansion (because of the third linear layer — `8/3 ≈ 2.66` keeps the total parameters comparable)
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def swish(x):
+    return x / (1 + np.exp(-np.clip(x, -30, 30)))   # x * sigmoid(x)
+
+class SwiGLU_FFN:
+    def __init__(self, d_model, d_ff=None, seed=42):
+        # TODO: SwiGLU uses 3 linear layers, not 2
+        # For comparable parameter count to standard FFN at 4x, use d_ff = int(d_model * 8 / 3)
+        # (this makes total params ≈ same: 3 * d_model * d_ff ≈ 2 * d_model * 4*d_model)
+        pass
+
+    def __call__(self, x):
+        # TODO: forward = W_down(Swish(W_gate @ x) * W_up @ x)
+        pass
+
+# Compare parameter counts
+d_model = 64
+d_ff_standard = 4 * d_model
+d_ff_swiglu = int(d_model * 8 / 3)
+
+standard_params = 2 * d_model * d_ff_standard   # W1 (d, 4d) + W2 (4d, d)
+swiglu_params = 3 * d_model * d_ff_swiglu       # gate, up, down
+
+print(f"Standard FFN (4x):  {standard_params:>6d} params (d_ff = {d_ff_standard})")
+print(f"SwiGLU FFN (~2.66x): {swiglu_params:>6d} params (d_ff = {d_ff_swiglu})")
+print(f"Ratio: {swiglu_params / standard_params:.3f} — should be ≈ 1.0")
+
+# Test SwiGLU forward
+# rng = np.random.default_rng(42)
+# X = rng.normal(0, 1, (6, d_model))
+# swiglu = SwiGLU_FFN(d_model)
+# out = swiglu(X)
+# print(f"SwiGLU output shape: {out.shape}")
+`}
+  packages={["numpy"]}
+/>
+
 What this chapter built is what every subsequent chapter on training, inference, alignment, and deployment assumes.
