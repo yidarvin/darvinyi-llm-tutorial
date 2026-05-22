@@ -9,3 +9,4 @@ export { default as AttentionHeatmap } from './ch04/AttentionHeatmap';
 export { default as CausalMask } from './ch04/CausalMask';
 export { default as MultiHeadDecomposition } from './ch05/MultiHeadDecomposition';
 export { default as TransformerBlockFlow } from './ch05/TransformerBlockFlow';
+export { default as SinusoidalPE } from './ch06/SinusoidalPE';

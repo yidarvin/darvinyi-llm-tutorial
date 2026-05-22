@@ -6,6 +6,7 @@ description: Attention is permutation-equivariant — shuffle the input and the 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { SinusoidalPE } from '@components/widgets';
 
 The transformer block from Chapter 5 has a curious property: it does not know the order of its inputs. Shuffle the input sequence — "cat the on mat sat the" instead of "the cat sat on the mat" — and the block's output is shuffled identically. Multi-head attention, the FFN, the residuals, the layer norms: none of them encode position. Each row of the output is determined by *which* other rows interact with it, not by *where* they sit in the sequence.
 
@@ -64,10 +65,8 @@ A useful way to think about it: each dimension pair encodes position at a partic
 
 The base $10000$ controls the range covered. With $d_{\text{model}} = 512$, the slowest frequency has period roughly $62{,}000$ positions, which is more than enough for a model trained at sequence lengths of $512$ or $2048$. Modern long-context models sometimes use larger bases ($50{,}000$ or even $500{,}000$) when targeting context lengths of $128{,}000+$, to give the slow pairs the headroom needed to distinguish far-apart positions in the very-long-context regime.
 
-<WidgetFrame title="Sinusoidal positional encoding" caption="The sinusoidal PE matrix as a heatmap. Position runs down the y-axis; dimension runs across the x-axis. Adjacent column pairs are sin/cos at the same frequency. The leftmost pairs oscillate rapidly with position (high frequency); the rightmost pairs oscillate slowly (long period). The classic 'stripe pattern' is the visual signature of the multi-scale frequency schedule.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 29 (marquee)
-  </div>
+<WidgetFrame title="Sinusoidal positional encoding" caption="The sinusoidal PE matrix as a heatmap: position on the y-axis, dimension on the x-axis. Different dimensions encode position at different frequencies — low dimensions oscillate quickly, high dimensions oscillate slowly. Click any column to see its underlying sin or cos wave plotted below.">
+  <SinusoidalPE client:visible />
 </WidgetFrame>
 
 ### How it's used
