@@ -38,7 +38,7 @@ export const PARTS: Part[] = [
     title: 'Pre-training',
     chapters: [
       { num: 7,  slug: 'ch07-pretraining-data',    title: 'Pre-training data',                  partNum: 3, status: 'published' },
-      { num: 8,  slug: 'ch08-building-small-llm',  title: 'Building a small LLM',               partNum: 3, status: 'planned' },
+      { num: 8,  slug: 'ch08-building-small-llm',  title: 'Building a small LLM',               partNum: 3, status: 'draft' },
       { num: 9,  slug: 'ch09-scaling-and-distributed', title: 'Scaling laws & distributed training', partNum: 3, status: 'planned' },
       { num: 10, slug: 'ch10-training-infra',      title: 'Training infrastructure',            partNum: 3, status: 'planned' },
     ],
