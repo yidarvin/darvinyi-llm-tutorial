@@ -6,6 +6,7 @@ description: Multi-head attention generalizes Chapter 4's single-head attention 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { MultiHeadDecomposition } from '@components/widgets';
 
 Chapter 4 was about one attention head. Real transformers have many — eight, twelve, ninety-six, depending on the model. Each head has its own learned projections, computes its own attention pattern, and produces its own slice of output. The slices are concatenated and projected back into the model's feature space. The motivation is that different heads can specialize in different relationships — locality, syntax, coreference — without the architectural complexity of separate networks.
 
@@ -60,10 +61,8 @@ What heads actually learn varies. In a trained model, different heads tend to sp
 
 The widget below shows what specialization looks like in practice — four heads over the same 6-token sequence, each producing a different attention pattern, then blended through the output projection. Different head, different focus, same input.
 
-<WidgetFrame title="Multi-head attention" caption="The same 6-token sequence with h=4 attention heads. Each head has its own learned Q, K, V projections, producing a different attention pattern. The final output blends the heads via a learned projection.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 24 (marquee)
-  </div>
+<WidgetFrame title="Multi-head attention" caption="Four parallel attention heads operating on the same 6-token sequence. Each head has its own hand-tuned attention pattern: local, backward, the-detection, and ending-broadcast. Real trained heads don't separate this cleanly — this is an idealization.">
+  <MultiHeadDecomposition client:visible />
 </WidgetFrame>
 
 The numpy implementation is a few dozen lines. The trick is the reshape-and-transpose that splits the single $d_{\text{model}}$ projection into per-head views without doing $h$ separate matmuls.

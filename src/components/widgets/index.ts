@@ -7,3 +7,4 @@ export { default as BPETraining } from './ch03/BPETraining';
 export { default as TokenizerComparison } from './ch03/TokenizerComparison';
 export { default as AttentionHeatmap } from './ch04/AttentionHeatmap';
 export { default as CausalMask } from './ch04/CausalMask';
+export { default as MultiHeadDecomposition } from './ch05/MultiHeadDecomposition';

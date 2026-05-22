@@ -1,0 +1,255 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+  position: relative;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.showAllButton {
+  padding: 0.35rem 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.showAllButton:hover {
+  color: var(--cyan-300);
+  border-color: var(--cyan-500);
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.inputLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tokenChip {
+  padding: 2px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+}
+
+.headGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.headCell {
+  padding: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    opacity 300ms,
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 200ms;
+}
+.headCell:hover {
+  border-color: var(--cyan-500);
+}
+.headCell:focus-visible {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: 2px;
+}
+.headCellFocused {
+  border-color: var(--cyan-500);
+  transform: scale(1.02);
+  z-index: 1;
+}
+.headCellDimmed {
+  opacity: 0.3;
+}
+
+.headLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.gridContainer {
+  display: grid;
+  gap: 1px;
+  background: var(--border-default);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 1px;
+}
+.attCell {
+  height: 26px;
+  cursor: pointer;
+  transition: outline-color 150ms;
+}
+.attCell:hover {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: -2px;
+}
+
+.colLabel,
+.rowLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+.rowLabel {
+  justify-content: flex-end;
+  padding-right: 4px;
+}
+
+.compositeRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.compositePanel {
+  flex: 1;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.arrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  color: var(--cyan-400);
+  white-space: nowrap;
+}
+
+.outputTable {
+  display: grid;
+  gap: 1px;
+  background: var(--border-default);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 1px;
+}
+.outputCellHeader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 2px;
+  background: var(--bg-elevated);
+}
+.outputCell {
+  height: 22px;
+  cursor: pointer;
+  transition: outline-color 150ms;
+}
+.outputCell:hover {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: -2px;
+}
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.panelHint {
+  margin-top: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.description {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.description strong {
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.description code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  background: var(--bg-primary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-default);
+}
+
+.hoverReadout {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.76rem;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 10;
+}
+.hoverReadout strong {
+  color: var(--cyan-300);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headCell {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .headGrid {
+    grid-template-columns: 1fr;
+  }
+  .compositeRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .arrow {
+    transform: rotate(0deg);
+    margin: 0 auto;
+  }
+}
