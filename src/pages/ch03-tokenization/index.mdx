@@ -6,6 +6,7 @@ description: How raw text becomes the integer IDs that Chapter 2's embedding lay
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { BPETraining } from '@components/widgets';
 
 Chapter 2 ended with the embedding lookup: integer token IDs in, dense vectors out. Where those integer token IDs come from was a question we deferred.
 
@@ -130,10 +131,8 @@ This sounds backward at first. Why not pick whichever merge produces the largest
 
 Train BPE on a tiny corpus and watch the first few merges emerge. The corpus is the kind that fits in a tweet — a handful of sentences with repeated tokens — chosen to make the first merges easy to read off.
 
-<WidgetFrame title="BPE training" caption="Watch BPE learn merges step by step on a small corpus. Each step picks the most frequent adjacent pair; the vocabulary grows by one token each iteration.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 15
-  </div>
+<WidgetFrame title="BPE training" caption="Watch BPE learn merges step by step on a small corpus. Each merge picks the most frequent adjacent pair; the vocabulary grows by one token each step.">
+  <BPETraining client:visible />
 </WidgetFrame>
 
 The runnable block below implements the training loop on a longer toy corpus. It runs in Pyodide in roughly 100 ms; the first few merges show common bigrams collapsing into single tokens.
