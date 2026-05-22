@@ -607,4 +607,298 @@ Eight chapters in, the parts add up. Chapters 1-6 specify the architecture: embe
 
 The next two chapters cover that engineering. Chapter 9 covers **scaling laws** (how to choose model size and dataset size given a compute budget — the Chinchilla derivation, the empirical scaling exponents) and **distributed training** (how to shard parameters, activations, and optimizer state across many GPUs without losing the recipe). Chapter 10 covers **training infrastructure** (GPU clusters, custom CUDA and Triton kernels for the bottleneck operations, the systems engineering that frontier-scale training rests on). Both chapters build on this one — they take the recipe as given and scale it.
 
+## Exercises
+
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; the runnable code lets you iterate without leaving the page. Hints are collapsed — try the problem first.
+
+### Exercise 1 (easy) — Cross-entropy from logits
+
+Implement cross-entropy loss for next-token prediction. Verify it matches the theoretical random baseline ($-\log(1/V)$ for a uniform distribution over $V$ classes) when the logits are random and the targets are random.
+
+<details>
+<summary>Hint</summary>
+
+For numerical stability, compute log-softmax explicitly rather than softmax-then-log. The standard trick: subtract the max logit before exponentiating. Then index the log-probabilities at the target positions and take the negative mean.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+np.random.seed(42)
+
+def cross_entropy(logits, targets):
+    """
+    logits: (n, V) — predicted logits at each position
+    targets: (n,) — true token indices
+    Returns: average cross-entropy loss (scalar)
+    """
+    # TODO: implement
+    # Hint 1: subtract max(logits) per row for numerical stability
+    # Hint 2: log_probs = logits_shifted - log(sum(exp(logits_shifted)))
+    # Hint 3: gather log_probs at target indices, then negate and average
+    pass
+
+# Test: with random logits and random targets, loss ≈ log(V)
+V = 100
+n = 200
+logits = np.random.normal(0, 1, (n, V))
+targets = np.random.randint(0, V, n)
+
+# loss = cross_entropy(logits, targets)
+# baseline = np.log(V)   # theoretical loss for uniform predictions
+# print(f"Cross-entropy loss: {loss:.4f}")
+# print(f"Theoretical baseline (log V): {baseline:.4f}")
+# print(f"Difference: {abs(loss - baseline):.4f}")
+# assert abs(loss - baseline) < 0.5, f"Expected loss near log({V}) = {baseline:.2f}, got {loss:.2f}"
+
+# Bonus: what happens to the loss if targets are deliberately the highest-logit class?
+# best_targets = np.argmax(logits, axis=-1)
+# loss_best = cross_entropy(logits, best_targets)
+# print(f"\\nIf we always 'predict correctly': loss = {loss_best:.4f}")
+# (should be < log(V) — even random logits have some max-logit class)
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Implement AdamW from scratch
+
+Implement AdamW with bias correction. Verify your implementation converges on a simple quadratic, and observe that weight decay biases the convergence point toward the origin.
+
+<details>
+<summary>Hint</summary>
+
+Maintain $m_t$ (first moment) and $v_t$ (second moment) per parameter. At each step:
+
+1. Update $m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t$
+2. Update $v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2$
+3. Bias-correct: $\hat{m}_t = m_t / (1-\beta_1^t)$, $\hat{v}_t = v_t / (1-\beta_2^t)$
+4. AdamW update: $\theta_t = (1 - \alpha\lambda)\theta_{t-1} - \alpha \hat{m}_t / (\sqrt{\hat{v}_t} + \epsilon)$
+
+The key difference from Adam + L2: the weight decay term $(1 - \alpha\lambda)\theta_{t-1}$ is applied multiplicatively, not folded into the gradient.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+class AdamW:
+    def __init__(self, params_shape, lr=0.01, beta1=0.9, beta2=0.95, eps=1e-8, weight_decay=0.0):
+        # TODO: initialize m, v, t, and store hyperparameters
+        pass
+
+    def step(self, params, grads):
+        """In-place update of params using gradients."""
+        # TODO: implement AdamW update
+        # 1. Increment t
+        # 2. Update m and v
+        # 3. Compute bias-corrected m_hat, v_hat
+        # 4. Update params: (1 - lr*wd)*params - lr*m_hat/(sqrt(v_hat)+eps)
+        pass
+
+# Test 1: convergence on (x - 3)^2 with weight_decay = 0
+print("=== Test 1: no weight decay — should converge to x = 3 ===")
+params = np.array([0.0])
+opt = AdamW(params.shape, lr=0.1, weight_decay=0.0)
+for step in range(200):
+    grads = 2 * (params - 3)
+    opt.step(params, grads)
+print(f"Final x = {params[0]:.4f} (expected: 3.0)")
+
+# Test 2: same problem, with weight_decay = 0.05
+# Weight decay should pull x slightly toward 0
+print("\\n=== Test 2: weight_decay = 0.05 — convergence point pulled toward 0 ===")
+params = np.array([0.0])
+opt = AdamW(params.shape, lr=0.1, weight_decay=0.05)
+for step in range(200):
+    grads = 2 * (params - 3)
+    opt.step(params, grads)
+print(f"Final x = {params[0]:.4f} (expected: < 3.0, somewhere around 2.5-2.9)")
+print("(The exact value depends on the equilibrium between gradient pull and decay pull)")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Warmup + cosine schedule
+
+Implement the warmup + cosine decay LR schedule. Verify it ramps to peak at the warmup boundary, decays smoothly, and reaches the minimum floor at total_steps.
+
+<details>
+<summary>Hint</summary>
+
+Three regimes:
+
+1. **Warmup** ($t < W$): $\alpha(t) = \alpha_{\max} \cdot t/W$
+2. **Cosine decay** ($W \leq t \leq T$): $\alpha(t) = \alpha_{\min} + \frac{1}{2}(\alpha_{\max} - \alpha_{\min})(1 + \cos(\pi \cdot (t-W)/(T-W)))$
+3. **Beyond training** ($t > T$): stay at $\alpha_{\min}$
+
+At $t = W$: warmup gives $\alpha_{\max}$; cosine at progress=0 gives $\alpha_{\min} + (\alpha_{\max} - \alpha_{\min}) = \alpha_{\max}$. So the schedule is continuous at the boundary.
+
+At $t = T$: cosine at progress=1 gives $\alpha_{\min} + 0 = \alpha_{\min}$.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def lr_schedule(step, max_lr=6e-4, min_lr=6e-5, warmup_steps=2000, total_steps=100000):
+    """Return the learning rate at the given step."""
+    # TODO: implement three regimes
+    # 1. step < warmup_steps: linear ramp
+    # 2. warmup_steps <= step <= total_steps: cosine decay
+    # 3. step > total_steps: stay at min_lr
+    pass
+
+# Verify schedule properties
+W = 2000
+T = 100000
+max_lr = 6e-4
+min_lr = 6e-5
+
+# Check: at step 0, lr = 0
+# lr_at_0 = lr_schedule(0, max_lr, min_lr, W, T)
+# print(f"step 0:        lr = {lr_at_0:.2e} (expected: 0.0)")
+# assert abs(lr_at_0) < 1e-9
+
+# Check: at warmup boundary, lr = max_lr
+# lr_at_W = lr_schedule(W, max_lr, min_lr, W, T)
+# print(f"step {W}:     lr = {lr_at_W:.2e} (expected: {max_lr:.2e})")
+# assert abs(lr_at_W - max_lr) < 1e-9
+
+# Check: at total_steps, lr = min_lr
+# lr_at_T = lr_schedule(T, max_lr, min_lr, W, T)
+# print(f"step {T}:   lr = {lr_at_T:.2e} (expected: {min_lr:.2e})")
+# assert abs(lr_at_T - min_lr) < 1e-9
+
+# Check: cosine decay is monotonic (each step lower than the previous)
+# steps_to_check = range(W, T, 1000)
+# prev_lr = max_lr + 1   # start higher than any expected value
+# for s in steps_to_check:
+#     curr_lr = lr_schedule(s, max_lr, min_lr, W, T)
+#     assert curr_lr < prev_lr, f"Schedule not monotonic at step {s}"
+#     prev_lr = curr_lr
+# print("\\n✓ Cosine decay is monotonic from step W to step T")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Tiny end-to-end training loop
+
+Train a *very* small character-level transformer on a tiny corpus end-to-end. The scaffolding (data, model class, hyperparameters) is provided; you implement the training loop and verify the loss drops.
+
+<details>
+<summary>Hint</summary>
+
+The training loop has 7 phases per step (see section 7 of this chapter):
+
+1. Compute learning rate from schedule
+2. Get a batch: `(x, y)` where `y` is `x` shifted by 1
+3. Forward pass: `logits = model(x)`; compute cross-entropy on `logits.view(-1, V), y.view(-1)`
+4. Backward pass: `optimizer.zero_grad(); loss.backward()`
+5. Gradient clipping: `torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)`
+6. Set the LR on all optimizer param groups; then `optimizer.step()`
+7. Periodically log
+
+The expected outcome: starting loss around 3.0 (random baseline for the small vocab), ending loss around 1.5-2.0 after a few hundred steps on the toy corpus.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+torch.manual_seed(42)
+
+# === Toy character-level setup ===
+# Tiny corpus: a single sentence repeated
+corpus = ("the quick brown fox jumps over the lazy dog. " * 100)
+chars = sorted(set(corpus))
+vocab_size = len(chars)
+char_to_idx = {c: i for i, c in enumerate(chars)}
+idx_to_char = {i: c for i, c in enumerate(chars)}
+data = torch.tensor([char_to_idx[c] for c in corpus], dtype=torch.long)
+print(f"Vocab size: {vocab_size}")
+print(f"Random baseline loss: log({vocab_size}) = {math.log(vocab_size):.3f}")
+
+# === Tiny transformer ===
+class TinyGPT(nn.Module):
+    def __init__(self, vocab_size, d_model=64, n_heads=4, n_layers=2, seq_len=32):
+        super().__init__()
+        self.tok_emb = nn.Embedding(vocab_size, d_model)
+        self.pos_emb = nn.Embedding(seq_len, d_model)
+        self.blocks = nn.ModuleList([
+            nn.TransformerEncoderLayer(d_model, n_heads, dim_feedforward=4*d_model, batch_first=True, activation='gelu')
+            for _ in range(n_layers)
+        ])
+        self.ln_f = nn.LayerNorm(d_model)
+        self.head = nn.Linear(d_model, vocab_size, bias=False)
+        self.seq_len = seq_len
+
+    def forward(self, x):
+        B, T = x.shape
+        pos = torch.arange(T, device=x.device)
+        h = self.tok_emb(x) + self.pos_emb(pos)
+        # Causal mask
+        causal_mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        for block in self.blocks:
+            h = block(h, src_mask=causal_mask)
+        h = self.ln_f(h)
+        return self.head(h)
+
+# === Data loader ===
+SEQ_LEN = 32
+BATCH_SIZE = 32
+
+def get_batch():
+    ix = torch.randint(0, len(data) - SEQ_LEN - 1, (BATCH_SIZE,))
+    x = torch.stack([data[i:i+SEQ_LEN] for i in ix])
+    y = torch.stack([data[i+1:i+SEQ_LEN+1] for i in ix])
+    return x, y
+
+# === Hyperparameters ===
+MAX_LR = 3e-3
+MIN_LR = 3e-4
+WARMUP = 50
+TOTAL = 500
+
+def lr_at(step):
+    if step < WARMUP:
+        return MAX_LR * (step / WARMUP)
+    progress = (step - WARMUP) / (TOTAL - WARMUP)
+    return MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1 + math.cos(math.pi * progress))
+
+# === Build model + optimizer ===
+model = TinyGPT(vocab_size, d_model=64, n_heads=4, n_layers=2, seq_len=SEQ_LEN)
+optimizer = torch.optim.AdamW(model.parameters(), lr=MAX_LR, betas=(0.9, 0.95), weight_decay=0.1)
+
+# === Training loop ===
+print(f"\\nTraining for {TOTAL} steps...")
+losses = []
+for step in range(TOTAL):
+    # TODO: implement the 7-phase training loop
+    # 1. compute lr_at(step) and set on optimizer param groups
+    # 2. get_batch()
+    # 3. forward: logits = model(x); loss = cross_entropy(logits.view(-1, V), y.view(-1))
+    # 4. optimizer.zero_grad(); loss.backward()
+    # 5. torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    # 6. optimizer.step()
+    # 7. losses.append(loss.item()); print every 50 steps
+    pass
+
+# Verify: loss dropped
+if losses:
+    print(f"\\nStarting loss: {losses[0]:.3f}")
+    print(f"Ending loss:   {losses[-1]:.3f}")
+    print(f"Drop:          {losses[0] - losses[-1]:.3f}")
+    # Expected: ending loss < starting loss by at least 0.5
+`}
+  packages={["torch"]}
+/>
+
 What is also worth doing right now, before reading further, is *training a model*. The reference code in section 7 runs on Tiny Shakespeare ($\sim 1$MB of text, character-level vocabulary, $\sim 50$M parameters) in a couple of hours on a single modern GPU and produces grammatical English. The loss curve drops. The samples improve. The model goes from "fz qm xj" to "Be not afraid of greatness; some are born great." The pipeline works. Everything from here is making it bigger.
