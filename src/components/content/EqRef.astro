@@ -1,0 +1,21 @@
+---
+export interface Props {
+  id: string;
+}
+const { id } = Astro.props;
+---
+<a href={`#eq-${id}`} class="eq-ref">({id})</a>
+
+<style>
+  .eq-ref {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em;
+    color: var(--cyan-400);
+    text-decoration: none;
+    border-bottom: none;
+  }
+  .eq-ref:hover {
+    color: var(--cyan-300);
+    border-bottom: none;
+  }
+</style>

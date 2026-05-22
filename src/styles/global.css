@@ -2,6 +2,7 @@
 @import './fonts.css';
 @import './variables.css';
 @import './base.css';
+@import './content.css';   /* NEW: added in session 03 */
 
 @tailwind base;
 @tailwind components;

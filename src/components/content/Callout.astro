@@ -1,0 +1,69 @@
+---
+export interface Props {
+  type?: 'note' | 'warning' | 'aside' | 'insight';
+  title?: string;
+}
+const { type = 'note', title } = Astro.props;
+
+const defaultLabels = {
+  note:    'Note',
+  warning: 'Warning',
+  aside:   'Aside',
+  insight: 'Insight',
+};
+const label = title ?? defaultLabels[type];
+---
+<aside class:list={['callout', `callout-${type}`]}>
+  <div class="callout-label">{label}</div>
+  <div class="callout-body">
+    <slot />
+  </div>
+</aside>
+
+<style>
+  .callout {
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    max-width: var(--container-prose);
+    border-left: 2px solid;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  }
+
+  /* Inline RGB values mirror variables.css:
+     cyan-500 = #06b6d4 → rgb(6, 182, 212)
+     amber-500 = #f59e0b → rgb(245, 158, 11)
+     Keep in sync if variables.css changes. */
+  .callout-note    { border-color: var(--cyan-500);      background: rgba(6, 182, 212, 0.05); }
+  .callout-warning { border-color: var(--amber-500);     background: rgba(245, 158, 11, 0.05); }
+  .callout-aside   { border-color: var(--text-tertiary); background: var(--bg-elevated); }
+  .callout-insight { border-color: var(--cyan-500);      background: rgba(6, 182, 212, 0.10); }
+
+  .callout-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  .callout-note    .callout-label,
+  .callout-insight .callout-label { color: var(--cyan-400); }
+  .callout-warning .callout-label { color: var(--amber-500); }
+  .callout-aside   .callout-label { color: var(--text-tertiary); }
+
+  .callout-body {
+    color: var(--text-primary);
+    line-height: 1.65;
+  }
+
+  /* Slotted content — paragraphs inside a callout need adjusted margins */
+  .callout-body :global(p) {
+    margin: 0.5rem 0;
+    max-width: none;
+  }
+  .callout-body :global(p:first-child) { margin-top: 0; }
+  .callout-body :global(p:last-child)  { margin-bottom: 0; }
+  .callout-body :global(code) {
+    font-size: 0.92em;
+  }
+</style>

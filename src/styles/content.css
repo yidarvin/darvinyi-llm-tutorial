@@ -1,0 +1,38 @@
+/* KaTeX core styles */
+@import 'katex/dist/katex.min.css';
+
+/* Display equations: cyan left-border to match the project's accent */
+.katex-display {
+  margin: 1.5rem auto !important;
+  padding: 0.5rem 1rem;
+  border-left: 2px solid var(--cyan-500);
+  max-width: var(--container-prose);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Use our text color, not KaTeX default white */
+.katex { color: var(--text-primary); }
+
+/* Sizing — inline math matches body, display is slightly larger */
+.katex { font-size: 1em; }
+.katex-display .katex { font-size: 1.1em; }
+
+/* Heading anchors from rehype-autolink-headings:
+   the heading TEXT itself is wrapped in <a class="heading-anchor">.
+   We want headings to LOOK like headings (no cyan, no underline)
+   while still being clickable for hash-link sharing. */
+.heading-anchor {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: none;
+}
+.heading-anchor:hover {
+  border-bottom: none;
+  color: var(--cyan-400);
+}
+.heading-anchor:focus-visible {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: 4px;
+  border-radius: 2px;
+}

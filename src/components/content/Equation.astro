@@ -1,0 +1,32 @@
+---
+export interface Props {
+  label?: string;
+}
+const { label } = Astro.props;
+const id = label ? `eq-${label}` : undefined;
+---
+<div class="equation" id={id}>
+  <div class="equation-content"><slot /></div>
+  {label && <span class="equation-label">({label})</span>}
+</div>
+
+<style>
+  .equation {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    max-width: var(--container-prose);
+  }
+  .equation-content {
+    min-width: 0;
+  }
+  .equation-label {
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    user-select: none;
+    white-space: nowrap;
+  }
+</style>

@@ -1,0 +1,71 @@
+---
+export interface Props {
+  title: string;
+  caption?: string;
+  wide?: boolean;
+}
+const { title, caption, wide = true } = Astro.props;
+---
+<div class:list={['widget-frame', { 'widget-frame-wide': wide }]}>
+  <div class="widget-frame-card">
+    <div class="widget-frame-header">
+      <h4 class="widget-frame-title">{title}</h4>
+      <span class="widget-frame-tag">Interactive</span>
+    </div>
+    <div class="widget-frame-body">
+      <slot />
+    </div>
+  </div>
+  {caption && <p class="widget-frame-caption">{caption}</p>}
+</div>
+
+<style>
+  .widget-frame {
+    margin: 3rem 0;
+    max-width: var(--container-prose);
+  }
+  .widget-frame-wide { max-width: var(--container-wide); }
+
+  .widget-frame-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .widget-frame-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .widget-frame-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .widget-frame-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .widget-frame-body {
+    padding: 1.25rem;
+  }
+
+  .widget-frame-caption {
+    color: var(--text-tertiary);
+    font-size: 0.9rem;
+    margin-top: 0.75rem;
+    line-height: 1.5;
+    max-width: var(--container-prose);
+  }
+</style>
