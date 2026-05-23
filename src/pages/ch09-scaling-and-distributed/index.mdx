@@ -1,0 +1,345 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch09-scaling-and-distributed
+description: Modern LLMs have 8B-1T parameters and train on trillions of tokens — far beyond a single GPU. This chapter covers two things — how to allocate a fixed compute budget between model size and dataset size (Chinchilla scaling laws), and how to actually train large models across many GPUs (data parallelism, FSDP, tensor parallelism, pipeline parallelism).
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Chapter 8 ended with a working training loop on a small model — a 50M-parameter transformer learning on a single GPU in an afternoon. The math of that chapter is the math of modern LLM training: same cross-entropy, same AdamW, same warmup-plus-cosine schedule. What is *not* the same at frontier scale is the engineering. Llama-3 has 8B to 405B parameters. GPT-4 is reportedly trillion-plus. The training corpora are trillions of tokens. A single H100 holds at most a few billion parameters in mixed precision — and training needs *additional* memory for gradients, optimizer state, and activations. The Chapter 8 loop, as written, runs out of memory before the first forward pass on these models, and would take years if it didn't.
+
+This chapter answers two questions about that gap. The first is *what should you train?* Given a fixed FLOP budget — say, $10^{23}$ — should you train a small model for a long time or a large model briefly? The Chinchilla scaling laws (Hoffmann et al. 2022) give a surprising answer: roughly $20$ tokens per parameter, with model size and dataset size scaling together. Pre-2022 models (GPT-3, Gopher, PaLM) violated this rule and were significantly undertrained. Modern frontier models fix it — and then *intentionally* over-train smaller architectures past Chinchilla-optimal for the inference economics.
+
+The second question is *how do you actually train at scale?* Four parallelism strategies — data parallelism, tensor parallelism, pipeline parallelism, and FSDP — distribute a training run across many GPUs. At the very largest scale, all three of DP, TP, and PP combine into "3D parallelism" — Megatron-Turing's 530B model used 8-way TP × 35-way PP × 64-way DP across $17{,}920$ GPUs. After this chapter, the system diagrams of GPT-4-scale training runs are readable. Chapter 10 continues with the practical infrastructure that runs those clusters.
+
+## The setup — single GPU isn't enough
+
+A $7$B-parameter model in BF16 weighs about $14$ GB just for the parameters themselves. Training needs more memory than that, by a lot. Gradients add another $\sim 14$ GB (one per parameter). AdamW's optimizer state — the first moment $m$ and second moment $v$, typically kept in FP32 even when the model runs in BF16 — adds another $\sim 56$ GB ($2 \times 4 \times 7$ B). Activations for the backward pass, depending on sequence length and batch size, add $10$ to $20$ GB more. Total training-state memory for a $7$B model: $\sim 100$ GB.
+
+That number does not fit on any single GPU. An A100 has $40$ or $80$ GB; an H100 has $80$ GB. A $7$B model is *borderline* on a single H100 with careful memory management; a $70$B model is not even close — its training state is closer to $700$ GB.
+
+Time is the second wall. Even if memory fit, training wall-clock scales with FLOPs divided by GPU throughput. An H100 peaks around $1000$ TFLOPS at BF16. The standard estimate for transformer training is $6ND$ FLOPs total, where $N$ is parameters and $D$ is training tokens. A $7$B model on $1$T tokens is $4.2 \times 10^{22}$ FLOPs — about $1.3$ years on a single H100 running at peak throughput, which they never do. A $70$B model on $1.4$T tokens is closer to $20$ years. Single-GPU training of a frontier model is, literally, infeasible.
+
+These are two distinct problems. **Memory** says the model and its training state do not fit on one GPU. **Time** says even if they did, the run would take years. The solutions overlap but require different techniques. Sections 2 and 3 first handle a prior question — *what* to train, given the FLOP budget. Sections 4 through 7 cover the engineering of distributing that training across many GPUs.
+
+## The first scaling laws — Kaplan 2020
+
+Kaplan et al. 2020 ([arxiv.org/abs/2001.08361](https://arxiv.org/abs/2001.08361)) was the first systematic study of *how loss varies* with model size, dataset size, and compute for transformer language models. They trained transformers across a wide range of sizes and dataset sizes and discovered that test loss followed clean *power laws* in each variable. Doubling the parameter count reduced loss by a predictable amount; doubling the data reduced it by a (different) predictable amount; doubling the compute, holding the right things constant, reduced it by yet another amount. The pattern was robust enough that it became the field's standard vocabulary — "scaling laws" as a noun, "the slope of the scaling curve" as a way of talking, all started here.
+
+The paper's most-cited claim was the *compute-optimal allocation*. Given a fixed compute budget $C$, Kaplan recommended putting most of the compute into model size and comparatively little into more training data — specifically, $N \propto C^{0.73}$ and $D \propto C^{0.27}$. The reading at the time was: scale parameters aggressively; data is a secondary concern.
+
+The labs that built the next generation of models followed this recommendation. **GPT-3** (Brown et al. 2020) was $175$B parameters trained on $300$B tokens — a ratio of roughly $1.7$ tokens per parameter. **Gopher** (Rae et al. 2021): $280$B parameters, $300$B tokens — a ratio near $1$. **Megatron-Turing NLG** (Smith et al. 2022): $530$B parameters, $270$B tokens — a ratio of $0.5$. **PaLM** (Chowdhery et al. 2022): $540$B parameters, $780$B tokens — a ratio of $1.4$. Every flagship model from 2020 through early 2022 sat in the same regime: very large parameters, comparatively few training tokens, following the Kaplan recipe.
+
+The problem was that the Kaplan experimental design under-trained the larger models. Each model in their grid was trained for a *fixed number of optimizer steps*, regardless of size. Large models, which have more parameters to fit, would have needed more steps to converge — they were stopped early. The headline allocation that fell out was an artifact of the experimental setup, not of the underlying scaling behavior. When the experiments were re-run with each model trained to convergence — done two years later in the Chinchilla paper — the optimal allocation shifted dramatically. Most of the 2020-2022 frontier models, it turned out, were significantly undertrained for their size.
+
+<Callout type="note">
+Kaplan 2020 was the field's first attempt and its recommendation turned out to be partially wrong, but the *framework* — predicting loss as a power law in $N$ and $D$, then optimizing allocation under a compute constraint — was foundational. Every subsequent scaling analysis, including Chinchilla, uses the Kaplan vocabulary. The criticism is of the experimental design, not the conceptual approach.
+</Callout>
+
+## The Chinchilla correction — Hoffmann 2022
+
+### The new experiment
+
+Hoffmann et al. 2022 ([arxiv.org/abs/2203.15556](https://arxiv.org/abs/2203.15556)) redid the scaling analysis with corrected methodology. Where Kaplan trained each model for a fixed step budget, Hoffmann trained each of $400$+ language models *to convergence* across a careful grid of model sizes and token counts. Three complementary analyses — fitting a parametric loss function, isolating compute-vs-loss curves at fixed model size, and the iso-FLOPs-curve method — all pointed to the same answer.
+
+The empirical demonstration was the most visible part of the paper. The authors trained Chinchilla — a $70$B-parameter model on $1.4$T tokens — using the same compute budget as DeepMind's earlier Gopher ($280$B parameters, $300$B tokens). Chinchilla, despite being $4\times$ smaller, outperformed Gopher on essentially every benchmark. Same training compute, better-trained smaller model, better results. The Kaplan-era practice of "scale parameters first" was empirically wrong.
+
+### The scaling-law equation
+
+The paper's central fitted equation is a parametric form for the test loss:
+
+<Equation label="9.chinchilla">
+$$L(N, D) = E + \frac{A}{N^\alpha} + \frac{B}{D^\beta}.$$
+</Equation>
+
+With fitted values $E \approx 1.69$, $A \approx 406$, $B \approx 410$, $\alpha \approx 0.34$, $\beta \approx 0.28$. The three terms decompose the loss into three sources: the *irreducible loss* $E$ (the entropy of natural language — no language model can do better than this), the *model-capacity error* $A/N^\alpha$ (loss from too few parameters; decays as a power law in $N$), and the *data-limitation error* $B/D^\beta$ (loss from too few training tokens; decays as a power law in $D$). Both error terms vanish in the limit of infinite size or infinite data; both decay slowly, as small powers of their inputs.
+
+The shapes of the exponents matter. With $\alpha \approx 0.34$ and $\beta \approx 0.28$, doubling $N$ reduces the model-capacity error by a factor of $2^{-0.34} \approx 0.79$ — about a $21\%$ reduction — and doubling $D$ reduces the data-limitation error by $2^{-0.28} \approx 0.82$ — about an $18\%$ reduction. Neither term dominates by much. They are close enough in slope that, for compute-optimal training, both terms should be reduced together.
+
+### Compute-optimal allocation
+
+Training a model of size $N$ on $D$ tokens costs approximately $C \approx 6ND$ FLOPs. (The $6$ is the empirical estimate: $\sim 2ND$ for the forward pass, $\sim 4ND$ for the backward pass. The backward is roughly twice the forward because it computes gradients with respect to both the activations and the parameters.) The compute-optimal allocation is the solution to a constrained minimization:
+
+$$\min_{N, D} L(N, D) \quad \text{subject to} \quad 6ND = C.$$
+
+Skipping the Lagrangian derivation, the answer is a pair of power laws in $C$:
+
+$$N_{\text{opt}} \propto C^{a}, \qquad D_{\text{opt}} \propto C^{1-a}, \qquad a = \frac{\beta}{\alpha + \beta}.$$
+
+Plug in Chinchilla's fitted $\alpha, \beta$: $a \approx 0.28/(0.34 + 0.28) \approx 0.45$. So $N \propto C^{0.45}$ and $D \propto C^{0.55}$. **Both scale together** as compute increases, neither dominates. Compare to Kaplan's $N \propto C^{0.73}, D \propto C^{0.27}$ and the difference is stark — Chinchilla puts substantially more weight on tokens.
+
+### The 20-tokens-per-parameter rule
+
+For compute budgets in the range that pre-2022 labs cared about, the compute-optimal ratio works out to $D_{\text{opt}} / N_{\text{opt}} \approx 20$ — **about $20$ training tokens per parameter**. This is the simple rule of thumb that everyone remembers from Chinchilla. Want to train a $7$B-parameter model compute-optimally? Use $\sim 140$B training tokens. Want $70$B? Use $\sim 1.4$T tokens — which is exactly what Chinchilla did.
+
+Practical use: given a compute budget $C$, plug into the compute-optimal formulas to get $N_{\text{opt}}$ and $D_{\text{opt}}$. Use those as the *starting* allocation; tune from there based on what your downstream evaluation actually cares about. The Chinchilla ratio is a *guide*, not a contract — and as the Llama-3 example below will show, modern practice often intentionally departs from it.
+
+<WidgetFrame title="Scaling law calculator" caption="The Chinchilla loss surface, plus the compute-optimal allocation curve. Adjust your compute budget; see what model size and dataset size you should choose. The 'compute-optimal point' is highlighted; off-optimal choices (Kaplan-style, Llama-3-style) show how much loss is left on the table — or intentionally accepted for other reasons.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 42 (marquee)
+  </div>
+</WidgetFrame>
+
+The numerical version is short — the Chinchilla loss function and the compute-optimal allocation are each a few lines of numpy. Running it across a range of compute budgets makes the "$\sim 20$ tokens per parameter" pattern visible across orders of magnitude.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+# Chinchilla fitted constants (approximate, from Hoffmann et al. 2022)
+E, A, B = 1.69, 406.0, 410.0
+ALPHA, BETA = 0.34, 0.28
+
+def chinchilla_loss(N, D):
+    """Expected loss for model size N and dataset size D, per Chinchilla."""
+    return E + A / (N ** ALPHA) + B / (D ** BETA)
+
+def compute_optimal(C):
+    """Given compute budget C (FLOPs), return (N_opt, D_opt, predicted_loss)."""
+    a = BETA / (ALPHA + BETA)
+    # Approximate fit constants for the proportionality.
+    k_N, k_D = 0.6, 1.7
+    N_opt = k_N * (C / 6) ** a
+    D_opt = k_D * (C / 6) ** (1 - a)
+    return N_opt, D_opt, chinchilla_loss(N_opt, D_opt)
+
+# Walk through several compute budgets — note the D/N ratio sits near 20.
+print(f"{'Compute (FLOPs)':>18} {'N (params)':>15} {'D (tokens)':>15} {'D/N':>8} {'Loss':>7}")
+print("-" * 70)
+for C in [1e22, 1e23, 6e23, 1e24, 3e25]:
+    N_opt, D_opt, L_opt = compute_optimal(C)
+    print(f"{C:>18.1e} {N_opt:>15.2e} {D_opt:>15.2e} {D_opt/N_opt:>8.1f} {L_opt:>7.3f}")
+`}
+  packages={["numpy"]}
+  height={460}
+/>
+
+<Callout type="warning">
+"Bigger models are always better" is the misconception Chinchilla disproved. Bigger is only better *if data and compute scale to match*. GPT-3 ($175$B parameters, $300$B tokens) was significantly undertrained; the $70$B Chinchilla on $1.4$T tokens, at the same training compute, beat it on essentially every benchmark. **Compute-optimal is what matters**, and "scale parameters for the sake of scaling parameters" is wasted compute. <EqRef id="9.chinchilla" /> is what tells you the right size given a budget.
+</Callout>
+
+<Callout type="aside">
+**Llama-3 8B was trained on $15$T tokens** — almost $100\times$ past Chinchilla-optimal for its size. Why train so far past the optimum? Inference economics. A smaller model is dramatically cheaper to serve — fewer parameters per forward pass, less KV cache, easier to deploy on cheaper hardware. Modern frontier models intentionally over-train *smaller* architectures past Chinchilla-optimal so that the resulting model is cheap to run at scale. The training cost of the extra tokens is amortized across billions of inference requests. The "Chinchilla rule" is now read as a *lower bound* on training tokens for any production model, not the optimum.
+</Callout>
+
+The allocation math is settled. The engineering question is what comes next: even if you know what you want to train, how do you actually run a $70$B-parameter model that does not fit on one GPU?
+
+## Why distribute — three reasons
+
+The reasons to distribute training across many GPUs come in three flavors. They overlap in motivation but call for different techniques.
+
+**Memory.** As Section 1 spelled out, a $70$B model with AdamW state in mixed precision runs about $700$ GB of training-state memory. An H100 has $80$ GB. The model cannot fit on one GPU at any setting. **Sharding** the parameters, gradients, and optimizer state across many GPUs — so each GPU holds only a fraction — is the only way the run starts at all.
+
+**Speed.** Even when memory fits, a single-GPU run takes prohibitively long. The standard $6ND$ FLOP estimate for a $70$B model on $1.4$T tokens is $5.9 \times 10^{23}$ FLOPs — roughly $20$ years of H100-equivalent compute at peak throughput. Splitting that work across many GPUs in parallel is what brings wall-clock down from years to weeks.
+
+**Batch size.** Language modeling benefits from large *effective* batches — the per-step gradient is a better estimate of the true population gradient when averaged over more tokens, and many of the optimizer hyperparameters (especially the AdamW second moment) work better with bigger batches. Achieving, say, an effective batch of $4$M tokens per step on a $70$B model means *many* GPUs processing in parallel, since the per-GPU batch is constrained by activation memory.
+
+Three reasons, three distinct parallelism strategies that can be combined. **Data parallelism (DP)** addresses speed and batch size — same model on every GPU, different micro-batches. **Model parallelism** — *tensor parallelism* (TP) and *pipeline parallelism* (PP) — addresses memory by splitting the model itself. **FSDP** (PyTorch's name for ZeRO-3) gives DP-like simplicity with model-parallel-like memory savings. Sections 5 through 7 cover each in turn; for very large models, all three are combined into 3D parallelism.
+
+## Data parallelism — the simple case
+
+### How DP works
+
+Data parallelism is the simplest scheme and the right starting point. Each GPU holds a *complete copy* of the model parameters — every weight matrix, every bias, every layer norm scale, all replicated identically. The training batch is *sharded* across GPUs: with $N$ GPUs and a global batch of $B$ sequences, each GPU sees $B/N$ sequences. Each GPU runs its forward pass on its shard, computes the loss, and runs the backward pass independently. At that point, every GPU has a gradient — but a *different* gradient, because each one saw different data.
+
+The synchronization step is to **average the gradients across all GPUs**, using an all-reduce. Every GPU comes out the other side with the same averaged gradient, applies the same AdamW step, and ends the iteration with identical parameters — bit-identical, modulo floating-point reduction order. The model stays in sync across the whole cluster, automatically. The next batch arrives sharded, the process repeats. DP is conceptually clean: take Chapter 8's loop, wrap the model in `DistributedDataParallel`, and the training proceeds.
+
+### The all-reduce
+
+The collective operation that makes DP work is *all-reduce*: every GPU contributes a tensor, the system computes the element-wise sum (or mean), and the result is delivered back to every GPU. For gradient averaging, every GPU contributes its full gradient and gets back the mean.
+
+The efficient implementation is the **ring all-reduce**. Conceptually, the GPUs form a ring; the gradient is split into $N$ chunks; each step of the ring shuffles one chunk forward, accumulating partial sums. After $2(N-1)$ ring steps, every GPU has the full sum. The total bytes each GPU sends and receives works out to approximately $2 \cdot (N-1)/N \cdot \text{model\_size}$ — for large $N$, very close to $2 \cdot \text{model\_size}$. Crucially, the communication cost per GPU is *independent of $N$* for large $N$ — adding more GPUs does not slow each individual GPU's communication.
+
+That sounds like DP scales arbitrarily, and it almost does. The gradient all-reduce happens every step, covers the entire model, and stays roughly constant in per-GPU cost regardless of GPU count. Doubling the GPU count doubles the throughput linearly, *until* a different bottleneck shows up.
+
+### Scaling limits
+
+The first scaling limit of DP is **memory**: DP does not help with the memory problem at all. Every GPU still holds the full model, the full gradient, the full optimizer state. A model that does not fit on a single GPU does not fit under DP either. DP is for *speed*; it is not a memory-savings technique.
+
+The second scaling limit is **communication**. The "constant per-GPU cost" assumption holds when the cluster's network can keep up. At a few hundred GPUs in a single rack with NVLink and high-bandwidth InfiniBand between nodes, the all-reduce overlaps cleanly with compute and the run scales linearly. Past roughly $1000$ GPUs, the all-reduce time per step starts to dominate compute time, and adding more GPUs delivers diminishing returns. The exact crossover depends on model size, batch size, and network topology, but the qualitative pattern is robust — DP alone is not enough for frontier-scale training.
+
+<RunnableCode
+  client:load
+  defaultCode={`import numpy as np
+
+def simulate_data_parallel_step(model_grads_per_rank):
+    """
+    Simulate a data-parallel gradient all-reduce.
+
+    Input: list of gradient arrays, one per rank (simulated GPU).
+    Output: averaged gradients (would be identical on every rank after all-reduce).
+    """
+    stacked = np.stack(model_grads_per_rank, axis=0)
+    return np.mean(stacked, axis=0)
+
+# Demo: 4 simulated GPUs, each with different per-rank gradients.
+np.random.seed(0)
+n_params = 100
+rank_grads = [
+    np.random.normal(0, 1, n_params),   # GPU 0 — its own data shard
+    np.random.normal(0, 1, n_params),   # GPU 1
+    np.random.normal(0, 1, n_params),   # GPU 2
+    np.random.normal(0, 1, n_params),   # GPU 3
+]
+
+averaged = simulate_data_parallel_step(rank_grads)
+
+print(f"GPU 0 mean grad: {np.mean(rank_grads[0]):>+.4f}")
+print(f"GPU 1 mean grad: {np.mean(rank_grads[1]):>+.4f}")
+print(f"GPU 2 mean grad: {np.mean(rank_grads[2]):>+.4f}")
+print(f"GPU 3 mean grad: {np.mean(rank_grads[3]):>+.4f}")
+print(f"\\nAveraged grad:   {np.mean(averaged):>+.4f}")
+print(f"(Every GPU sees this averaged gradient and applies an identical optimizer step.)")
+
+# Per-step communication cost — independent of GPU count for large N.
+print(f"\\nPer-GPU comm cost: ~2 * model_size = ~{2 * n_params * 4} bytes (FP32)")
+`}
+  packages={["numpy"]}
+  height={460}
+/>
+
+<Callout type="warning">
+"Data parallelism scales to any number of GPUs" is the easy assumption and it fails past a certain scale. DP scales linearly *until* the gradient all-reduce becomes bandwidth-bound — past roughly $1000$ GPUs on typical cross-node networks, the all-reduce time starts to dominate the step. **DP alone does not scale to frontier-model training**. The other parallelism strategies (TP, PP, FSDP) exist partly to limit how big the DP rank needs to grow, and partly to handle models that do not fit in DP at all.
+</Callout>
+
+If DP cannot break the per-GPU memory ceiling, the next step is to actually split the model itself. There are two ways to do that.
+
+## Model parallelism — tensor and pipeline
+
+### Tensor parallelism (Megatron)
+
+Tensor parallelism splits **individual layer operations** across GPUs. Each GPU holds a *slice* of a layer's parameters and computes a *slice* of that layer's output. The pioneering recipe is Megatron-LM (Shoeybi et al. 2019, [arxiv.org/abs/1909.08053](https://arxiv.org/abs/1909.08053)), which works out specific dimension choices for the transformer's FFN and attention so that communication between GPUs is required only at carefully chosen points.
+
+For the FFN, the recipe is a column-then-row split. The first linear projects $d \to 4d$ — Megatron splits this *along the output (column) dimension*, so each TP rank computes its own slice of the $4d$-dimensional hidden activations independently, with no communication needed. The activation function (GELU or SwiGLU) is element-wise and stays local. The second linear projects $4d \to d$ — Megatron splits this *along the input (row) dimension*, so each rank multiplies its own activation slice by its own weight slice, producing a partial sum. A single all-reduce across TP ranks then combines the partial sums into the final FFN output. Two big linear operations; one communication point.
+
+For attention, the recipe is similar: QKV projections split along the head dimension (different attention heads on different GPUs), each rank computes attention independently on its heads, the output projection splits along the input dimension, and a single all-reduce across TP ranks at the end of attention recovers the full output. Each transformer block ends up with two all-reduces — one for attention, one for FFN.
+
+The communication cost per block is two all-reduces of the *activation* — proportional to batch × sequence-length × $d$, *not* to model size. This is high-volume communication that happens on every layer of every forward and backward pass. It needs very high bandwidth and very low latency, which is why TP is almost always confined to *within a node* — typical TP ranks are $2$, $4$, or $8$, matching the number of GPUs on one server connected by NVLink.
+
+### Pipeline parallelism (GPipe)
+
+Pipeline parallelism splits the model **between layers**, not within them. Different layers live on different GPUs. GPU $0$ holds layers $1$ through $4$; GPU $1$ holds layers $5$ through $8$; and so on, dividing an $N$-layer model into pipeline stages. The pioneering paper is GPipe (Huang et al. 2019, [arxiv.org/abs/1811.06965](https://arxiv.org/abs/1811.06965)).
+
+The forward pass flows down the pipeline: a batch enters GPU $0$, its layer-$1$-through-$4$ activations are computed, the result is sent to GPU $1$, which runs layers $5$ through $8$, and so on. The backward pass flows in reverse. Communication happens *only at the stage boundaries* — one activation send between consecutive GPUs per stage transition. That is dramatically less communication than TP. PP is bandwidth-friendly and runs comfortably *across* nodes over InfiniBand.
+
+The cost of PP is the **pipeline bubble**. At the very start of training, GPU $0$ is busy on the first batch while GPUs $1$ through $N-1$ wait for activations to arrive. At the end of each backward pass, only the later GPUs are busy while the earlier ones idle. The idle time is the bubble; it makes the pipeline less efficient than a fully-utilized DP cluster of equivalent size.
+
+The mitigation is **micro-batching**: split each batch into many smaller micro-batches and feed them through the pipeline one after another. While GPU $1$ is processing micro-batch $1$, GPU $0$ is already processing micro-batch $2$, and the pipeline fills up. With $N$ stages and $M$ micro-batches per batch, the bubble fraction is approximately $(N-1) / (M + N - 1)$. To get the bubble small, $M$ has to be much larger than $N$. Modern 1F1B and interleaved-1F1B schedules push the bubble down further by interleaving forward and backward passes carefully.
+
+### The tradeoff
+
+The two model-parallel strategies trade off communication volume against scheduling complexity. **TP** has low memory per GPU and high per-layer activation communication — fastest within a node, worst across nodes. **PP** has low communication (only at stage boundaries) but introduces the pipeline bubble — best across nodes, requires careful micro-batch scheduling.
+
+For very large models, both are used together: **TP within nodes** (NVLink bandwidth) and **PP across nodes** (InfiniBand). Combining the two with DP on top gives the **3D parallelism** that frontier-scale training runs use. The Megatron-Turing $530$B model (Smith et al. 2022, [arxiv.org/abs/2201.11990](https://arxiv.org/abs/2201.11990)) is the canonical demonstration: TP$=8$ within each node, PP$=35$ across nodes, DP$=64$ across replicas, totaling $17{,}920$ GPUs. The dimensions are chosen so each form of communication lands on a network layer that can sustain it.
+
+<WidgetFrame title="Parallelism strategies" caption="How a single forward pass distributes across multiple GPUs under DP, TP, PP, and FSDP. Toggle between strategies to see how data flows, which GPUs hold which parameters, and where communication happens. Animation shows one micro-batch flowing through the architecture.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 43 (secondary)
+  </div>
+</WidgetFrame>
+
+<Callout type="warning">
+"Tensor parallelism is just sharding the model across GPUs" is the wrong mental model. TP specifically splits *operations* along carefully chosen dimensions so that the all-reduce happens *only at certain points* — once per FFN and once per attention, not on every intermediate. Naive sharding (split every matmul along an arbitrary dimension; communicate at every intermediate) would require so much communication that the system runs slower than not parallelizing at all. The Megatron column-then-row pattern is a specific design that makes TP work; the design matters as much as the sharding.
+</Callout>
+
+<Callout type="aside">
+"Pipeline parallelism is free model splitting" is also wrong — PP introduces the pipeline bubble, which grows with pipeline depth and shrinks with micro-batch count. With a $32$-stage pipeline and only $32$ micro-batches per batch, the bubble fraction is about $50\%$ — half the GPU-time is wasted on bubbles. Modern schedules (1F1B, interleaved 1F1B) reduce the bubble to under $10\%$ at production scale, but only via careful interleaving of forward and backward passes that is non-trivial to implement correctly.
+</Callout>
+
+The third way to think about parallelism keeps DP's simplicity while sharding the state — and has become the standard default for everything in the $1$B-$30$B range.
+
+## FSDP — the modern default
+
+### The motivation
+
+Vanilla DP wastes memory by *replicating* everything. Every GPU stores a full copy of the parameters, the gradients, and the AdamW optimizer state ($m$ and $v$). For a $7$B model in BF16 with AdamW: $\sim 14$ GB params + $\sim 14$ GB gradients + $\sim 56$ GB FP32 optimizer state = $\sim 84$ GB per GPU just for state, before any activations. That barely fits on an H100 — and entirely will not fit on cheaper GPUs.
+
+The insight from ZeRO (Rajbhandari et al. 2020, [arxiv.org/abs/1910.02054](https://arxiv.org/abs/1910.02054)) is that if the work is already sharded across DP ranks, there is no good reason to keep the *state* replicated. Shard the state too. ZeRO defines three stages of increasingly aggressive sharding: ZeRO-1 shards optimizer state, ZeRO-2 shards gradients too, ZeRO-3 shards parameters as well. PyTorch's **FSDP** (Fully Sharded Data Parallel) is essentially ZeRO-3 with a clean wrapper API, and it has become the modern default for any model larger than a few hundred million parameters.
+
+### How FSDP works
+
+Under ZeRO-3 / FSDP, each GPU stores only $1/N$ of each layer's parameters — where $N$ is the number of DP ranks. The rest live on other GPUs. When the forward pass needs layer $L$:
+
+1. **All-gather** layer $L$'s parameters from all DP ranks. Each rank contributes its $1/N$ shard; every rank ends up with the full layer $L$ params *temporarily* in memory.
+2. **Compute** the forward pass for layer $L$ using those gathered parameters.
+3. **Discard** the gathered parameters as soon as the layer is done. The local shard is kept; the rest is freed.
+
+Backward works symmetrically: gather the parameters for layer $L$, compute the gradient, then **reduce-scatter** the gradient back to the appropriate shards. After the full backward pass, each GPU holds the gradient for its shard of every layer's parameters. The optimizer step happens locally on each shard.
+
+The end result is that each GPU stores only $1/N$ of the model + $1/N$ of the gradients + $1/N$ of the optimizer state. For a $7$B model on $8$ GPUs, the per-GPU state drops from $\sim 84$ GB to $\sim 11$ GB — comfortably fitting on much cheaper hardware. The cost is extra communication: every forward and backward pass now needs all-gathers and reduce-scatters. In practice, those costs overlap with compute (FSDP pre-fetches the next layer's parameters while the current layer is computing), so the wall-clock cost is often small. For most modern training, FSDP's memory savings dramatically outweigh its communication overhead.
+
+### When to use what
+
+The parallelism strategy depends on model size and cluster scale.
+
+- **Small model ($<1$B), few GPUs**: vanilla DP. Simple, low overhead, no reason to add complexity.
+- **Medium model ($1$B-$30$B), many GPUs**: FSDP. Memory savings open up cheaper hardware; the communication overhead is manageable; the API stays nearly identical to vanilla DP.
+- **Large model ($30$B+)**: FSDP plus tensor parallelism within nodes. FSDP handles the DP-axis sharding; TP shrinks each layer's compute footprint enough to fit big layers in NVLink-bandwidth communication.
+- **Frontier scale ($100$B+)**: full 3D parallelism — DP $\times$ TP $\times$ PP, often with FSDP on the DP axis. Megatron-Turing $530$B's $8 \times 35 \times 64 = 17{,}920$ GPUs is the canonical example.
+
+<RunnableCode
+  client:load
+  defaultCode={`# Illustrative FSDP setup (the actual run requires a multi-GPU environment).
+# The point: the *training loop* is the same as Chapter 8. FSDP wraps the model;
+# the rest of the code is identical. The all-gather / reduce-scatter happens
+# inside the wrapper, transparently to the loop.
+
+# import os
+# import torch
+# import torch.distributed as dist
+# import torch.nn.functional as F
+# from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+# from torch.distributed.fsdp import MixedPrecision
+
+# # Initialize the process group (launched by torchrun across N ranks).
+# dist.init_process_group(backend='nccl')
+# local_rank = int(os.environ['LOCAL_RANK'])
+# torch.cuda.set_device(local_rank)
+
+# # Build the model — same model class as Chapter 8's GPT.
+# model = GPT(vocab_size=50257, d_model=4096, n_heads=32, n_layers=32)
+
+# # Wrap with FSDP. param_dtype controls the precision used for compute;
+# # the optimizer state stays in FP32 inside FSDP for numerical stability.
+# model = FSDP(
+#     model,
+#     mixed_precision=MixedPrecision(
+#         param_dtype=torch.bfloat16,
+#         reduce_dtype=torch.bfloat16,
+#         buffer_dtype=torch.bfloat16,
+#     ),
+#     device_id=local_rank,
+# )
+
+# # Optimizer + training loop are exactly the same as Chapter 8.
+# optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95))
+
+# for step in range(total_steps):
+#     x, y = get_batch()
+#     logits = model(x)
+#     loss = F.cross_entropy(logits.view(-1, vocab_size), y.view(-1))
+#     optimizer.zero_grad()
+#     loss.backward()           # FSDP reduces-scatter gradients automatically
+#     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+#     optimizer.step()
+
+print("(Code above is illustrative; requires a multi-GPU environment to run.)")
+print("Compare with Chapter 8's training loop: the body is essentially unchanged.")
+print("FSDP wraps the model; the all-gather/reduce-scatter happens transparently.")
+`}
+  packages={[]}
+  height={620}
+/>
+
+<Callout type="note">
+**FSDP is not just data parallelism with extra steps.** Vanilla DP replicates the entire model, the gradients, and the optimizer state on every GPU. FSDP shards all three across DP ranks — each GPU stores only $1/N$ of each. A model that would never fit under vanilla DP can fit under FSDP. The "extra steps" (all-gather params before forward, reduce-scatter grads after backward) are not optional — they are the *entire point* of the memory savings. The implementation effort to add them is non-trivial; the payoff is the difference between training a model and not training it at all.
+</Callout>
+
+## What we've built — and what's next
+
+Nine chapters in, the training-side mental model is complete. Chapters 1 through 6 specified the architecture. Chapter 7 specified the data pipeline. Chapter 8 specified the training loop and its mathematics — the cross-entropy loss, AdamW, the warmup-plus-cosine schedule, gradient clipping. This chapter answered the two questions of scale: *what* to train, given a compute budget (Chinchilla scaling laws, $\sim 20$ tokens per parameter, with the modern caveat that frontier models intentionally over-train for inference economics), and *how* to train it across many GPUs (DP for speed, TP within nodes for memory, PP across nodes for memory, FSDP as the modern unified default, 3D parallelism for the largest runs). The system diagrams of GPT-4-scale training runs — Llama-3's $24{,}000$-GPU H100 cluster, Megatron-Turing's $17{,}920$-GPU 3D parallel setup — are now readable from end to end.
+
+What is still missing is the systems engineering of *running* those clusters. Cluster orchestration, NCCL configuration, CUDA streams, Triton kernel development, debugging training runs that go bad at the $10{,}000$-GPU scale, recovering from inevitable hardware failures over weeks-long jobs. Chapter 10 covers that material. It is *practical depth* rather than core conceptual content — the math and the parallelism strategies of this chapter are the conceptual core; the kernel-level details of Chapter 10 are what frontier labs actually wrestle with in production.
+
+The full pre-training story is Chapters 7 through 10: data, training loop, scaling and parallelism, infrastructure. After this chapter, the reader has the conceptual core. After Chapter 10, the reader has the practical depth. After both, the tutorial moves on to post-training (supervised fine-tuning, alignment) in Chapter 13 and onward, and inference (KV caching, quantization, decoding) in Chapter 17 and onward.
