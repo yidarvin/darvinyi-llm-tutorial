@@ -6,6 +6,7 @@ description: Mixture of Experts (MoE) — the architectural pattern that decoupl
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { MoERoutingVisualizer } from '@components/widgets';
 
 Chapter 10 closed the training-side arc. We now know how to *train* a dense transformer at any scale — what hardware to use, what frameworks to reach for, what numerical precision to keep, and roughly how many dollars it costs. Chapters 11 and 12 cover the major architectural alternatives — variants that change the building block itself rather than how it is trained.
 
@@ -161,10 +162,8 @@ The bookkeeping for an MoE model has two distinct numbers that matter for comple
 
 The inference economics fall directly out of this split. GPU memory needs the **total** parameter count, because every expert must be resident in memory to be ready to run on any token. Per-token compute is set by the **active** count. **Memory bandwidth and FFN FLOPs are decoupled** — a Mixtral inference deployment must hold $46.7$B parameters but pays only $12.9$B parameters' worth of compute per token, which is cheaper than serving Llama-2 70B even though Mixtral has more total capacity.
 
-<WidgetFrame title="MoE routing visualizer" caption="A sequence of tokens flows into an MoE layer with 8 experts. The router computes logits per token; top-2 selection picks the two experts to handle each token. Watch how different tokens route to different expert combinations. The hand-tuned tokens show how experts naturally specialize during training — code tokens to expert 3, factual tokens to expert 5, syntax tokens to expert 1, etc. Adjustable: top-k value (1, 2, or 4); hover any expert for routing statistics.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 51 (marquee)
-  </div>
+<WidgetFrame title="MoE routing visualizer" caption="16 hand-tuned tokens flow into an MoE layer with 8 experts. Curves show top-k routing; thicker curves = higher gate values. Hover any token to highlight its routing; hover any expert to see all routed tokens. Toggle top-k between 1, 2, and 4 to see how routing decisions change. Expert 4 is deliberately under-utilized — a real failure mode the auxiliary loss is designed to prevent. Note: real expert specialization is messier than shown; this widget hand-tunes the routing for pedagogical clarity.">
+  <MoERoutingVisualizer client:visible />
 </WidgetFrame>
 
 <Callout type="warning">

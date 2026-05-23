@@ -1,0 +1,178 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.kToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.kToggleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-right: 0.5rem;
+}
+.kButton {
+  padding: 0.4rem 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.kButton:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.kButtonActive {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.diagramPanel {
+  padding: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+.svg { width: 100%; height: auto; }
+
+.tokenBox {
+  fill: var(--bg-primary);
+  stroke: var(--border-default);
+  stroke-width: 1;
+  transition: stroke 200ms, fill 200ms;
+}
+.tokenGroup:hover .tokenBox { stroke: var(--cyan-400); fill: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-primary)); }
+.tokenLabel {
+  fill: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.expertBox {
+  fill: var(--bg-primary);
+  stroke: var(--border-default);
+  stroke-width: 1;
+  transition: stroke 200ms, fill 200ms;
+}
+.expertGroup:hover .expertBox { stroke: var(--cyan-400); fill: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-primary)); }
+.expertBoxUnused {
+  stroke: var(--rose-400);
+  stroke-dasharray: 4 3;
+}
+.expertLabel {
+  fill: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  pointer-events: none;
+}
+.expertSubLabel {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  pointer-events: none;
+}
+.expertUnusedFlag { fill: var(--rose-400); pointer-events: none; }
+
+.routingCurve {
+  fill: none;
+  transition: opacity 200ms, stroke-width 200ms;
+}
+
+.colHeader {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+
+.loadPanel {
+  padding: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+.loadTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.loadRow {
+  display: grid;
+  grid-template-columns: 30px 1fr 30px auto;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+}
+.loadLabel { color: var(--text-secondary); }
+.loadCount { color: var(--text-primary); text-align: right; }
+.loadBarTrack {
+  height: 14px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.loadBarFill {
+  height: 100%;
+  background: var(--cyan-500);
+  min-width: 2px;
+  transition: width 200ms;
+}
+.loadBarFillUnused { background: var(--rose-500); opacity: 0.5; }
+.loadUnusedBadge {
+  color: var(--rose-400);
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
+.selectedPanel {
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--cyan-500) 6%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-md);
+}
+.selectedTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+}
+.selectedTitle strong { color: var(--cyan-300); }
+.selectedCategory {
+  color: var(--text-tertiary);
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+}
+.selectedRouting {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+.selectedRouting strong { color: var(--cyan-300); }
+.selectedExplanation {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .loadRow { grid-template-columns: 25px 1fr 25px; }
+  .loadUnusedBadge { display: none; }
+}
