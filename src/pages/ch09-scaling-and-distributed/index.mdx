@@ -6,7 +6,7 @@ description: Modern LLMs have 8B-1T parameters and train on trillions of tokens 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { ScalingLawCalculator } from '@components/widgets';
+import { ScalingLawCalculator, ParallelismDiagram } from '@components/widgets';
 
 Chapter 8 ended with a working training loop on a small model — a 50M-parameter transformer learning on a single GPU in an afternoon. The math of that chapter is the math of modern LLM training: same cross-entropy, same AdamW, same warmup-plus-cosine schedule. What is *not* the same at frontier scale is the engineering. Llama-3 has 8B to 405B parameters. GPT-4 is reportedly trillion-plus. The training corpora are trillions of tokens. A single H100 holds at most a few billion parameters in mixed precision — and training needs *additional* memory for gradients, optimizer state, and activations. The Chapter 8 loop, as written, runs out of memory before the first forward pass on these models, and would take years if it didn't.
 
@@ -232,10 +232,8 @@ The two model-parallel strategies trade off communication volume against schedul
 
 For very large models, both are used together: **TP within nodes** (NVLink bandwidth) and **PP across nodes** (InfiniBand). Combining the two with DP on top gives the **3D parallelism** that frontier-scale training runs use. The Megatron-Turing $530$B model (Smith et al. 2022, [arxiv.org/abs/2201.11990](https://arxiv.org/abs/2201.11990)) is the canonical demonstration: TP$=8$ within each node, PP$=35$ across nodes, DP$=64$ across replicas, totaling $17{,}920$ GPUs. The dimensions are chosen so each form of communication lands on a network layer that can sustain it.
 
-<WidgetFrame title="Parallelism strategies" caption="How a single forward pass distributes across multiple GPUs under DP, TP, PP, and FSDP. Toggle between strategies to see how data flows, which GPUs hold which parameters, and where communication happens. Animation shows one micro-batch flowing through the architecture.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 43 (secondary)
-  </div>
+<WidgetFrame title="Parallelism strategies" caption="Four parallelism strategies (DP, TP, PP, FSDP) shown as 4-GPU layouts. Each strategy distributes data and parameters differently and uses different communication primitives. Tab between strategies to compare memory layouts, batch distribution, and communication patterns.">
+  <ParallelismDiagram client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
