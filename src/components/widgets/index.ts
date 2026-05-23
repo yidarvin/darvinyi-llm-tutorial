@@ -20,3 +20,4 @@ export { default as ParallelismDiagram } from './ch09/ParallelismDiagram';
 export { default as TrainingStackPicker } from './ch10/TrainingStackPicker';
 export { default as StepTimeline } from './ch10/StepTimeline';
 export { default as MoERoutingVisualizer } from './ch11/MoERoutingVisualizer';
+export { default as ActiveVsTotalParams } from './ch11/ActiveVsTotalParams';

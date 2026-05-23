@@ -1,0 +1,216 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.sortToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.sortLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.sortButton {
+  padding: 0.35rem 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.sortButton:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.sortButtonActive {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.chartPanel {
+  padding: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.modelRow {
+  display: grid;
+  grid-template-columns: 150px 1fr 110px;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+.modelLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+.modelRowCustom .modelLabel { color: var(--cyan-300); font-weight: 500; }
+
+.barContainer {
+  position: relative;
+  height: 18px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.barTotal {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  background: color-mix(in srgb, var(--cyan-500) 18%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--cyan-500) 40%, transparent);
+}
+.barActive {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  background: var(--cyan-500);
+}
+.modelRowCustom .barTotal {
+  border-right-color: var(--amber-500);
+  background: color-mix(in srgb, var(--amber-500) 18%, transparent);
+}
+.modelRowCustom .barActive { background: var(--amber-500); }
+
+.modelStats {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+.statTotal { color: var(--text-tertiary); }
+.statSeparator { color: var(--text-tertiary); margin: 0 0.2rem; }
+.statActive { color: var(--cyan-300); font-weight: 500; }
+.modelRowCustom .statActive { color: var(--amber-500); }
+
+.customSeparator {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 0.85rem;
+  margin-bottom: 0.4rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border-default);
+}
+
+.legend {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  flex-wrap: wrap;
+}
+.legendSwatchActive {
+  display: inline-block;
+  width: 14px; height: 8px;
+  background: var(--cyan-500);
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+.legendSwatchInactive {
+  display: inline-block;
+  width: 14px; height: 8px;
+  background: color-mix(in srgb, var(--cyan-500) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan-500) 40%, transparent);
+  margin-right: 0.4rem;
+  vertical-align: middle;
+}
+
+.configPanel {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.configTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+}
+.configGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  margin-bottom: 0.85rem;
+}
+.sliderGroup { display: flex; flex-direction: column; gap: 0.25rem; }
+.sliderLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+.sliderValue { color: var(--cyan-300); }
+.slider { width: 100%; }
+.kButtons { display: flex; gap: 0.3rem; }
+.kButton {
+  padding: 0.25rem 0.55rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.kButtonActive {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.configResults {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.configMetric {
+  padding: 0.45rem 0.7rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.configMetricLabel {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.15rem;
+}
+.configMetricValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.configMetricValueActive {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .modelRow { grid-template-columns: 110px 1fr 95px; gap: 0.4rem; }
+  .modelLabel { font-size: 0.7rem; }
+  .modelStats { font-size: 0.68rem; }
+  .configGrid { grid-template-columns: 1fr; }
+}

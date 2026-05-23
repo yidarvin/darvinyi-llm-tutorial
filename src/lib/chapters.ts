@@ -47,7 +47,7 @@ export const PARTS: Part[] = [
     num: 4,
     title: 'Alternative Architectures',
     chapters: [
-      { num: 11, slug: 'ch11-moe',           title: 'Mixture of Experts',         partNum: 4, status: 'draft' },
+      { num: 11, slug: 'ch11-moe',           title: 'Mixture of Experts',         partNum: 4, status: 'published' },
       { num: 12, slug: 'ch12-ssm-and-mamba', title: 'State-space models & Mamba', partNum: 4, status: 'planned' },
     ],
   },

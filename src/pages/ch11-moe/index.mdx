@@ -6,7 +6,7 @@ description: Mixture of Experts (MoE) — the architectural pattern that decoupl
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { MoERoutingVisualizer } from '@components/widgets';
+import { MoERoutingVisualizer, ActiveVsTotalParams } from '@components/widgets';
 
 Chapter 10 closed the training-side arc. We now know how to *train* a dense transformer at any scale — what hardware to use, what frameworks to reach for, what numerical precision to keep, and roughly how many dollars it costs. Chapters 11 and 12 cover the major architectural alternatives — variants that change the building block itself rather than how it is trained.
 
@@ -341,10 +341,8 @@ print("  Mixtral has lower per-token inference cost despite more total capacity.
 ```
 </RunnableCode>
 
-<WidgetFrame title="Active vs total parameters" caption="The inference economics of MoE made concrete. Slide the configuration sliders (N experts, top-k, base FFN size, layer count) and see total and active parameters change. Compare against real models: Llama-2 7B/13B/70B (dense, total = active), Mixtral 8x7B, DeepSeek-V3. The chart visualizes the central MoE claim: more total parameters at the same active cost.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 52 (secondary)
-  </div>
+<WidgetFrame title="Active vs total parameters" caption="The inference economics of MoE made concrete. Each model shown as a bar — light region is total parameters (memory cost), filled region is active parameters per token (compute cost). Dense models (Llama-2, Llama-3) have total = active. MoE models (Mixtral, DeepSeek) show a visible gap between memory and compute. The custom configurator below lets you design your own MoE and see where it lands.">
+  <ActiveVsTotalParams client:visible />
 </WidgetFrame>
 
 The progression from Switch (top-1, $2021$) to GLaM (top-2, $2021$) to Mixtral (top-2 open-weights, $2024$) to DeepSeek-V3 (loss-free balancing, late $2024$) is a clean four-step story. Each step solved a different practical problem: Switch made sparse scaling work at all, GLaM established top-2 as standard, Mixtral made MoE production-ready in open weights, DeepSeek-V3 pushed it to frontier scale with refined balancing. Section 7 turns to the honest accounting of why MoE remains harder to use than dense models.
@@ -384,6 +382,261 @@ Post-training MoE models is harder than post-training dense models for a structu
 This chapter introduced the MoE block — router plus $N$ experts replacing the dense FFN — and worked through the math of top-$k$ routing, the central practical problem of load balancing via auxiliary loss, the bookkeeping of expert capacity and dropped tokens, the modern variants from Switch through DeepSeek-V3, and the honest accounting of why MoE training, serving, and fine-tuning are all harder than their dense counterparts. The pedagogical claim is one sentence: **MoE is the architectural pattern that decouples capacity from compute**, scaling total parameters with the number of experts while keeping per-token FLOPs proportional only to the top-$k$ active subset.
 
 MoE wins where very large total capacity and manageable inference cost both matter. The "sweet spot" for frontier open-weights models in $2024$ — Mixtral, DeepSeek-V3 — has been exactly that combination. MoE loses on simplicity. If your use case does not need more than roughly $50$B effective capacity, dense models are easier to train, easier to serve, and very nearly as good.
+
+## Exercises
+
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — MoE forward pass at top-1 vs top-2
+
+Implement the MoE forward pass. Verify that top-1 routing uses exactly one expert per token; top-2 uses two with normalized gates summing to $1$.
+
+<details>
+<summary>Hint</summary>
+
+For each token:
+1. Compute router logits: $\ell = W_r x$.
+2. Find the top-$k$ expert indices (by argsort of logits).
+3. Softmax over only the selected logits to get gate values summing to $1$.
+4. Run only the top-$k$ FFNs and combine: $\text{MoE}(x) = \sum_{i \in \text{top}_k} g_i \cdot \text{FFN}_i(x)$.
+
+For top-1, the gate is the softmax of a single logit — which is just $1.0$ (a softmax over one value always returns $1$).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def moe_forward(x, router_W, expert_W1s, expert_W2s, k=2):
+    """
+    MoE forward for one token (1D x).
+    Returns: (output, expert_indices, gates)
+    """
+    # TODO: compute router logits = x @ router_W.T
+    # TODO: pick top-k expert indices (argsort)
+    # TODO: softmax over selected logits -> gates
+    # TODO: for each selected expert, compute FFN(x) and combine
+    pass
+
+# Test setup
+np.random.seed(42)
+d_model, d_ffn, num_experts = 16, 32, 4
+x = np.random.normal(0, 1, d_model)
+router_W = np.random.normal(0, 0.1, (num_experts, d_model))
+expert_W1s = np.random.normal(0, 0.1, (num_experts, d_ffn, d_model))
+expert_W2s = np.random.normal(0, 0.1, (num_experts, d_model, d_ffn))
+
+# Test top-1
+# out, idx, gates = moe_forward(x, router_W, expert_W1s, expert_W2s, k=1)
+# print(f"Top-1: experts={idx}, gates={gates}")
+# assert len(idx) == 1, "Top-1 should select exactly one expert"
+# assert abs(gates[0] - 1.0) < 1e-6, "Top-1 gate should be 1.0"
+
+# Test top-2
+# out, idx, gates = moe_forward(x, router_W, expert_W1s, expert_W2s, k=2)
+# print(f"Top-2: experts={idx}, gates={gates.round(3)}")
+# assert len(idx) == 2, "Top-2 should select two experts"
+# assert abs(gates.sum() - 1.0) < 1e-6, f"Gates should sum to 1, got {gates.sum()}"
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Parameter counting (Mixtral 8x7B verification)
+
+Compute total and active parameters for an MoE transformer with a given config. Verify against Mixtral 8x7B's published numbers ($46.7$B total, $12.9$B active).
+
+<details>
+<summary>Hint</summary>
+
+Per MoE layer:
+- Attention: $4 d^2$ (Q, K, V, O projections)
+- LayerNorms: $\approx 4d$
+- Per-expert FFN: $2 d \cdot d_{\text{ffn}}$
+- Router: $N \cdot d$
+
+Total layer params (all experts) = attn $+$ LN $+ N \cdot \text{FFN}_{\text{per-expert}}$ $+$ router.
+Active layer params (top-$k$ only) = attn $+$ LN $+ k \cdot \text{FFN}_{\text{per-expert}}$ $+$ router.
+
+Plus embeddings: $\approx 2 \cdot V \cdot d$ (input embedding + output projection, often tied).
+
+For Mixtral 8x7B: $d = 4096$, $d_{\text{ffn}} = 14336$, $N = 8$, $k = 2$, $L = 32$, $V \approx 32000$.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def count_moe_params(num_layers, d_model, d_ffn, num_experts, top_k, vocab_size=32000):
+    """Compute total and active parameters for an MoE transformer."""
+    # Per-layer attention: 4 * d^2 (Q, K, V, O)
+    attn = 4 * d_model * d_model
+    # LayerNorms: 4 * d_model per block
+    ln = 4 * d_model
+    # FFN per expert: 2 * d_model * d_ffn
+    ffn_per_expert = 2 * d_model * d_ffn
+    # Router: num_experts * d_model
+    router = num_experts * d_model
+
+    # TODO: layer_total = attn + ln + num_experts * ffn_per_expert + router
+    # TODO: layer_active = attn + ln + top_k * ffn_per_expert + router
+
+    # TODO: total = num_layers * layer_total + 2 * vocab_size * d_model
+    # TODO: active = num_layers * layer_active + 2 * vocab_size * d_model
+
+    # return total, active
+    pass
+
+# Mixtral 8x7B verification (approximate config)
+# total, active = count_moe_params(
+#     num_layers=32, d_model=4096, d_ffn=14336,
+#     num_experts=8, top_k=2, vocab_size=32000,
+# )
+# print(f"Mixtral 8x7B (computed):")
+# print(f"  Total:  {total/1e9:.1f}B  (published: 46.7B)")
+# print(f"  Active: {active/1e9:.1f}B  (published: 12.9B)")
+# print(f"  Sparsity: {active/total*100:.0f}%")
+
+# Compare to dense Llama-2 70B (num_experts=1, top_k=1)
+# total_dense, active_dense = count_moe_params(
+#     num_layers=80, d_model=8192, d_ffn=28672,
+#     num_experts=1, top_k=1, vocab_size=32000,
+# )
+# print(f"\\nLlama-2 70B (dense):")
+# print(f"  Total = Active = {total_dense/1e9:.1f}B")
+# print(f"\\n-> Mixtral has ~67% the total params and ~18% the active params of Llama-2 70B.")
+# print(f"   Same memory footprint as Llama-2 13B; quality closer to Llama-2 70B.")
+`}
+  packages={[]}
+/>
+
+### Exercise 3 (medium) — Auxiliary load balance loss
+
+Implement the Switch Transformer auxiliary load balancing loss. Verify that it is lower for balanced routing than for collapsed routing — providing the gradient signal that prevents collapse.
+
+<details>
+<summary>Hint</summary>
+
+The auxiliary loss is:
+$$\mathcal{L}_{\text{aux}} = \alpha \cdot N \cdot \sum_{i=1}^{N} f_i \cdot P_i$$
+
+where:
+- $f_i$ = fraction of tokens routed to expert $i$ (from argmax assignments).
+- $P_i$ = average router probability for expert $i$ (from softmax outputs).
+- $\alpha$ = balance coefficient, typically $0.01$.
+
+The loss is minimized when both $f_i$ and $P_i$ are uniform at $1/N$. Imbalance pushes the loss up.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def aux_load_balance_loss(router_probs, expert_assignments, num_experts, alpha=0.01):
+    """
+    Switch Transformer auxiliary load balancing loss.
+
+    router_probs:        (num_tokens, num_experts) - softmax output for each token
+    expert_assignments:  (num_tokens,) - top-1 expert assignment per token (argmax)
+    num_experts:         N
+    alpha:               balance coefficient
+    """
+    # TODO: f_i = fraction of tokens routed to expert i
+    # TODO: P_i = average router probability for expert i (across tokens)
+    # TODO: loss = alpha * num_experts * sum(f_i * P_i)
+    pass
+
+np.random.seed(0)
+num_experts, num_tokens = 4, 100
+
+# Balanced: uniform-ish routing
+balanced_probs = np.random.dirichlet([5.0] * num_experts, size=num_tokens)
+balanced_assign = np.argmax(balanced_probs, axis=-1)
+
+# Collapsed: most tokens -> expert 0
+collapsed_probs = np.random.dirichlet([10.0, 0.1, 0.1, 0.1], size=num_tokens)
+collapsed_assign = np.argmax(collapsed_probs, axis=-1)
+
+# Compute losses
+# loss_bal = aux_load_balance_loss(balanced_probs, balanced_assign, num_experts)
+# loss_col = aux_load_balance_loss(collapsed_probs, collapsed_assign, num_experts)
+
+# print(f"Balanced routing loss: {loss_bal:.5f}")
+# print(f"Collapsed routing loss: {loss_col:.5f}")
+# print(f"Ratio: {loss_col / loss_bal:.2f}x")
+# print(f"\\n-> Collapsed routing has a higher loss -> gradient pushes back toward balance.")
+# print(f"   This is the central signal preventing router collapse during training.")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Expert capacity and dropped tokens
+
+Simulate expert capacity. Given a batch of routing decisions, count how many tokens are dropped at each capacity factor. Sweep $\rho$ from $0.5$ to $2.0$ and report the drop rate at each value.
+
+<details>
+<summary>Hint</summary>
+
+Expert capacity formula: $C = \rho \cdot (T / N)$ where $T$ is total tokens, $N$ is number of experts, $\rho$ is the capacity factor.
+
+For each expert:
+- Count how many tokens were assigned to it (from top-1 argmax).
+- If count $> C$, drop $(\text{count} - C)$ tokens.
+
+Total drops $= \sum_i \max(0, \text{count}_i - C)$. Drop rate $=$ total drops $/$ total tokens.
+
+At $\rho = 1.0$: perfectly balanced routing has zero drops; imperfect routing has some.
+At $\rho = 2.0$: very generous; most batches have zero drops but compute is wasted.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def simulate_drops(expert_assignments, num_experts, capacity_factor):
+    """
+    Given top-1 expert assignments for a batch, compute the number of dropped tokens
+    at a given capacity factor.
+    Returns (drops, drop_rate).
+    """
+    num_tokens = len(expert_assignments)
+    # Capacity per expert: rho * (T / N)
+    capacity = int(capacity_factor * num_tokens / num_experts)
+
+    # TODO: count tokens per expert (np.bincount)
+    # counts = np.bincount(expert_assignments, minlength=num_experts)
+    # TODO: drops = sum(max(0, count - capacity) for each expert)
+    # TODO: return drops, drop_rate (= drops / num_tokens)
+    pass
+
+np.random.seed(42)
+num_experts, num_tokens = 8, 1000
+
+# Imperfect routing -- Zipf-like (some experts get more)
+weights = np.array([3.0, 2.0, 1.5, 1.0, 1.0, 0.8, 0.5, 0.3])
+weights = weights / weights.sum()
+assignments = np.random.choice(num_experts, size=num_tokens, p=weights)
+
+print(f"Tokens per expert: {np.bincount(assignments, minlength=num_experts).tolist()}")
+print(f"Perfect balance would be: ~{num_tokens // num_experts} per expert")
+print(f"\\nDrop rate at various capacity factors:")
+
+# for rho in [0.5, 0.8, 1.0, 1.25, 1.5, 2.0]:
+#     drops, rate = simulate_drops(assignments, num_experts, rho)
+#     print(f"  rho={rho}: {drops} drops ({rate*100:.1f}%)")
+
+# At rho=1.0: imperfect routing -> some drops
+# At rho=1.25: most drops eliminated; small efficiency cost
+# At rho=2.0: zero drops but ~50% of capacity wasted
+# Modern training: rho ~ 1.25 (sweet spot)
+`}
+  packages={["numpy"]}
+/>
 
 Chapter 12 takes the other architectural path. MoE keeps the attention mechanism intact and changes only what happens after it; **state-space models** like Mamba replace attention itself, trading attention's $O(N^2)$ memory and compute for $O(N)$ throughout. A different bet on what is actually holding transformers back. Together, Chapters 11 and 12 cover the two major architectural alternatives to standard dense transformers that have emerged in the last few years.
 
