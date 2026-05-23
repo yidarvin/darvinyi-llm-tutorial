@@ -1,0 +1,394 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch13-sft
+description: Supervised Fine-Tuning (SFT) — the first and most universal post-training method. Take a pre-trained base model, fine-tune on instruction-response pairs with response-only loss masking, and you have a usable chatbot. This chapter covers the SFT recipe, chat templates (ChatML, Llama-3, Mistral, Gemma), multi-turn conversation formatting, system prompts, the LIMA insight that 1000 high-quality examples can suffice, synthetic data generation (Alpaca, Vicuna, UltraChat), and the capability tax — how SFT can degrade pre-training capabilities. The first chapter of Phase 11 (post-training); the foundation of every modern chatbot.
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Chapters 1–10 taught how to train a pre-trained language model. Chapters 11 and 12 covered architectural alternatives — Mixture of Experts and state-space models — for when the standard dense transformer does not fit the constraints of the deployment. What you have at the end of either path is the same kind of object: a model that *completes text*. Type "The capital of France is" and it produces "Paris." Type a question and it may or may not answer.
+
+That object is not a chatbot. It does not know to respond when asked. It does not follow instructions, refuse harmful requests, or adopt a persona. **Phase 11 (Post-training)** covers how to turn raw next-token prediction into something useful: SFT (this chapter), preference optimization (Chapter 14), parameter-efficient methods (Chapter 15), and distillation (Chapter 16). Every modern chat model — GPT-4, Claude, Llama-3-Instruct, Mistral-Instruct, Gemini — went through SFT at the start of that pipeline.
+
+Supervised Fine-Tuning is the foundation. **The recipe is mechanically simple**: take a base model, fine-tune on a dataset of (instruction, response) pairs with the loss computed only on response tokens. That is it. The math is unchanged from Chapter 8's training loop; what differs is the data and a mask. The chapter is honest about the lack of glamour. SFT is universal because it works, is cheap, and is universal — not because it is clever. The interesting questions are operational: what chat template, what data, how much, what hyperparameters. This chapter covers those.
+
+## The setup — pre-trained ≠ useful
+
+A base language model is a polymath who has read most of the internet and can produce text on any topic, but has never been to school for chatbots. Give it the prefix "Q: What is the capital of France? A:" and it answers correctly — pre-training taught it the Q/A pattern from web text. Give it just "What is the capital of France?" and the next-token completion is probably another question, because what follows a question in unfiltered web text is often another question, not the answer. Base models can do many tasks if you prompt them carefully with in-context examples, but they have no built-in conception that *they* are the helpful side of a conversation.
+
+What is missing from the base model is short. It does not know it should *respond* when asked a question. It does not know to follow instructions without few-shot demonstrations. It has no consistent persona. It does not refuse anything. It does not know which special tokens mark the boundary between user turn and assistant turn. None of these are deep capability gaps — they are *format* gaps. The model knows the content; it does not know the shape.
+
+SFT fills the format gap. The post-training pipeline assembles in a fixed order: pre-trained model first, SFT second, preference optimization third (Chapter 14), parameter-efficient methods (Chapter 15) and distillation (Chapter 16) optional. SFT is the universal step. Some labs skip preference optimization for small models or specific use cases; none skip SFT, because the alternatives are unstable. Going straight from pre-training to RLHF without an SFT prior produces a reward model that has no idea what "good chatbot behavior" looks like. SFT establishes the baseline that everything else refines.
+
+<Callout type="note">
+**Phase 11 transition.** The architectural exploration is over. Phase 10 (Chapters 11 and 12) closed with the two major alternatives to standard dense transformers — MoE and SSMs. Phase 11 changes the question. Given *any* pre-trained architecture, what do you do to make it useful? SFT (this chapter), preference optimization (Chapter 14), PEFT (Chapter 15), and distillation (Chapter 16) are the four answers. **Phase 11 chapters are more sequential than Phase 10's** — they build on each other. SFT feeds DPO; DPO is sometimes done with LoRA; distillation can wrap either.
+</Callout>
+
+This chapter restricts to pure full-parameter SFT for pedagogical clarity. LoRA-based SFT is more common in practice and is the subject of Chapter 15; preference optimization is Chapter 14; distillation as a standalone technique is Chapter 16. Pure SFT first; refinements after.
+
+## The SFT recipe — instructions in, responses out
+
+### The recipe in one paragraph
+
+Take a pre-trained base model. Construct a dataset of (instruction, response) pairs — somewhere between $1{,}000$ and a million depending on budget. Format each pair according to a chat template (the next section's topic). Fine-tune with standard next-token-prediction loss, **but mask the loss on the instruction tokens** so only the response contributes to the gradient. Train for $1$ to $3$ epochs at a learning rate roughly $10\times$ smaller than pre-training — typically $1\mathrm{e}{-5}$ to $5\mathrm{e}{-5}$. The resulting model knows it is a chatbot. **That is it.** No new architecture, no new loss function (the cross-entropy is the same; only the reduction is masked), no new optimizer. SFT really is *fine* tuning — the same machinery from Chapter 8, run gently.
+
+### What changes from pre-training
+
+Five things change, all operational.
+
+**Data** changes shape. Pre-training data is raw web text — billions of unstructured tokens. SFT data is a curated set of instruction-response pairs, formatted as conversations. The volume drops by orders of magnitude (millions of tokens, not trillions) but the per-example quality is dramatically higher.
+
+**The loss is masked.** Cross-entropy is computed at every position in pre-training; in SFT, only response tokens contribute. Section 3 covers this in detail — it is the chapter's central technical detail.
+
+**The learning rate is roughly $10\times$ smaller.** Pre-training peaks around $1\mathrm{e}{-4}$ for modern transformers; SFT runs at $1\mathrm{e}{-5}$ to $5\mathrm{e}{-5}$. Too high and the model forgets its pre-training; too low and the SFT signal does not transfer.
+
+**Epochs drop to $1$–$3$.** Pre-training trains for "as many tokens as Chinchilla says," which can be trillions of tokens. SFT covers its small dataset a handful of times. More epochs typically hurt — the model overfits to the format and loses generalization.
+
+**Sequence length and batch size shrink.** Conversations are short relative to web documents. SFT typically runs at $2$K to $8$K context with batches of $256$K to $1$M tokens, against pre-training's many millions of tokens per batch.
+
+### What stays the same
+
+Almost everything else. The transformer architecture is byte-identical — same attention, same FFN, same embedding, same layer norms, same residuals. AdamW is the optimizer with similar $\beta_1$, $\beta_2$, and weight decay. Mixed precision (BF16 weights, FP32 master weights) is the standard. The distributed-training stack from Chapter 10 — FSDP, possibly with tensor parallelism — runs SFT exactly the same way it runs pre-training, just at smaller scale. And the math itself is identical: cross-entropy loss, gradient descent, backprop. The unmasked computation at every position is the same computation; the mask only selects which positions matter.
+
+<Callout type="aside">
+**SFT is "just training with a different dataset and a loss mask."** Most engineering teams reuse their pre-training infrastructure — FSDP launch scripts, optimizer configs, training loops — for SFT, with a small diff: load a base checkpoint instead of initializing fresh, swap the dataset loader to one that produces masked instruction-response sequences, drop the learning rate by an order of magnitude, and stop after a few thousand steps. **There is no separate "SFT framework."** Trl, Axolotl, OpenRLHF, and friends are convenience wrappers; under the hood they are the same training loop from Chapter 8 with two small changes.
+</Callout>
+
+The loss mask is the one new piece. Section 3 walks through it.
+
+## Response-only loss masking
+
+### Why mask the loss
+
+Pre-training computes the loss at every token: each token in the sequence is a target, and the model is trained to predict each one from its prefix. That made sense when the data was raw web text — *every* token was something the model would eventually need to be able to generate.
+
+In SFT, the data has a structure pre-training did not have. Half of every example is the *user's* input — an instruction we *show* the model so it can produce a response. We do not want the model to learn to generate that input. We want the model to learn to generate the *response*, conditioned on having seen the input. If we leave the loss unmasked, three bad things happen. The model memorizes specific user prompts, wasting capacity that should be spent on response quality. It learns weird mid-conversation completions, because user-side tokens followed by other user-side tokens is not a generation pattern that generalizes. And response quality slightly degrades, because gradient updates are diluted by signal that does not point in a useful direction.
+
+The fix is one line of code. Compute the cross-entropy at every position as before, then multiply by a binary mask that is $1$ on assistant tokens and $0$ everywhere else, and average over the masked positions only. User-prompt and system-prompt tokens are still *in the context* — the model conditions on them at every assistant position — but they do not contribute to the loss. Only the response tokens are training targets.
+
+### How the mask works
+
+The mask is a tensor the same shape as the input sequence. Constructing it is a tokenization-time job: tokenize the full conversation, walk through and identify which token positions correspond to assistant turns, set those positions to $1$ and the rest to $0$. HuggingFace's `DataCollatorForCompletionOnlyLM` does this automatically using the chat template's role markers — most teams use it rather than rolling their own. The mathematics is:
+
+<Equation label="13.sft">
+$$\mathcal{L}_{\text{SFT}} = \frac{1}{\sum_t m_t} \sum_t m_t \cdot \mathcal{L}_{\text{CE}}(y_t, p_t)$$
+</Equation>
+
+where $m_t \in \{0, 1\}$ is the response mask, $\mathcal{L}_{\text{CE}}(y_t, p_t) = -\log p_t[y_t]$ is the standard per-position cross-entropy from <EqRef id="8.loss" />, and the sum runs over all positions in the sequence. Equation <EqRef id="13.sft" /> is the entire SFT loss. The only difference from Chapter 8's training loss is the $m_t$ factor and the matching denominator.
+
+<WidgetFrame title="SFT loss masking" caption="A multi-turn conversation tokenized and visualized. Each token is shown with its role (system / user / assistant). Toggle 'response mask' on/off to see which tokens contribute to the loss. Hover any token for details. The mask determines what the model learns to generate vs what's just context.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 60 (marquee)
+  </div>
+</WidgetFrame>
+
+The runnable cell below builds the mask by hand on an eight-token toy sequence — four tokens of user prompt, four tokens of assistant response — and compares the unmasked loss against the masked one. The numbers differ because the masked version averages over four positions, not eight, and discards whatever signal the user-prompt positions happened to contribute.
+
+<RunnableCode>
+```python
+import numpy as np
+
+def cross_entropy(logits, labels):
+    """Numerically stable per-position cross-entropy."""
+    max_logit = logits.max(axis=-1, keepdims=True)
+    log_z = np.log(np.exp(logits - max_logit).sum(axis=-1, keepdims=True)) + max_logit
+    label_logits = np.take_along_axis(logits, labels[..., None], axis=-1).squeeze(-1)
+    return log_z.squeeze(-1) - label_logits
+
+def sft_loss(logits, labels, response_mask):
+    """
+    SFT loss with response-only masking.
+
+    logits:        (T, V) -- model output for one sequence
+    labels:        (T,)   -- target tokens
+    response_mask: (T,)   -- 1 where this token is assistant response, 0 elsewhere
+    """
+    per_position = cross_entropy(logits, labels)
+    masked = per_position * response_mask
+    return masked.sum() / max(response_mask.sum(), 1)
+
+# 8-token toy sequence: first 4 are user prompt, last 4 are assistant response
+np.random.seed(0)
+T, V = 8, 100
+logits = np.random.normal(0, 1, (T, V))
+labels = np.random.randint(0, V, T)
+
+full_loss = cross_entropy(logits, labels).mean()
+
+response_mask = np.zeros(T)
+response_mask[4:] = 1.0
+masked_loss = sft_loss(logits, labels, response_mask)
+
+print(f"Full-sequence loss (all 8 tokens):  {full_loss:.3f}")
+print(f"Response-only loss (last 4 only):   {masked_loss:.3f}")
+print()
+print("Both use the same per-position cross-entropy.")
+print("The mask focuses gradients on assistant tokens only.")
+print("The model learns to generate good responses, not to memorize user prompts.")
+```
+</RunnableCode>
+
+<Callout type="warning">
+**Misconception.** "SFT loss is computed on all tokens." Wrong — **response-only loss masking is the standard.** Computing loss on user prompts wastes model capacity (memorizing specific prompts instead of learning to respond), produces strange mid-conversation completion behavior, and slightly hurts response quality. Always mask. Modern data collators (`DataCollatorForCompletionOnlyLM` in `transformers`, equivalents in TRL and Axolotl) build the mask automatically from the chat template's role markers — there is no reason to skip it.
+</Callout>
+
+With the loss handled, the next question is mechanical: how do we *format* a conversation so the model knows what is user, what is system, and what is assistant?
+
+## Chat templates and special tokens
+
+### What a chat template does
+
+A language model takes a flat sequence of tokens. A conversation has structure — multiple roles (system, user, assistant), turn boundaries, sometimes tool calls. The **chat template** is the function that flattens the structured conversation into a single token sequence the model can ingest, using **special tokens** to mark the role boundaries.
+
+The special tokens are not arbitrary. Each model family bakes them into the tokenizer during tokenizer training, with specific token IDs that the model is later trained to recognize. ChatML's `<|im_start|>` is one token in OpenAI's tokenizer, not the multi-character sequence it looks like. Llama-3's `<|begin_of_text|>` is similarly one token, distinct from the BOS token. The format characters that *look* like markup are actually atomic vocabulary items. **Mixing them up across model families is a common bug** — the receiving model has never seen the other family's special tokens and treats them as ordinary text, breaking the role parsing.
+
+### Four major templates
+
+**ChatML** — used by OpenAI and adopted by Mistral via tokenizer config — wraps each turn with `<|im_start|>role` and `<|im_end|>`. It is clean and supports the system role natively:
+
+```
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+What is the capital of France?<|im_end|>
+<|im_start|>assistant
+The capital of France is Paris.<|im_end|>
+```
+
+**Llama-3** is verbose and explicit. A document-level `<|begin_of_text|>`, then per-turn `<|start_header_id|>role<|end_header_id|>` brackets around the role, then `<|eot_id|>` (end-of-turn) at the close. Meta distinguishes end-of-turn (this assistant turn is done; the user may continue) from end-of-sequence (this document is over):
+
+```
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+What is the capital of France?<|eot_id|>
+```
+
+**Mistral**'s native template is simpler — `[INST] ... [/INST]` brackets around user instructions, with the response following. Mistral has no native system role; system instructions get prepended to the first user message:
+
+```
+<s>[INST] You are a helpful assistant.
+
+What is the capital of France? [/INST] The capital of France is Paris.</s>
+```
+
+**Gemma** is ChatML-shaped but with different syntax: `<start_of_turn>role` and `<end_of_turn>` mark the boundaries, and like Mistral there is no native system role.
+
+The templates differ in three dimensions — the special tokens themselves, the handling of system prompts, and the end-of-turn signaling — but they all do the same job: take a list of `{role, content}` messages and flatten them into a token sequence with unambiguous role boundaries.
+
+### Using `apply_chat_template()`
+
+The modern API is HuggingFace's `tokenizer.apply_chat_template()`. Pass a list of messages in the canonical form `[{"role": "user", "content": "..."}, ...]`; the tokenizer applies the template baked into its config and returns the flattened token sequence. **This is the function everyone uses.** Writing templates by hand is error-prone — the four templates above are a small sample, the special-token IDs are easy to typo, and a model's correct template is whatever shipped in its tokenizer. The function gets it right; you do not have to think about it.
+
+<WidgetFrame title="Chat template comparison" caption="The same conversation rendered in four chat templates: ChatML, Llama-3, Mistral, and Gemma. Each uses different special tokens, role markers, and handles system prompts differently. Switching templates between models causes broken output — always match the template to the model.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 61 (secondary)
+  </div>
+</WidgetFrame>
+
+The runnable cell implements three of the templates by hand on the same conversation. The output is the same logical content rendered three different ways — and a Llama-3 model fed the ChatML output (or vice versa) produces garbage, because the special tokens it was trained to recognize are not there.
+
+<RunnableCode>
+```python
+def format_chatml(messages):
+    """ChatML: <|im_start|>role\\ncontent<|im_end|>"""
+    out = ""
+    for m in messages:
+        out += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
+    return out
+
+def format_llama3(messages):
+    """Llama-3: verbose header IDs, end-of-turn tokens"""
+    out = "<|begin_of_text|>"
+    for m in messages:
+        out += f"<|start_header_id|>{m['role']}<|end_header_id|>\n\n{m['content']}<|eot_id|>"
+    return out
+
+def format_mistral(messages):
+    """Mistral [INST]; no native system role -- merge into first user message"""
+    out = "<s>"
+    sys_content = ""
+    for m in messages:
+        if m["role"] == "system":
+            sys_content = m["content"] + "\n\n"
+        elif m["role"] == "user":
+            out += f"[INST] {sys_content}{m['content']} [/INST]"
+            sys_content = ""
+        else:  # assistant
+            out += f" {m['content']}</s>"
+    return out
+
+conversation = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is the capital of France?"},
+    {"role": "assistant", "content": "The capital of France is Paris."},
+]
+
+for name, fn in [("ChatML", format_chatml),
+                 ("Llama-3", format_llama3),
+                 ("Mistral", format_mistral)]:
+    print(f"=== {name} ===")
+    print(fn(conversation))
+    print()
+
+print("Different special tokens, same logical conversation.")
+print("Using ChatML markers on a Llama-3 model (or vice versa) breaks the model.")
+print("In real code: tokenizer.apply_chat_template(messages) handles all of this.")
+```
+</RunnableCode>
+
+<Callout type="warning">
+**Misconception.** "Any LM can use any chat template." Wrong — **each model is trained with specific special tokens.** Using ChatML's `<|im_start|>` on a Llama-3 model that was trained with `<|start_header_id|>` produces broken output: the role markers are not recognized, the model does not know where turns begin and end, and generation degrades. Always use the model's intended template, either via `tokenizer.apply_chat_template()` or by following the model card's instructions verbatim.
+</Callout>
+
+Single-turn formatting is straightforward. The real conversations have multiple turns and persistent system prompts. Section 5.
+
+## Multi-turn conversations and system prompts
+
+### Multi-turn dialog
+
+The chat templates above extend to multi-turn dialog by simple concatenation — append the next user turn, then the next assistant turn, and the model sees the whole conversation history in one flat token sequence. For SFT, the loss is masked on **every** user turn, not just the first. Only the assistant turns contribute. The model learns to generate the next assistant response given the full conversation history; it does not learn to generate the user's side of the dialog.
+
+Multi-turn data has a length-distribution problem. Real conversations vary enormously — a one-shot Q/A is a few hundred tokens; a multi-turn coding session can be thousands. Two strategies handle the variance. **Truncation** drops the oldest turns when a conversation exceeds the context window, accepting the loss of early context. **Packing** stuffs multiple shorter conversations into one fixed-length sequence with proper boundary tokens between them, using GPU memory more efficiently at the cost of implementation complexity. Modern open SFT recipes — Tulu 2, Zephyr, Axolotl — default to packing because the throughput gain is large.
+
+### System prompts
+
+A system prompt is the first message of a conversation, marked with the `system` role, that establishes persistent behavior. Common examples: "You are a helpful assistant"; "You are a coding assistant focused on Python"; "You are a medical professional — always recommend the user consult a doctor for actual diagnosis." The model is trained to weight system instructions more heavily than later user turns: instructions that arrive *as* the system prompt have stronger steering effect than the same instructions buried in a user message.
+
+For SFT, the training data should include diverse system prompts so the model learns to follow whichever one the user supplies at inference. A model trained only on conversations with "You are a helpful assistant" struggles when given a different persona at inference; a model trained on a wide variety generalizes. A common robustness trick is to include training examples both *with* and *without* system prompts (or with a generic default), so the model handles both cases. Some teams always inject a default system prompt at SFT time and again at inference, eliminating the with-or-without distinction entirely.
+
+<Callout type="aside">
+**Misconception.** "System prompts are just text — they get concatenated like any other input." Technically yes; in practice, the model treats system-role tokens differently. Because the model is trained to weight them as persistent instructions, **system prompts have stronger behavioral steering** than the same content placed in a user message. If you want a model to consistently follow an instruction across a long conversation, the system prompt is the right place. The user message is for one-shot requests; the system prompt is for standing rules.
+</Callout>
+
+The chat-template mechanics handle the *shape* of the data. The harder question is what *content* goes inside. Section 6.
+
+## Data quality matters more than quantity
+
+### The LIMA claim
+
+In 2023, Zhou et al. published **LIMA: Less Is More for Alignment**. They fine-tuned Llama-65B on just $1{,}000$ instruction-response pairs — manually curated, hand-checked, written or selected for diversity and quality. The result was competitive with much larger SFT runs of the era: Alpaca's $52{,}000$ synthetic examples, OpenAssistant's $161{,}000$ crowd-sourced ones. On head-to-head human preference comparisons, LIMA was preferred or tied a majority of the time against far bigger datasets.
+
+The claim landed as a provocation because the prevailing assumption was "more SFT data is always better." LIMA showed the curve plateaus fast — diminishing returns kick in by $10{,}000$ to $50{,}000$ examples, and beyond that, *quality* of new examples matters more than *quantity*. The paper's title is the thesis: less is more, if the less is good.
+
+### Why alignment is shallow
+
+LIMA's framing for the result is that **alignment is shallow**. The pre-trained model has already learned almost everything that ends up in the final chatbot: how to generate text, what humans typically write about, the syntactic and stylistic patterns of natural language, factual content. SFT does not have to teach any of this. What SFT teaches is the *format* of being a helpful assistant — how to greet, how to structure answers, how to refuse, how to format code, how to follow an instruction without needing an in-context example.
+
+Format is fast to learn. A small number of high-quality examples is enough to convert the model's pre-existing capabilities into chatbot form. What SFT does *not* teach is new world knowledge. A model that does not know who won the 2024 election from pre-training will not learn it from a thousand SFT examples either — SFT shifts behavior, not the underlying knowledge representation. The model already knew the content; SFT taught it the shape.
+
+### Practical implications
+
+**Curate, do not accumulate.** A thousand carefully written examples often beats a hundred thousand auto-generated ones, especially for first SFT passes. **Diversity matters more than volume** — fifty task types with a hundred examples each is more useful than a single task type with five thousand. **Bad data teaches bad habits** — training on noisy, hedging, or low-information responses produces a model that responds noisily, hedges constantly, and gives low-information answers. The model imitates what it sees.
+
+Quality-over-quantity has limits. At industrial scale, the frontier labs (Llama-3-Instruct, Claude, GPT-4) use SFT mixtures in the hundreds of thousands to millions of examples — but those mixtures are *also* heavily curated, with filtering, deduplication, model-judged quality scoring, and human review on top. The point is not that big SFT datasets are bad; it is that the *quality bar* on each example matters more than the headline count. **Spend the budget on curation, not on volume.**
+
+<Callout type="warning">
+**Misconception.** "SFT teaches the model new knowledge." Mostly false — **SFT teaches format and style, rarely teaches new facts.** LIMA's whole success comes precisely from this. The model already knows the content; SFT just teaches it the shape of being an assistant. If you need the model to *know* something it did not learn in pre-training, SFT is the wrong tool — you need retrieval (Chapter 22) or continued pre-training, not a thousand fine-tuning examples.
+</Callout>
+
+<Callout type="warning">
+**Misconception.** "More SFT data is always better." False — **LIMA showed $1{,}000$ high-quality examples beat $100{,}000$ low-quality ones.** Diminishing returns kick in fast, typically by $10{,}000$ to $50{,}000$ examples. Overtraining past $3$ epochs actively hurts: the model becomes brittle to format changes and loses some of its pre-training generalization. The plateau is real and shows up early.
+</Callout>
+
+LIMA shows that quality matters; it does not say where the quality comes from. Manual curation is expensive — LIMA used graduate students. How do most open-source projects actually get their data? Section 7.
+
+## Synthetic data and teacher distillation
+
+### The teacher-student pattern
+
+Hand-curating $1{,}000$ examples for LIMA cost graduate-student hours; hand-curating a million examples is prohibitive. The alternative that drove most of the open-source SFT boom is **synthetic data from a stronger model**. Pay a stronger LM — GPT-3.5, GPT-4, Claude — to generate instruction-response pairs at scale. Filter for quality. Fine-tune your smaller open model on the result. The teacher's quality is the ceiling; the student tries to approach it.
+
+The pattern was formalized by **Self-Instruct** (Wang et al. 2022): bootstrap data using the model itself plus a small seed set. Hand-write a hundred or so seed instructions. Use a strong LM to generate more instructions of similar style. Use the same LM to generate responses to those generated instructions. Filter the lot for quality with heuristics or a model judge. The result is tens of thousands of synthetic examples for the cost of API calls.
+
+The canonical application of this pattern is **Alpaca** (Taori et al. 2023). $175$ hand-written seed instructions, GPT-3.5 (text-davinci-003) to generate $52{,}000$ more, fine-tune Llama-7B on the result. Total API cost: about $\$600$. Alpaca was the first cheap, replicable, open instruction-tuned model at competitive quality and triggered a cambrian explosion of synthetic SFT recipes through 2023 and 2024.
+
+### Major synthetic SFT datasets
+
+A short tour of the canonical ones. **Alpaca** ($52$K, single-turn, GPT-3.5-davinci) is the cheap-and-cheerful original. **Vicuna** (~$70$K, multi-turn, ShareGPT conversations) used real ChatGPT conversations that users had shared, and demonstrated multi-turn synthetic data beats single-turn. **UltraChat** (~$1.5$M, multi-turn, GPT-3.5-turbo) pushed the recipe to industrial scale, generating diverse multi-turn conversations programmatically. **OpenOrca** and the **Orca-1/2** series (Microsoft) gathered step-by-step reasoning traces from GPT-4, particularly strong on math and reasoning. **WizardLM** (Microsoft) introduced *instruction evolution* — iteratively rewriting instructions to be more complex, training on the harder versions.
+
+Each of these is a recipe; each was state-of-the-art for some window in 2023–2024; each has been superseded by curated mixtures and refined teachers. The lineage is the point — synthetic data went from research curiosity (Self-Instruct, 2022) to standard practice (Alpaca, 2023) to industrial-scale infrastructure (UltraChat, 2023; Tulu 2, 2023) in under two years.
+
+### Limitations
+
+Synthetic data has hard ceilings. **The distillation ceiling**: the student cannot exceed the teacher on the teacher's distribution. Alpaca cannot exceed GPT-3.5-davinci on the kinds of questions GPT-3.5-davinci can answer; an Alpaca-style recipe with GPT-4 as teacher hits GPT-4's ceiling, not above. **Stylistic homogeneity**: all synthetic data sounds like the teacher. A student trained on GPT-3.5 outputs writes like GPT-3.5. The diversity of style and approach you get from real human conversations is gone. **Hallucination propagation**: when the teacher hallucinates, the student learns to hallucinate the same things, with the same confidence. **License issues**: many commercial APIs' terms of service prohibit using outputs to train competing models, which has produced ongoing legal grey areas around the open-source datasets built on top of them.
+
+In practice, no team trains a serious SFT recipe on raw synthetic data. The first thing that happens is filtering — drop the empty responses, the meta-references ("As an AI language model..."), the suspiciously short or suspiciously long outputs, the responses that mostly repeat the question. The cell below implements a toy version: a handful of heuristics that flag a noticeable fraction of low-quality synthetic examples.
+
+<RunnableCode>
+```python
+def quality_score(example):
+    """
+    Score an instruction-response example; higher is better.
+    Real systems use reward models, deduplication, profanity filters,
+    and many more heuristics -- this is a simplified version.
+    """
+    instruction = example["instruction"]
+    response = example["response"]
+
+    score = 1.0
+    if len(response) < 20:
+        score *= 0.3           # too short
+    if len(response) > 2000:
+        score *= 0.5           # too long; often padded/repetitive
+    if "as an ai" in response.lower():
+        score *= 0.5           # meta-reference
+    if response.strip() in ("", "I don't know.", "N/A"):
+        score *= 0.1           # placeholder
+    if instruction.lower() in response.lower():
+        score *= 0.5           # echoes the instruction
+    return score
+
+examples = [
+    {"instruction": "What is the capital of France?",
+     "response": "The capital of France is Paris."},
+    {"instruction": "Explain quantum entanglement.",
+     "response": "OK"},
+    {"instruction": "Write a poem about clouds.",
+     "response": "As an AI language model, I cannot truly experience clouds, but here is a poem..."},
+    {"instruction": "What's 2 + 2?",
+     "response": "2 + 2 equals 4."},
+    {"instruction": "Tell me about photosynthesis.",
+     "response": " ".join(["This is a great topic."] * 200)},  # padded
+]
+
+print(f"{'instruction':>40} | score | keep?")
+print("-" * 64)
+for ex in examples:
+    s = quality_score(ex)
+    keep = "yes" if s >= 0.5 else "no"
+    print(f"{ex['instruction'][:38]:>40} | {s:.2f}  | {keep}")
+
+print()
+print("Even simple heuristics flag a noticeable fraction of synthetic examples.")
+print("Production pipelines layer reward models and deduplication on top.")
+```
+</RunnableCode>
+
+Synthetic data works, with caveats. The chapter's last section covers the harder reality: SFT is not free, and it has its own pathologies.
+
+## Pitfalls — format brittleness, capability tax
+
+### The capability tax
+
+SFT does not preserve every capability the base model had. The phenomenon goes by several names — **alignment tax**, **catastrophic forgetting**, **capability tax** — and it was visible from the first SFT paper. Ouyang et al. (2022), the InstructGPT paper, reported that their fine-tuned model was *worse* than base GPT-3 on several standard NLP benchmarks (HellaSwag and similar) despite being preferred by humans on the chat task. The model gained instruction-following at the cost of some pure language-modeling capability.
+
+The mechanism is intuitive. Capabilities the model needs in the SFT distribution get reinforced; capabilities it does not need get partially forgotten. Train an SFT recipe heavy on conversation but light on code, and code performance degrades. Train light on math, and math performance degrades. Train on a narrow distribution of factual topics, and other parts of the world knowledge drift. The model is doing what gradient descent always does — moving toward what reduces the current loss, at the cost of whatever the current loss does not measure.
+
+Mitigations are straightforward and well-known: mix diverse data (include code, math, factual, conversational, in roughly the proportions you want preserved); do not over-train ($1$–$3$ epochs, never more); use the lower learning rate so updates are gentle; optionally mix in a small fraction of pre-training data to preserve the base distribution. None of these eliminate the tax — they manage it. The tax is real and persistent; the question is how much you are paying.
+
+### Format brittleness
+
+A heavily SFT'd model becomes *attached* to the format of its training. Prompt it with the exact chat template it was trained on and it produces clean output. Prompt it slightly off — wrong special tokens, no system prompt when it was trained with one, an unusual phrasing of the user turn — and quality degrades. The model is overfit to the format. Some recipes mitigate by including diverse templates or template-free examples in training; others accept the brittleness as the cost of strong format adherence.
+
+### Bridge to preference optimization
+
+The deepest limitation of SFT is that it teaches *format*, not *quality*. A model post-SFT will respond to any question, but the response can be confidently wrong, confidently harmful, or just confidently low-quality. SFT gives no signal about *which* response is better when many are plausible — every response in the training data was an example of *a* valid completion, but never compared against alternatives.
+
+<Callout type="warning">
+**Misconception.** "SFT preserves all pre-training capabilities." False — **SFT causes some capability degradation (catastrophic forgetting).** Capabilities not represented in the SFT data tend to degrade; the InstructGPT paper documented exactly this trade-off. Mix in diverse data, do not over-train, use the lower learning rate, and the tax is manageable. Eliminating it entirely is not on the table.
+</Callout>
+
+**Chapter 14 covers what comes next: preference optimization.** RLHF (the original three-stage InstructGPT recipe), DPO (the simpler offline variant from Rafailov et al. 2023), RLVR (verifiable-reward reinforcement learning, the recipe behind DeepSeek-R1's reasoning training), CAI (Constitutional AI, Anthropic's approach using AI feedback). These methods compare alternatives — pairs of responses, one preferred over the other — and train the model to prefer the better one. SFT teaches the model to *respond*; preference optimization teaches it to respond *well*. The modern open-source post-training stack is **SFT plus DPO**, and Zephyr-7B (Tunstall et al. 2023) is the canonical demonstration that the combination produces ChatGPT-3.5-class quality on a $7$B model. The next chapter walks through DPO and its variants in detail.
