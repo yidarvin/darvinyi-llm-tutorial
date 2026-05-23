@@ -1,0 +1,108 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+.controlGroup { display: flex; flex-direction: column; gap: 0.3rem; }
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.controlValue { color: var(--cyan-300); font-weight: 500; }
+.slider { width: 100%; }
+
+.timelinePanel {
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.timelineLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.svg { width: 100%; height: auto; }
+
+.axisLine { stroke: var(--border-default); stroke-width: 1; }
+.tickLine { stroke: var(--border-default); stroke-width: 1; }
+.tickLabel { fill: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; font-size: 9px; }
+.laneLabel { fill: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; }
+.computeBlock { fill: color-mix(in srgb, var(--cyan-500) 70%, transparent); stroke: var(--cyan-400); stroke-width: 1; }
+.commBlock { fill: color-mix(in srgb, var(--amber-400) 70%, transparent); stroke: var(--amber-400); stroke-width: 1; }
+.blockLabel { fill: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; }
+.totalMarker { stroke: var(--rose-400); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.totalLabel { fill: var(--rose-400); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; }
+
+.metricsRow {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.7rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.metric {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.metricLabel { color: var(--text-tertiary); margin-right: 0.4rem; }
+.metricValue { color: var(--text-primary); font-weight: 500; }
+.metricHighlight .metricValue { color: var(--emerald-400); }
+
+.speedupPanel {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--cyan-500) 6%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.speedupLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.speedupValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.4rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.speedupNote {
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption em { color: var(--cyan-300); font-style: normal; font-weight: 500; }
+
+@media (max-width: 640px) {
+  .metricsRow { flex-direction: column; gap: 0.3rem; }
+  .speedupPanel { flex-direction: column; align-items: flex-start; }
+}

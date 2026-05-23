@@ -6,7 +6,7 @@ description: The systems engineering chapter that closes Phase 9. Where Chapter 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { TrainingStackPicker } from '@components/widgets';
+import { TrainingStackPicker, StepTimeline } from '@components/widgets';
 
 Chapter 9 ended with the complete conceptual story of distributed training. Choose a compute budget. Allocate it per Chinchilla — about $20$ tokens per parameter. Combine data, tensor, pipeline, and FSDP parallelism into a 3D layout across thousands of GPUs. Train. That is the math.
 
@@ -314,10 +314,8 @@ The metric that captures all of this is **MFU** (Model FLOPs Utilization): actua
 
 The difference between $25\%$ MFU and $50\%$ MFU is mostly the difference between sequential execution and overlapped execution. The widget below makes the two regimes side-by-side visible.
 
-<WidgetFrame title="Step timeline" caption="One training step visualized as a timeline: compute (forward, backward) plus communication (all-reduce, all-gather). Toggle 'overlap' on and off to see how hiding communication behind compute changes the wall-clock per step. The difference between 30% MFU and 50% MFU is largely the difference between sequential and overlapped execution.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 48 (secondary)
-  </div>
+<WidgetFrame title="Step timeline" caption="One training step visualized as a timeline: compute (cyan) and communication (amber) phases. Sequential mode runs compute then communication (no overlap); overlapped mode hides communication behind compute. Adjust the slider values to see when overlap helps most.">
+  <StepTimeline client:visible />
 </WidgetFrame>
 
 The runnable below makes the activation-checkpointing trade concrete — three regimes (none, selective, full) for a $70$B-class layer stack — and prints the per-strategy memory footprint.
@@ -415,7 +413,243 @@ print("Which is why every frontier lab has one.")
   height={500}
 />
 
-### Bridge to Phase 10+
+## Exercises
+
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — NVLink vs InfiniBand bandwidth math
+
+Compute the time for a single gradient all-reduce on a $7$B-parameter model across two scenarios: $8$ GPUs on one node (NVLink) vs $8$ GPUs across two nodes (InfiniBand). Verify the $\sim 20\times$ speed difference.
+
+<details>
+<summary>Hint</summary>
+
+For ring all-reduce of size $D$ bytes across $n$ GPUs, total communication per GPU $\approx 2 \cdot (n-1)/n \cdot D$. For $8$ GPUs and gradient size $D = 2 \times 7 \times 10^9 = 14$ GB (BF16 grads), per-GPU comm is $\sim 24.5$ GB.
+
+- NVLink at $900$ GB/s: $24.5 / 900 \approx 0.027$ sec
+- InfiniBand at $25$ GB/s: $24.5 / 25 \approx 0.98$ sec
+
+The $\sim 36\times$ gap is what dictates "TP within node, DP across nodes."
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def all_reduce_time(data_size_bytes, num_gpus, bandwidth_gbps):
+    """
+    Time for ring all-reduce in seconds.
+
+    Ring all-reduce per-GPU communication: 2 * (n-1)/n * data_size
+    """
+    # Ring all-reduce factor: 2(n-1)/n
+    per_gpu_bytes = 2 * (num_gpus - 1) / num_gpus * data_size_bytes
+    # Convert bandwidth GB/s -> bytes/s
+    bandwidth_bytes_s = bandwidth_gbps * 1e9
+    # TODO: return per_gpu_bytes / bandwidth_bytes_s
+    pass
+
+# Test scenario: 7B model gradient all-reduce
+GRAD_SIZE = 2 * 7e9   # BF16 = 2 bytes/param
+NUM_GPUS = 8
+
+# NVLink (~900 GB/s for H100)
+# nvlink_time = all_reduce_time(GRAD_SIZE, NUM_GPUS, 900)
+# print(f"NVLink (~900 GB/s):     {nvlink_time*1000:>7.2f} ms")
+
+# InfiniBand (~25 GB/s for HDR)
+# ib_time = all_reduce_time(GRAD_SIZE, NUM_GPUS, 25)
+# print(f"InfiniBand (~25 GB/s):  {ib_time*1000:>7.2f} ms")
+
+# Speed gap
+# print(f"\\nSpeed gap: {ib_time / nvlink_time:.0f}x slower across nodes")
+# print(f"This is WHY TP is restricted to within-node (NVLink) operations.")
+`}
+  packages={[]}
+/>
+
+### Exercise 2 (medium) — FlashAttention I/O complexity
+
+Compute the HBM I/O for standard attention vs FlashAttention at increasing sequence lengths. Verify that the gap grows asymptotically.
+
+<details>
+<summary>Hint</summary>
+
+**Standard attention** writes the full $N \times N$ attention matrix to HBM:
+$\text{HBM I/O} \approx O(N^2 \cdot d)$ bytes.
+
+**FlashAttention** tiles attention to fit in SRAM (size $M$):
+$\text{HBM I/O} \approx O(N \cdot d \cdot \lceil N / M \rceil)$ bytes.
+
+For typical SRAM sizes (e.g., $M \approx 100\text{K}$ elements), once $N > M$, the FlashAttention I/O grows linearly in $N$ rather than quadratically.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def standard_attention_hbm_io(N, d, dtype_bytes=2):
+    """
+    HBM I/O for standard attention.
+
+    Operations:
+      1. Compute Q*K^T: read Q, K (2 * N * d); write S (N * N)
+      2. Softmax: read S (N * N); write P (N * N)
+      3. Compute P*V: read P, V (N * N + N * d); write O (N * d)
+
+    Total: dominated by O(N^2) attention matrix I/O.
+    """
+    # Read Q, K, V; write O: 4 * N * d
+    qkv_o_io = 4 * N * d * dtype_bytes
+    # Read/write attention matrix S, P: 4 * N^2
+    attn_matrix_io = 4 * N * N * dtype_bytes
+    return qkv_o_io + attn_matrix_io
+
+def flashattention_hbm_io(N, d, sram_size=100_000, dtype_bytes=2):
+    """
+    HBM I/O for FlashAttention.
+
+    Tile size limited by SRAM. For each Q tile, K and V tiles are streamed
+    through SRAM. Each K, V element is loaded approximately N / sram_size times.
+    """
+    # TODO: implement
+    # Each Q, K, V, O is read/written ~N / sram_size times
+    # Total I/O approx 4 * N * d * (N / sram_size) * dtype_bytes -- but bounded below by 4*N*d
+    pass
+
+# Test at increasing sequence lengths
+print(f"{'N':>8} {'Standard':>15} {'FlashAttn':>15} {'Speedup':>10}")
+print("-" * 55)
+for N in [512, 2048, 8192, 32768, 131072]:
+    std = standard_attention_hbm_io(N, 64)
+    # flash = flashattention_hbm_io(N, 64)
+    # speedup = std / flash
+    # print(f"{N:>8} {std/1e6:>12.1f} MB {flash/1e6:>12.1f} MB {speedup:>10.1f}x")
+
+# Expected: at N=512, speedup ~1-2x; at N=131072, speedup ~50x+
+# The asymptotic gap is why long-context LLMs became practical with FlashAttention.
+`}
+  packages={[]}
+/>
+
+### Exercise 3 (medium) — Activation memory with checkpointing
+
+Compute activation memory for a $70$B-parameter transformer ($80$ layers, $d_\text{model}=8192$) at various sequence lengths, with and without activation checkpointing. Identify the sequence length where checkpointing becomes necessary on an $80$ GB H100.
+
+<details>
+<summary>Hint</summary>
+
+Per-layer activations include attention QKV ($3 \times B \times N \times d$), attention output ($B \times N \times d$), FFN intermediate ($B \times N \times 4d$), and various LayerNorm outputs. Total per layer $\approx 10 \times B \times N \times d \times \text{bytes}$.
+
+Without checkpointing: total $= \text{num\_layers} \times \text{per\_layer}$.
+With selective checkpointing: keep only input to each layer $\rightarrow$ total $\approx \text{num\_layers} \times B \times N \times d \times \text{bytes}$ ($10\times$ reduction).
+
+Compare against H100's $80$ GB; account for state memory ($\sim 140$ GB for $70$B model under FSDP on $8$ GPUs $= 17.5$ GB/GPU, leaving $\sim 60$ GB for activations).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def activation_memory(num_layers, batch_size, seq_len, d_model, with_checkpointing, dtype_bytes=2):
+    """
+    Activation memory per GPU.
+
+    Per-layer activations (no checkpointing) approx 10 * B * N * d * bytes
+    With selective checkpointing: ~1 * B * N * d * bytes (10x reduction)
+    """
+    # TODO: implement
+    pass
+
+# Test: 70B model on 8 H100s (FSDP), various sequence lengths
+NUM_LAYERS = 80
+D_MODEL = 8192
+BATCH_SIZE = 4   # per GPU
+H100_MEM_GB = 80
+
+# State memory per GPU (FSDP across 8 GPUs): 70B * 18 bytes / 8 = 157 GB total / 8 ~= 19 GB/GPU
+STATE_GB = (70e9 * 18) / 8 / 1e9
+
+print(f"State memory per GPU: {STATE_GB:.1f} GB")
+print(f"Available for activations: {H100_MEM_GB - STATE_GB:.1f} GB\\n")
+
+print(f"{'seq_len':>8} {'no checkpt':>12} {'with checkpt':>14} {'fits no/yes':>14}")
+print("-" * 52)
+for seq_len in [512, 1024, 2048, 4096, 8192, 16384]:
+    # mem_no = activation_memory(NUM_LAYERS, BATCH_SIZE, seq_len, D_MODEL, with_checkpointing=False) / 1e9
+    # mem_yes = activation_memory(NUM_LAYERS, BATCH_SIZE, seq_len, D_MODEL, with_checkpointing=True) / 1e9
+    # available_gb = H100_MEM_GB - STATE_GB
+    # fits_no = "yes" if mem_no < available_gb else "no"
+    # fits_yes = "yes" if mem_yes < available_gb else "no"
+    # print(f"{seq_len:>8} {mem_no:>9.1f} GB {mem_yes:>10.1f} GB {fits_no:>6} / {fits_yes:>6}")
+    pass
+
+# Conclusion: checkpointing extends the practical sequence length 10x.
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — MFU calculation + cost projection
+
+Compute MFU and dollar cost for a realistic training run: Llama-3 $70$B trained on $1.4$T tokens across $1024$ H100s. Compare against industry-typical $40$–$50\%$ MFU.
+
+<details>
+<summary>Hint</summary>
+
+$\text{MFU} = \text{achieved FLOPs} / \text{theoretical peak FLOPs}$.
+
+For training:
+- Total FLOPs $\approx 6 \times N \times D$ (where $N$ = params, $D$ = tokens)
+- Achieved FLOPs/sec = tokens_per_sec $\times 6 \times N$
+- Theoretical FLOPs/sec = num_gpus $\times$ peak_flops_per_gpu
+
+For a real training run, you measure tokens/sec and back out MFU.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def estimate_training_run(model_params, tokens, num_gpus, peak_flops_per_gpu, mfu, hourly_cost_per_gpu):
+    """
+    Estimate total training time and cost.
+
+    Total FLOPs = 6 * N * D
+    Achievable FLOPs/sec = num_gpus * peak_flops_per_gpu * mfu
+    Time = total_FLOPs / achievable_FLOPs_per_sec
+    Cost = time_hours * num_gpus * hourly_cost
+    """
+    # TODO: implement
+    pass
+
+def mfu_from_throughput(tokens_per_sec, model_params, num_gpus, peak_flops_per_gpu):
+    """
+    Back out MFU from observed throughput.
+
+    achieved_flops_per_sec = tokens_per_sec * 6 * model_params
+    theoretical_flops_per_sec = num_gpus * peak_flops_per_gpu
+    """
+    # TODO: implement
+    pass
+
+# Scenario: Llama-3 70B training run
+MODEL_PARAMS = 70e9
+TOKENS = 1.4e12          # 1.4T tokens (~20x model size, Chinchilla)
+NUM_GPUS = 1024          # 1024 H100s
+PEAK_FLOPS_H100 = 989e12 # 989 TFLOPS BF16
+
+# Industry-typical MFU values
+for mfu in [0.30, 0.40, 0.50]:
+    # result = estimate_training_run(
+    #     MODEL_PARAMS, TOKENS, NUM_GPUS, PEAK_FLOPS_H100, mfu, hourly_cost_per_gpu=5.0
+    # )
+    # print(f"MFU={mfu*100:.0f}%: {result['hours']/24:.1f} days, cost \${result['cost']/1e6:.1f}M")
+    pass
+
+# Verify MFU calculation from a hypothetical throughput
+# If we measure 1.0M tokens/sec on 1024 H100s training a 70B model:
+# observed_mfu = mfu_from_throughput(1.0e6, MODEL_PARAMS, NUM_GPUS, PEAK_FLOPS_H100)
+# print(f"\\nObserved MFU from 1M tokens/sec: {observed_mfu*100:.1f}%")
+# (Should be in the 40-50% range -- industry-typical for well-tuned training)
+`}
+  packages={[]}
+/>
 
 Ten chapters in, the entire training-side story is on the page. Architecture (Chapters 1 through 6), data pipeline (Chapter 7), training loop (Chapter 8), scaling math and parallelism strategies (Chapter 9), and the practical infrastructure that runs those strategies on real clusters (Chapter 10). With these, the system diagrams of any frontier training run — Llama-3, GPT-4-class, Gemini — are readable at every level: the architecture, the data mix, the loss and the optimizer, the parallelism layout, the GPU hardware, the interconnect, the framework, the kernels, the cost.
 
