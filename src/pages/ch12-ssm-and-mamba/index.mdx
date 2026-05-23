@@ -6,6 +6,7 @@ description: State-space models (SSMs) and Mamba — the second major architectu
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { SSMvsAttentionScaling } from '@components/widgets';
 
 Attention has a problem. It is $O(N^2)$ in both memory and compute. At a $32$K-token context, the attention matrix has a billion entries — about $4$GB in BF16 just to hold the scores for a single layer. At the rumored million-token frontier, the same matrix is a trillion entries, four terabytes. FlashAttention (Chapter 10) hid this cost from HBM by keeping intermediate tiles in SRAM, but the underlying compute is still quadratic — FlashAttention is a better implementation of the same $O(N^2)$ algorithm, not a different one. Long contexts are bottlenecked by attention, full stop.
 
@@ -27,10 +28,8 @@ What we want is **linear-time sequence modeling**. Memory and compute both growi
 
 Pre-Mamba SSMs (S4, S5) performed well on the Long Range Arena benchmark but underperformed transformers on language modeling. The breakthrough came in December $2023$ with **Mamba**, which added input-dependent dynamics and finally closed the language-modeling gap. Mamba is what made SSMs a serious contender, not a research curiosity. Everything else in this chapter is consequence of that breakthrough or context for it.
 
-<WidgetFrame title="SSM vs attention scaling" caption="Compute and memory cost as a function of sequence length, for attention vs SSM. Attention's $O(N^2)$ scaling explodes at long contexts; SSMs grow linearly. Slider for sequence length (256 to 1M tokens). At short contexts (≤2K), attention's optimized matmul wins on wall clock; at long contexts (32K+), the asymptotic difference dominates.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 55 (marquee)
-  </div>
+<WidgetFrame title="SSM vs attention scaling" caption="Log-log plot of compute (FLOPs) and memory (bytes) per layer vs sequence length. Attention's $O(N^2)$ line climbs at slope 2; SSM's $O(N)$ line at slope 1. Toggle between compute and memory; adjust d_model. At short contexts (<2K) attention wins on constant factors; at long contexts (>32K) SSM dominates. The crossover (~8K tokens) marks where SSM becomes faster in absolute terms.">
+  <SSMvsAttentionScaling client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
