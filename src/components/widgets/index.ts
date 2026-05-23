@@ -17,3 +17,4 @@ export { default as LossCurve } from './ch08/LossCurve';
 export { default as OptimizerComparison } from './ch08/OptimizerComparison';
 export { default as ScalingLawCalculator } from './ch09/ScalingLawCalculator';
 export { default as ParallelismDiagram } from './ch09/ParallelismDiagram';
+export { default as TrainingStackPicker } from './ch10/TrainingStackPicker';

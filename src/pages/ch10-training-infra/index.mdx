@@ -6,6 +6,7 @@ description: The systems engineering chapter that closes Phase 9. Where Chapter 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { TrainingStackPicker } from '@components/widgets';
 
 Chapter 9 ended with the complete conceptual story of distributed training. Choose a compute budget. Allocate it per Chinchilla — about $20$ tokens per parameter. Combine data, tensor, pipeline, and FSDP parallelism into a 3D layout across thousands of GPUs. Train. That is the math.
 
@@ -189,10 +190,8 @@ The decision flow is roughly:
 - **$30$B to $100$B parameters**: Megatron-LM for tensor and pipeline parallelism, with an FSDP-style data axis layered on top. The model is too big for FSDP alone.
 - **$100$B+ parameters**: Megatron-DeepSpeed or an equivalent combination. Full 3D parallelism with all three of FSDP, TP, and PP, plus the more aggressive memory tricks DeepSpeed offers.
 
-<WidgetFrame title="Training stack picker" caption="Pick a model size, GPU type, and GPU count. The widget recommends a parallelism stack (FSDP vs Megatron vs Megatron-DeepSpeed), estimates the achievable MFU, and projects training cost. Practical decision support — what would you actually use?">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 47 (marquee)
-  </div>
+<WidgetFrame title="Training stack picker" caption="Pick a model size, GPU type, and GPU count. The widget computes per-GPU memory under each parallelism stack (DP, FSDP, Megatron+FSDP, Megatron-DeepSpeed), recommends the simplest stack that fits, and estimates MFU, training time, and cost for a Chinchilla-optimal run. Practical decision support.">
+  <TrainingStackPicker client:visible />
 </WidgetFrame>
 
 These frameworks orchestrate the training loop, but for the most performance-critical operations they often invoke custom GPU kernels rather than relying on PyTorch's defaults. Section 6 explains why and how.

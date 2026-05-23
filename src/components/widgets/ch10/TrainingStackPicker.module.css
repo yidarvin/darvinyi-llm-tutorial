@@ -1,0 +1,232 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controlsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.controlValue {
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.slider {
+  width: 100%;
+}
+.sliderHints {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+}
+
+.radioGroup {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+.radioItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.recommendationPanel {
+  padding: 1.1rem 1.2rem;
+  background: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+.recommendationHeader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.4rem;
+}
+.recommendationHeader strong {
+  color: var(--cyan-300);
+  font-size: 1.05rem;
+  font-family: 'Inter', sans-serif;
+}
+.recommendationRanks {
+  display: flex;
+  gap: 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.85rem;
+}
+
+.memoryBarSection {
+  margin-bottom: 1rem;
+}
+.memoryBarLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+.memoryBarLabel strong {
+  color: var(--text-primary);
+}
+.memoryBarOk {
+  color: var(--emerald-400);
+}
+.memoryBarBad {
+  color: var(--rose-400);
+}
+.memoryBarTrack {
+  height: 18px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.memoryBarFill {
+  height: 100%;
+  transition: width 200ms;
+}
+.memoryBarFillOk {
+  background: var(--cyan-500);
+}
+.memoryBarFillBad {
+  background: var(--rose-500);
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+}
+.metric {
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.metricLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.2rem;
+}
+.metricValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.metricSubtext {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  margin-top: 0.15rem;
+}
+
+.rationalePanel {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+.rationaleTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+.rationaleBody {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.compareTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.compareGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+.stackCard {
+  padding: 0.65rem 0.8rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.stackCardRecommended {
+  border-color: var(--cyan-500);
+  background: color-mix(in srgb, var(--cyan-500) 5%, var(--bg-elevated));
+}
+.stackCardHeader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+}
+.stackCardFitsRow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  margin-bottom: 0.3rem;
+}
+.fitsOk {
+  color: var(--emerald-400);
+}
+.fitsNo {
+  color: var(--rose-400);
+}
+.stackCardMemory {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.15rem;
+}
+.stackCardRanks {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.66rem;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 720px) {
+  .metricsGrid {
+    grid-template-columns: 1fr;
+  }
+  .compareGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
