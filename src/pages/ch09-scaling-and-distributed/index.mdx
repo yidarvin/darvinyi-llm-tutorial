@@ -6,6 +6,7 @@ description: Modern LLMs have 8B-1T parameters and train on trillions of tokens 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { ScalingLawCalculator } from '@components/widgets';
 
 Chapter 8 ended with a working training loop on a small model — a 50M-parameter transformer learning on a single GPU in an afternoon. The math of that chapter is the math of modern LLM training: same cross-entropy, same AdamW, same warmup-plus-cosine schedule. What is *not* the same at frontier scale is the engineering. Llama-3 has 8B to 405B parameters. GPT-4 is reportedly trillion-plus. The training corpora are trillions of tokens. A single H100 holds at most a few billion parameters in mixed precision — and training needs *additional* memory for gradients, optimizer state, and activations. The Chapter 8 loop, as written, runs out of memory before the first forward pass on these models, and would take years if it didn't.
 
@@ -75,10 +76,8 @@ For compute budgets in the range that pre-2022 labs cared about, the compute-opt
 
 Practical use: given a compute budget $C$, plug into the compute-optimal formulas to get $N_{\text{opt}}$ and $D_{\text{opt}}$. Use those as the *starting* allocation; tune from there based on what your downstream evaluation actually cares about. The Chinchilla ratio is a *guide*, not a contract — and as the Llama-3 example below will show, modern practice often intentionally departs from it.
 
-<WidgetFrame title="Scaling law calculator" caption="The Chinchilla loss surface, plus the compute-optimal allocation curve. Adjust your compute budget; see what model size and dataset size you should choose. The 'compute-optimal point' is highlighted; off-optimal choices (Kaplan-style, Llama-3-style) show how much loss is left on the table — or intentionally accepted for other reasons.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 42 (marquee)
-  </div>
+<WidgetFrame title="Scaling law calculator" caption="The Chinchilla loss curve along the iso-compute constraint. Adjust your compute budget; the curve rescales. Three strategy points highlight the trade-off: Kaplan (overlarge model, undertrained), Chinchilla (optimal balance), Llama-3 style (over-trained smaller model for inference economics). Click any strategy card to focus it.">
+  <ScalingLawCalculator client:visible />
 </WidgetFrame>
 
 The numerical version is short — the Chinchilla loss function and the compute-optimal allocation are each a few lines of numpy. Running it across a range of compute budgets makes the "$\sim 20$ tokens per parameter" pattern visible across orders of magnitude.

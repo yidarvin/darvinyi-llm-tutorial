@@ -1,0 +1,175 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+  position: relative;
+}
+
+.controls {
+  margin-bottom: 1rem;
+}
+.controlLabel {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+.controlValue {
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.slider {
+  width: 100%;
+  accent-color: var(--cyan-500);
+}
+.sliderHints {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+}
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin: 1rem 0 0.5rem;
+  font-weight: 500;
+}
+
+.plotPanel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+.svg {
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+
+.gridLine {
+  stroke: var(--border-subtle);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 4;
+}
+.axisLine {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+.tickLabel {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+.axisLabel {
+  fill: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.curvePath {
+  stroke: var(--cyan-400);
+  stroke-width: 2;
+}
+.strategyLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.strategyCard {
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 200ms;
+}
+.strategyCard:hover {
+  border-color: var(--border-strong);
+}
+.strategyCard:focus-visible {
+  outline: 2px solid var(--cyan-500);
+  outline-offset: 2px;
+}
+.cardFocused {
+  /* border color is set inline based on the strategy's color */
+}
+.cardHeader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.45rem;
+}
+.cardRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  margin-bottom: 0.15rem;
+}
+.cardLabel {
+  color: var(--text-tertiary);
+}
+.cardValue {
+  color: var(--text-secondary);
+}
+.cardLossValue {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.description {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.5rem;
+}
+.descriptionHeader {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+.descriptionBody {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.hoverReadout {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 10;
+}
+.hoverReadout strong {
+  color: var(--cyan-300);
+}
+
+@media (max-width: 640px) {
+  .cardsGrid {
+    grid-template-columns: 1fr;
+  }
+  .sliderHints {
+    font-size: 0.55rem;
+  }
+}

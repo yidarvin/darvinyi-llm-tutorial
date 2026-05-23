@@ -15,3 +15,4 @@ export { default as DedupInteractive } from './ch07/DedupInteractive';
 export { default as QualityFilter } from './ch07/QualityFilter';
 export { default as LossCurve } from './ch08/LossCurve';
 export { default as OptimizerComparison } from './ch08/OptimizerComparison';
+export { default as ScalingLawCalculator } from './ch09/ScalingLawCalculator';
