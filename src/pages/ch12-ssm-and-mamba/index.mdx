@@ -6,7 +6,7 @@ description: State-space models (SSMs) and Mamba — the second major architectu
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SSMvsAttentionScaling } from '@components/widgets';
+import { SSMvsAttentionScaling, SelectiveScanAnimation } from '@components/widgets';
 
 Attention has a problem. It is $O(N^2)$ in both memory and compute. At a $32$K-token context, the attention matrix has a billion entries — about $4$GB in BF16 just to hold the scores for a single layer. At the rumored million-token frontier, the same matrix is a trillion entries, four terabytes. FlashAttention (Chapter 10) hid this cost from HBM by keeping intermediate tiles in SRAM, but the underlying compute is still quadratic — FlashAttention is a better implementation of the same $O(N^2)$ algorithm, not a different one. Long contexts are bottlenecked by attention, full stop.
 
@@ -269,10 +269,8 @@ This is exactly what breaks the convolution mode. The duality derivation require
 
 This is a deliberate trade-off. Mamba gives up the convolution mode to gain selectivity. The duality, S4's signature mathematical elegance, is sacrificed for a quality gain that lets SSMs finally compete with transformers on language. It is not a flaw of Mamba; it is a chosen complexity. And it sets up the engineering problem that the next section solves: how to compute a time-varying linear recurrence efficiently on a GPU.
 
-<WidgetFrame title="Selective scan visualization" caption="Watch state $h_t$ evolve through a sequence as $\Delta_t$ varies per token. Large $\Delta_t$ → strong state update on this token; small $\Delta_t$ → state nearly unchanged. The hand-tuned sequence has some 'important' tokens (large $\Delta$) and 'filler' tokens (small $\Delta$); reader sees how the state captures only the important content.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 56 (secondary)
-  </div>
+<WidgetFrame title="Selective scan visualization" caption="A 16-token sequence with hand-tuned $\Delta_t$ per token. Important tokens (&quot;capital&quot;, &quot;France&quot;, &quot;Paris&quot;, &quot;weather&quot;, &quot;rainy&quot;, &quot;winter&quot;) have large $\Delta_t$; filler tokens (&quot;The&quot;, &quot;of&quot;, &quot;is&quot;, etc.) have small $\Delta_t$. The state heatmap shows 8 components evolving over time. Slow-decay components retain information across many tokens; fast-decay components forget quickly. Press play to scrub through the sequence and see selectivity in action.">
+  <SelectiveScanAnimation client:visible />
 </WidgetFrame>
 
 The runnable cell below shows selectivity in action. A sequence alternates between "loud" inputs (value $5.0$) and "quiet" inputs (value $0.1$). The softplus of a linear function of $x$ produces a large $\Delta_t$ for loud tokens and a small $\Delta_t$ for quiet ones. Look at how the state moves: large jumps on loud tokens, near-stillness on quiet ones.
@@ -430,5 +428,281 @@ With the architecture sized up, the final section turns to the honest question: 
 ### Bridge to Phase 11
 
 **Phase 10 closes here.** Together with Chapter 11 (Mixture of Experts), this chapter completes the architectural-alternatives arc. MoE modifies the FFN; SSM replaces attention. Three architecture families now coexist at the frontier: **dense transformers** (Llama-3, Qwen), **MoE transformers** (Mixtral, DeepSeek-V3, reportedly GPT-4), and **SSM-based models** (mostly hybrids like Jamba). None has fully displaced the others. Each excels in different regimes.
+
+## Exercises
+
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Discrete SSM recurrence with diagonal A
+
+Implement the discrete SSM recurrence with diagonal $A$ and verify it produces a decaying impulse response. Slower eigenvalues should produce longer memory.
+
+<details>
+<summary>Hint</summary>
+
+The discrete recurrence is $h_t = \bar{A} h_{t-1} + \bar{B} x_t$ where $\bar{A}_{ii} = \exp(\Delta a_i)$ for diagonal $A$ with diagonal entries $a_i$. For an impulse input ($x_0 = 1$, $x_t = 0$ for $t > 0$), the state at time $t$ decays as $h_{t,i} = \exp(\Delta t a_i)$ — exponential decay with rate $\Delta |a_i|$.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def discrete_ssm(x, A_diag, B, C, delta):
+    """
+    Discrete SSM with diagonal A.
+
+    x:        (T,) — input sequence
+    A_diag:   (N,) — eigenvalues of A (typically negative for stability)
+    B, C:     (N,) — input and output projections
+    delta:    float — discretization step
+
+    Returns y of shape (T,)
+    """
+    # TODO: discretize A and B
+    # A_bar = np.exp(delta * A_diag)   # element-wise for diagonal A
+    # B_bar = delta * B                  # Euler approximation
+
+    # TODO: run the recurrence
+    # h = np.zeros(len(A_diag))
+    # y = np.zeros(len(x))
+    # for t in range(len(x)):
+    #     h = A_bar * h + B_bar * x[t]
+    #     y[t] = C @ h
+    # return y
+    pass
+
+# Verify impulse response decay rates
+A_diag = np.array([-3.0, -1.0, -0.3, -0.1])   # 4 eigenvalues, slowest = -0.1
+B = np.array([1.0, 1.0, 1.0, 1.0])
+C = np.array([1.0, 0.0, 0.0, 0.0])             # observe only first component
+delta = 0.1
+
+# Impulse input
+T = 50
+x = np.zeros(T); x[0] = 1.0
+
+# y = discrete_ssm(x, A_diag, B, C, delta)
+# print(f"With C reading component 0 (fastest decay):")
+# print(f"  y[0]={y[0]:.3f}, y[5]={y[5]:.3f}, y[20]={y[20]:.6f}")
+
+# Now read out slowest component
+# C_slow = np.array([0.0, 0.0, 0.0, 1.0])
+# y_slow = discrete_ssm(x, A_diag, B, C_slow, delta)
+# print(f"\\nWith C reading component 3 (slowest decay):")
+# print(f"  y[0]={y_slow[0]:.3f}, y[5]={y_slow[5]:.3f}, y[20]={y_slow[20]:.4f}")
+# print(f"\\nSlower eigenvalues → longer memory. The state retains the impulse much longer.")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Recurrence-convolution duality
+
+Compute the same SSM output two ways: via recurrence and via convolution. Verify they match.
+
+<details>
+<summary>Hint</summary>
+
+Both methods compute the same function. The recurrence runs in $O(N \cdot \text{state\_dim})$ per token (sequential). The convolution computes the kernel $\bar{K}_j = C \bar{A}^j \bar{B}$ once, then convolves: $y_t = \sum_{i} \bar{K}_{t-i} x_i$. The kernel can be FFT-accelerated for $O(N \log N)$ overall on long sequences. The two outputs should match to numerical precision.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def ssm_recurrence(x, A_diag, B, C, delta):
+    T = len(x)
+    A_bar = np.exp(delta * A_diag)
+    B_bar = delta * B
+    h = np.zeros(len(A_diag))
+    y = np.zeros(T)
+    for t in range(T):
+        h = A_bar * h + B_bar * x[t]
+        y[t] = C @ h
+    return y
+
+def compute_kernel(A_diag, B, C, delta, length):
+    """Compute K[j] = C @ A_bar^j @ B_bar for j = 0..length-1."""
+    A_bar = np.exp(delta * A_diag)
+    B_bar = delta * B
+    # TODO: compute kernel — for each j, K[j] = sum_i C_i * A_bar_i^j * B_bar_i
+    pass
+
+def ssm_convolution(x, kernel):
+    """y[t] = sum_i kernel[t-i] * x[i]"""
+    T = len(x); L = len(kernel)
+    y = np.zeros(T)
+    # TODO: implement convolution (causal)
+    pass
+
+# Setup
+np.random.seed(2)
+A_diag = np.array([-1.0, -0.5, -0.25, -0.1])
+B = np.array([1.0, 1.0, 1.0, 1.0])
+C = np.array([0.4, 0.3, 0.2, 0.1])
+delta = 0.2
+T = 40
+x = np.random.normal(0, 1, T)
+
+# Compute via recurrence
+y_rec = ssm_recurrence(x, A_diag, B, C, delta)
+
+# Compute via convolution
+# K = compute_kernel(A_diag, B, C, delta, T)
+# y_conv = ssm_convolution(x, K)
+
+# Verify they match
+# print(f"Recurrence vs convolution max diff: {np.abs(y_rec - y_conv).max():.2e}")
+# print(f"\\nSame SSM, two implementations. This duality enables both efficient")
+# print(f"training (parallel convolution) and efficient inference (sequential recurrence).")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Selective SSM
+
+Compare a non-selective (fixed $\Delta$) SSM to a selective (input-dependent $\Delta_t$) SSM on a sequence with both "important" and "filler" tokens. Verify the selective version captures the important content while the non-selective version smears across everything.
+
+<details>
+<summary>Hint</summary>
+
+In a selective SSM, $\Delta_t$ depends on $x_t$. For this exercise, make $\Delta_t = \text{softplus}(x_t)$ — large $\Delta_t$ when $x_t$ is large/positive (important), small $\Delta_t$ when $x_t$ is small (filler).
+
+Non-selective version: use a fixed $\Delta$ (the mean of the selective ones).
+
+Compare the final state norms — the selective version should have larger state magnitudes for the important tokens.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softplus(x):
+    return np.log(1 + np.exp(x))
+
+def fixed_delta_ssm(x, A_diag, B, C, delta):
+    """Fixed-delta SSM — same delta for every token."""
+    T = len(x)
+    A_bar = np.exp(delta * A_diag)
+    B_bar = delta * B
+    h = np.zeros(len(A_diag))
+    states = []
+    for t in range(T):
+        h = A_bar * h + B_bar * x[t]
+        states.append(h.copy())
+    return np.array(states)
+
+def selective_ssm(x, A_diag, B, C, W_delta=1.0):
+    """Selective SSM — delta_t depends on input."""
+    T = len(x)
+    h = np.zeros(len(A_diag))
+    states = []
+    for t in range(T):
+        # TODO: compute delta_t from x[t] via softplus
+        # TODO: discretize and update state
+        # delta_t = softplus(W_delta * x[t])
+        # A_bar = np.exp(delta_t * A_diag)
+        # B_bar = delta_t * B
+        # h = A_bar * h + B_bar * x[t]
+        # states.append(h.copy())
+        pass
+    return np.array(states)
+
+# Sequence: alternating important (large) and filler (small) values
+# Each pattern: [filler, IMPORTANT, filler, IMPORTANT, filler, ...]
+x = np.array([0.1, 2.0, 0.1, 2.0, 0.1, 2.0, 0.1, 2.0, 0.1, 2.0])
+
+A_diag = np.array([-1.0, -0.5, -0.25, -0.1])
+B = np.array([1.0, 1.0, 1.0, 1.0])
+C = np.array([1.0, 1.0, 1.0, 1.0])
+
+# Fixed delta = mean of selective deltas
+fixed_delta = np.mean([softplus(v) for v in x])
+print(f"Mean delta for fixed-delta SSM: {fixed_delta:.3f}")
+
+fixed_states = fixed_delta_ssm(x, A_diag, B, C, fixed_delta)
+# selective_states = selective_ssm(x, A_diag, B, C, W_delta=1.0)
+
+# Compare state norms at each step
+# print(f"\\nState magnitudes at each step:")
+# print(f"  fixed:     {[f'{np.linalg.norm(s):.2f}' for s in fixed_states]}")
+# print(f"  selective: {[f'{np.linalg.norm(s):.2f}' for s in selective_states]}")
+# print(f"\\nSelective SSM shows clearer 'spikes' on important tokens.")
+# print(f"Fixed SSM smears across all tokens uniformly.")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Parallel scan via associative operations
+
+Implement Mamba's parallel scan algorithm. Given a sequence of $(A_t, B_t x_t)$ pairs, compute the prefix product/sum efficiently using the associative composition $(A_2, b_2) \circ (A_1, b_1) = (A_2 A_1, A_2 b_1 + b_2)$.
+
+<details>
+<summary>Hint</summary>
+
+The parallel scan uses Blelloch's algorithm: an up-sweep (reduce) phase followed by a down-sweep (propagate) phase. For correctness verification, just implement a sequential prefix-sum and verify it matches the standard recurrence.
+
+The associative operation is: combining $(A, b)$ and $(A', b')$ → $(A' A, A' b + b')$.
+Identity element: $(I, 0)$.
+
+For verification, you don't need true parallelism — just verify that scan via the associative operation gives the same result as direct recurrence.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def direct_recurrence(A_list, b_list, h0):
+    """Standard sequential recurrence: h_t = A_t * h_{t-1} + b_t (diagonal A)"""
+    h = h0.copy()
+    states = [h.copy()]
+    for t in range(len(A_list)):
+        h = A_list[t] * h + b_list[t]
+        states.append(h.copy())
+    return states
+
+def scan_via_associative(A_list, b_list, h0):
+    """
+    Compute the same recurrence by composing (A, b) pairs left-to-right via:
+        (A_2, b_2) ∘ (A_1, b_1) = (A_2 * A_1, A_2 * b_1 + b_2)
+
+    This is mathematically equivalent to the recurrence. A real parallel scan
+    parallelizes this composition using Blelloch's algorithm.
+    """
+    # Start with identity (A=1, b=0) — applied to h0 gives h0
+    # TODO: compose left-to-right and apply to h0 at each step
+    # composed_A = np.ones_like(A_list[0])
+    # composed_b = np.zeros_like(b_list[0])
+    # states = [h0.copy()]
+    # for t in range(len(A_list)):
+    #     # Compose with the new (A_t, b_t)
+    #     # New: A_new = A_t * composed_A, b_new = A_t * composed_b + b_t
+    #     # Then h_t = A_new * h0 + b_new
+    #     ...
+    pass
+
+# Verify equivalence
+np.random.seed(3)
+T = 20
+N = 4
+A_list = [np.random.uniform(0.3, 0.95, N) for _ in range(T)]   # diagonal A, magnitude < 1
+b_list = [np.random.normal(0, 0.5, N) for _ in range(T)]
+h0 = np.random.normal(0, 0.5, N)
+
+direct = direct_recurrence(A_list, b_list, h0)
+# scan = scan_via_associative(A_list, b_list, h0)
+
+# Verify they match
+# diffs = [np.linalg.norm(d - s) for d, s in zip(direct, scan)]
+# print(f"Max difference: {max(diffs):.2e}")
+# print(f"\\nThe associative composition gives the same result as the recurrence.")
+# print(f"Mamba uses this property + Blelloch's algorithm to parallelize the scan on GPUs.")
+# print(f"The CUDA kernel performs the composition in O(log T) depth instead of O(T).")
+`}
+  packages={["numpy"]}
+/>
 
 Whatever architecture you train, the next question is how to turn raw next-token prediction into something useful. **Phase 11 (post-training) is about that.** Chapter 13 covers supervised fine-tuning — the simplest post-training method, and the foundation for everything else. Chapter 14 covers preference optimization (RLHF, DPO, RLVR, CAI) — the family of methods that turn a fine-tuned model into a chatbot. Chapter 15 covers parameter-efficient methods (LoRA, adapters). Chapter 16 covers distillation. Together they cover the practical methods that turn pre-trained models into ChatGPT-style assistants. The architecture arc is over; the *useful-model* arc begins.
