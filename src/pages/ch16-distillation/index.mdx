@@ -6,7 +6,7 @@ description: Distillation — the compression technique that turns a frontier-ca
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { TemperatureScaling } from '@components/widgets';
+import { TemperatureScaling, DistillationPipeline } from '@components/widgets';
 
 Chapters 13 through 15 left you with the techniques to train and align large language models. *Large* is the operative word. A $70$B-parameter model is too expensive to deploy at scale for most use cases — even with the quantization and inference optimizations of Phase 12, serving it cheaply at high throughput is hard. Most production teams want models in the $7$B–$14$B range. The capability gap, though, is significant: a $7$B base model is typically $10$ to $30$ MMLU points behind a $70$B base. Without help, the smaller model is not a viable substitute.
 
@@ -325,10 +325,8 @@ The most exciting recent thread is reasoning distillation. **Orca** (Mukherjee e
 
 **DeepSeek-R1-Distill** (DeepSeek, $2025$) is the most striking recent example. The frontier R1 model — trained with RLVR per Chapter 14 — was distilled into students of size $1.5$B, $7$B, $8$B, $14$B, and $32$B. The headline: **R1-Distill-Qwen-32B matches o1-mini** on a range of math and coding benchmarks. The students inherit the teacher's CoT patterns and generate long, structured reasoning traces of their own on hard problems. This is the first clean demonstration at LLM scale that *reasoning* — not just knowledge or formatting — can be distilled into a much smaller student.
 
-<WidgetFrame title="Distillation pipeline" caption="The end-to-end flow from teacher to student. Click each stage for details on what happens: teacher training (full RLHF/RLVR pipeline), data generation (teacher samples on diverse prompts), filtering (quality scoring), student training (SFT on filtered data), and final evaluation. The widget makes the modern hard-distillation recipe — used by R1-Distill, Phi, Orca — concrete.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 75 (secondary)
-  </div>
+<WidgetFrame title="Distillation pipeline" caption="The end-to-end hard-distillation pipeline used by R1-Distill, Phi, and Orca. Teacher → diverse prompts → teacher generates responses → filter for quality → student SFT → deployable student. Click any stage for details on what happens, what's needed, and real-world examples. No soft labels; no KL divergence; just standard SFT on teacher-generated data.">
+  <DistillationPipeline client:visible />
 </WidgetFrame>
 
 <Callout type="note">
@@ -336,6 +334,296 @@ R1-Distill is the most exciting recent demonstration that **reasoning capabiliti
 </Callout>
 
 The final section pulls the chapter — and Phase 11 — together.
+
+## Exercises
+
+Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Temperature softmax
+
+Implement the temperature-scaled softmax and verify the qualitative behavior: at $T = 1$, the distribution is peaked; at $T \to \infty$, it flattens toward uniform.
+
+<details>
+<summary>Hint</summary>
+
+The temperature-scaled softmax is:
+$$p_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$$
+
+Numerical stability tip: subtract `logits.max()` from `logits / T` before exponentiating.
+
+For verification:
+- At $T = 1$: largest logit should get most of the probability mass
+- At $T \to \infty$: distribution approaches uniform (1/n for each of n classes)
+- At $T \to 0^+$: distribution approaches a one-hot at the max logit (winner-take-all)
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax_with_temperature(logits, T=1.0):
+    """
+    Compute the temperature-scaled softmax of logits.
+    Numerical stability: subtract the max scaled logit before exponentiating.
+    """
+    # TODO: implement
+    pass
+
+# Test on a peaked distribution
+logits = np.array([4.0, 1.2, 0.8, 0.5, 0.3, 0.1, -0.5, -1.0, -1.5, -2.0])
+
+# TODO: compute probs at T=1, T=4, T=16
+# probs_t1 = softmax_with_temperature(logits, T=1)
+# probs_t4 = softmax_with_temperature(logits, T=4)
+# probs_t16 = softmax_with_temperature(logits, T=16)
+
+# Verify:
+# 1. At T=1, the top class should dominate (~0.9+)
+# 2. At T=4, top class should still win but less dominantly
+# 3. At T=16, distribution should be much more uniform
+# 4. Each distribution should sum to 1.0
+
+# print(f"At T=1:  top prob = {probs_t1.max():.3f}, sum = {probs_t1.sum():.3f}")
+# print(f"At T=4:  top prob = {probs_t4.max():.3f}, sum = {probs_t4.sum():.3f}")
+# print(f"At T=16: top prob = {probs_t16.max():.3f}, sum = {probs_t16.sum():.3f}")
+# print(f"\\nObservation: as T grows, the top probability shrinks toward 1/10 = 0.1 (uniform).")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — KL divergence
+
+Implement KL divergence between two probability distributions and verify its properties:
+- $\text{KL}(p \,\|\, p) = 0$ (identical distributions)
+- $\text{KL}(p \,\|\, q) \geq 0$ (always non-negative)
+- $\text{KL}(p \,\|\, q) \neq \text{KL}(q \,\|\, p)$ in general (asymmetric)
+
+<details>
+<summary>Hint</summary>
+
+The KL divergence:
+$$\text{KL}(p \,\|\, q) = \sum_i p_i \log \frac{p_i}{q_i}$$
+
+Or equivalently: $\sum_i p_i (\log p_i - \log q_i)$
+
+Numerical stability: add a small epsilon (1e-9) inside the logarithms to avoid $\log 0$.
+
+To verify asymmetry: take $p = [0.5, 0.5]$ and $q = [0.9, 0.1]$. Then:
+- $\text{KL}(p \,\|\, q)$ is one value
+- $\text{KL}(q \,\|\, p)$ is a different value
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def kl_divergence(p, q, eps=1e-9):
+    """
+    KL divergence KL(p || q) along the last axis.
+    p, q: probability distributions (each row sums to 1)
+    """
+    # TODO: implement KL(p || q) with numerical stability
+    pass
+
+# Test
+p = np.array([0.5, 0.3, 0.2])
+q = np.array([0.4, 0.4, 0.2])
+
+# Property 1: KL(p || p) = 0
+# kl_pp = kl_divergence(p, p)
+# print(f"KL(p || p) = {kl_pp:.6f} (should be ~0)")
+
+# Property 2: KL(p || q) > 0 for p != q
+# kl_pq = kl_divergence(p, q)
+# kl_qp = kl_divergence(q, p)
+# print(f"KL(p || q) = {kl_pq:.6f}")
+# print(f"KL(q || p) = {kl_qp:.6f}")
+
+# Property 3: asymmetric
+# print(f"\\nAsymmetric: KL(p || q) != KL(q || p): {abs(kl_pq - kl_qp) > 1e-6}")
+
+# In distillation, we use KL(teacher || student) — minimize the student's KL FROM the teacher.
+# This means: we want student to match teacher's distribution shape, even on rare classes.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Full distillation loss
+
+Implement the full Hinton distillation loss: $(1-\alpha) \mathcal{L}_{\text{hard}} + \alpha T^2 \mathcal{L}_{\text{soft}}$. Verify that the $T^2$ multiplier is necessary — without it, the soft loss becomes negligible at high $T$.
+
+<details>
+<summary>Hint</summary>
+
+The full loss has two parts:
+
+**Soft loss** (with $T^2$ multiplier):
+$$\mathcal{L}_{\text{soft}} = T^2 \cdot \text{KL}\bigl(\sigma(z_T / T) \,\|\, \sigma(z_S / T)\bigr)$$
+
+**Hard loss** (standard cross-entropy with true labels):
+$$\mathcal{L}_{\text{hard}} = -\sum_i \mathbb{1}[i = y] \log \sigma(z_S)_i$$
+
+**Combined**:
+$$\mathcal{L} = (1 - \alpha) \mathcal{L}_{\text{hard}} + \alpha \mathcal{L}_{\text{soft}}$$
+
+For the verification:
+- Compute $\mathcal{L}_{\text{soft}}$ with the $T^2$ multiplier at $T = 1, 4, 16$
+- Compute $\mathcal{L}_{\text{soft}}$ *without* the $T^2$ multiplier at the same $T$ values
+- Observe: at high $T$, the no-$T^2$ version shrinks to nearly zero; the with-$T^2$ version stays meaningful
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax_with_temperature(logits, T=1.0):
+    logits = logits / T
+    logits = logits - logits.max(axis=-1, keepdims=True)
+    exp = np.exp(logits)
+    return exp / exp.sum(axis=-1, keepdims=True)
+
+def kl_divergence(p, q, eps=1e-9):
+    return (p * (np.log(p + eps) - np.log(q + eps))).sum(axis=-1)
+
+def distillation_loss(student_logits, teacher_logits, true_labels, T=4.0, alpha=0.7, use_T2=True):
+    """
+    Full Hinton distillation loss.
+
+    use_T2: if True, multiply soft loss by T^2. If False, omit the multiplier
+            (to demonstrate why it matters).
+    """
+    # TODO: implement.
+    # 1. Compute softened teacher + student distributions at temperature T.
+    # 2. Compute L_soft as the mean KL(teacher || student); multiply by T^2 if use_T2.
+    # 3. Compute L_hard as mean cross-entropy of the student (at T=1) against true_labels.
+    # 4. Return (total, L_hard, L_soft) where total = (1 - alpha) * L_hard + alpha * L_soft.
+    pass
+
+# Setup
+np.random.seed(0)
+batch, classes = 8, 10
+teacher_logits = np.random.normal(0, 2, (batch, classes))
+true_labels = np.random.randint(0, classes, batch)
+for i, c in enumerate(true_labels):
+    teacher_logits[i, c] += 5
+
+student_logits = np.random.normal(0, 1, (batch, classes))
+
+# TODO: compute losses at T=1, 4, 16 with and without T^2
+# Show that without T^2, the soft loss becomes very small at high T
+
+# print(f"{'T':>4} | {'L_soft (w/ T^2)':>17} | {'L_soft (no T^2)':>17}")
+# print("-" * 50)
+# for T in [1, 4, 16]:
+#     _, _, soft_with = distillation_loss(student_logits, teacher_logits, true_labels, T=T, alpha=0.7, use_T2=True)
+#     _, _, soft_without = distillation_loss(student_logits, teacher_logits, true_labels, T=T, alpha=0.7, use_T2=False)
+#     print(f"T={T:>3} | {soft_with:>17.4f} | {soft_without:>17.4f}")
+#
+# print("\\nWithout T^2, the soft loss shrinks dramatically at high T.")
+# print("The T^2 multiplier keeps the gradient magnitudes comparable to the hard loss.")
+# print("Don't forget the T^2 — it's not a heuristic, it's mathematical necessity.")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Hard distillation pipeline simulation
+
+Simulate the modern hard-distillation pipeline used by R1-Distill, Phi, and Orca. Generate teacher outputs on a prompt set; filter for quality; "train" the student on the filtered data; evaluate.
+
+<details>
+<summary>Hint</summary>
+
+Pseudo-pipeline:
+
+1. **Prompts**: a list of diverse queries (e.g., 100+ prompts covering math, code, instruction following).
+2. **Generate**: for each prompt, the teacher produces a response. (In real life: an LLM call. Here: a mock function.)
+3. **Filter**: score each (prompt, response) pair. Drop low-quality.
+4. **Train**: "train" the student on the filtered data. (In real life: SFT. Here: just count the filtered examples.)
+5. **Evaluate**: report stats — how many prompts, how many filtered examples, what survival rate.
+
+The point of this exercise is to internalize that **hard distillation is just SFT with teacher-generated data**. The "distillation" is in the data source, not the training algorithm.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import random
+import numpy as np
+
+random.seed(42)
+np.random.seed(42)
+
+# Mock teacher: returns a response with a simulated "quality" score in [0, 1]
+def mock_teacher_generate(prompt, skill=0.85):
+    """Pseudo: in production, this is a real teacher LLM call."""
+    quality = float(np.random.beta(skill * 10, (1 - skill) * 10))
+    length = random.randint(20, 200)
+    return {"text": f"[teacher response to: {prompt[:30]}] ({length} chars)", "quality": quality}
+
+def filter_response(response, threshold=0.5):
+    """
+    Filter teacher outputs for quality.
+
+    In production:
+    - Use a reward model to score
+    - Use rule-based correctness checks (math, code)
+    - Reject too-short or too-long responses
+    - Self-consistency checks
+
+    Here: simple threshold on the simulated quality.
+    """
+    # TODO: return True if response passes, False otherwise
+    pass
+
+# Step 1: Define a diverse prompt set
+prompts = [
+    "Solve: 2x + 5 = 17",
+    "Explain photosynthesis in 3 sentences.",
+    "Write a Python function that reverses a string.",
+    "What's the capital of Japan?",
+    "Prove that the sum of two even numbers is even.",
+    "Describe the water cycle.",
+    "Write a haiku about autumn.",
+    "What causes earthquakes?",
+] * 20   # 160 total prompts
+
+# Step 2-3: Generate teacher outputs and filter
+synthetic_data = []
+total_generated = 0
+filtered_count = 0
+
+# TODO: for each prompt:
+#   - Generate teacher response
+#   - Filter for quality
+#   - Add to synthetic_data if passes filter
+
+# for prompt in prompts:
+#     response = mock_teacher_generate(prompt)
+#     total_generated += 1
+#     if filter_response(response, threshold=0.5):
+#         filtered_count += 1
+#         synthetic_data.append({"prompt": prompt, "response": response["text"]})
+
+# Step 4: "Train" the student (mock — would be Ch 13's SFT loop in production)
+# Just count examples
+# student_training_examples = len(synthetic_data)
+
+# Step 5: Report stats
+# print(f"Pipeline stats:")
+# print(f"  Prompts in set:         {len(prompts)}")
+# print(f"  Teacher responses:      {total_generated}")
+# print(f"  Filtered (kept):        {filtered_count} ({100*filtered_count/total_generated:.0f}%)")
+# print(f"  Student training data:  {student_training_examples} examples")
+#
+# print(f"\\nIn production: train student via SFT (Ch 13's machinery) on the filtered data.")
+# print(f"No soft labels. No KL divergence. Just SFT on teacher-generated data.")
+# print(f"This is the recipe used by R1-Distill, Phi, and Orca.")
+`}
+  packages={["numpy"]}
+/>
 
 ## When to use distillation
 
