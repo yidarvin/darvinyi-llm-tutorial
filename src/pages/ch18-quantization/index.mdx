@@ -1,0 +1,349 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch18-quantization
+description: Quantization — how to deploy large models cheaply by reducing the bits per parameter. The basic float→int mapping (scale + zero point + clip) is short math; the engineering choices around it (per-tensor vs per-channel vs per-group, symmetric vs asymmetric, INT8 vs INT4 vs NF4, GPTQ vs AWQ, weight vs activation quantization) are dense and operationally consequential. Bridges back to Ch 15's QLoRA — NF4 gets its proper treatment here. Combines multiplicatively with Ch 17's optimizations — production stacks use both. The chapter that explains how to fit a 70B model on a single GPU.
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Chapter 17 reduced *wasted computation*: KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. This chapter takes the complementary route — reduce the *bits per parameter*. A $70$B model in BF16 takes $140$ GB of weights; in INT4, the same model fits comfortably on a single A100 80GB with headroom left over for KV cache and batching. **Quantization is the optimization that decides whether a model can be deployed at all** — not just whether it is cheap.
+
+The math is short. The float-to-int mapping is a linear transform with two parameters: a scale and a zero point. Pick a range, clip, round, store the integers, throw away the floats. The engineering is dense. **Granularity** (per-tensor vs per-channel vs per-group) determines how much quality is lost to outliers. **Outlier handling** is what made INT8 work at LLM scale — Dettmers's $2022$ paper found a small population of feature dimensions that broke naive quantization and gave the mixed-precision fix. **NF4** — which you saw in Chapter 15 as the quantization layer of QLoRA — places its $16$ levels at equiprobable normal quantiles, which is the right thing to do when the weights are normally distributed. **GPTQ** and **AWQ** are the modern post-training quantization algorithms that close the quality gap between FP16 and INT4 to under one percent on standard benchmarks.
+
+This chapter unpacks all of it. By the end the reader should be able to compute the float-to-int mapping, choose a quantization granularity, explain why INT4 needs per-group, understand NF4's construction, distinguish GPTQ from AWQ, and combine quantization with Ch 17's optimizations for the full Phase 12 inference picture. **Then Chapter 19 closes Phase 12** with sampling — how the decoder picks tokens given the (now-quantized) logits the model produces.
+
+## Why quantize
+
+### The memory case
+
+A $70$B parameter model stored in BF16 takes $140$ GB of weights — two bytes per parameter. That does not fit on a single A100 80GB, and on an H100 80GB it leaves almost no room for the KV cache, the batch, or the activations. **At INT8 the same model takes $70$ GB**, which fits one H100 with room for cache and batching. **At INT4 it takes $35$ GB**, which fits a single A100 80GB with comfortable room left over for $32$K-context KV cache across a handful of concurrent sequences. **At NF4 with double quantization it is about $35$ to $40$ GB**, similar to INT4 but with measurably better quality per bit. The threshold of "what hardware can serve this model" moves dramatically with the bit width.
+
+### The bandwidth case
+
+Recall from Ch 17 §2 that decode is **memory-bound**: the GPU spends most of its time pulling weights from HBM into the matmul units, not actually computing. Arithmetic intensity collapses at decode because the activation tensor is a single token while the weight matrices are still the full multi-gigabyte tensors. **Halving the bytes per weight halves the time to load them**, which translates almost linearly into decode throughput — about $2\times$ at INT8 over BF16, about $4\times$ at INT4. For prefill (compute-bound) the speedup is smaller because the bottleneck is FLOPs not memory; for decode it is close to linear. **Quantization is therefore the single highest-leverage optimization for decode throughput**, alongside KV cache.
+
+### The throughput case
+
+Smaller weight matrices leave more memory for everything else, which means more concurrent requests can share the GPU. Combined with the continuous batching from Ch 17, quantization unlocks a larger working batch size and therefore higher sustained throughput per GPU-hour. **And on the quality side, modern recipes are nearly lossless.** LLM.int8, NF4 with double quantization, AWQ, and GPTQ all sit at or under one percent degradation on standard benchmarks like MMLU, HellaSwag, and GSM8K — practically lossless for almost any production use case. Sub-four-bit territory ($2$-bit, $3$-bit, $1.58$-bit) is still an active research area where the tradeoff becomes nontrivial; INT4 is the current floor for "drop-in" quantization.
+
+<Callout type="note">
+Quantization is the optimization that often determines whether a model is **deployable at all**, not just whether it is cheap. A $70$B model that does not fit on a single A100 in BF16 fits comfortably at INT4. The threshold of "what can be served on what hardware" moves dramatically with quantization — and that single fact has downstream consequences for unit economics, on-device deployment, and which models are realistic targets for self-hosting at all.
+</Callout>
+
+The next section introduces the basic mapping — the short math from which everything else in the chapter follows.
+
+## The basic mapping
+
+### Scale, zero point, clip
+
+The float-to-int mapping is a linear transformation followed by a clip:
+
+<Equation label="18.quantize-mapping">
+$$x_{\text{int}} = \text{clip}\!\left(\text{round}\!\left(\frac{x_{\text{float}}}{s}\right) + z, \; q_{\min}, \; q_{\max}\right)$$
+</Equation>
+
+with **scale** $s > 0$ (a float) and **zero point** $z$ (an integer). The clip bounds $[q_{\min}, q_{\max}]$ depend on the bit width: $[-128, 127]$ for signed INT8, $[-8, 7]$ for signed INT4. **Dequantization** runs the same map backward: $x_{\text{float}} \approx s \cdot (x_{\text{int}} - z)$, and the worst-case error from a single weight is bounded by $s/2$ — half the spacing between grid points. The scale is exactly the grid spacing; the smaller you make $s$, the finer the grid, and the harder it becomes to fit the original range without clipping.
+
+Given a range $[x_{\min}, x_{\max}]$ that the quantizer needs to cover, the two standard choices for $s$ and $z$ are: **symmetric** ($z = 0$ with $s = \max(|x_{\min}|, |x_{\max}|) / q_{\max}$) and **asymmetric** ($z = -\text{round}(x_{\min}/s)$ with $s = (x_{\max} - x_{\min}) / (q_{\max} - q_{\min})$). Symmetric is cheaper at inference time because the zero point drops out of the matmul; asymmetric is more flexible at the cost of a few extra operations per multiply.
+
+### Symmetric and asymmetric
+
+**Symmetric quantization is the default for LLM weights.** Weight distributions in a trained transformer are typically close to zero-centered — initialization is symmetric, and training does not break that much. **Asymmetric is reserved for cases where the distribution is genuinely skewed**, like activations after a ReLU or GELU where everything is non-negative. The cost difference is small but real: a symmetric matmul is just $\sum W_q a_q$ with one scale factor pulled out; an asymmetric one has cross terms from the zero point that the kernel has to either materialize or fuse away. **In practice, weights symmetric, activations asymmetric where it helps** — and modern recipes for LLMs lean symmetric on both sides because the activation distributions after LayerNorm are usually well-centered.
+
+### Storage overhead
+
+The bit width of the quantized integers is the headline number, but the scale and zero point have their own storage cost that gets folded back into the effective bits per weight. **Per-tensor** quantization uses one scale per matrix and the overhead is negligible. **Per-channel** uses one scale per output dimension and the overhead is small. **Per-group** ($G = 64$ or $G = 128$) uses one scale per group of contiguous weights, and at INT4 with $G = 128$ the scale overhead lands at roughly $0.13$ bits per weight — small but visible. For a $7$B model the bookkeeping works out to about $7.05$ GB at INT8 per-channel and about $3.6$ GB at INT4 per-group with the scales included. The "INT4" line item gets you $4\times$ over BF16, not $8\times$, after you pay for the scales.
+
+<RunnableCode>
+```python
+import numpy as np
+
+def quantize_symmetric(x, n_bits=8):
+    """Symmetric quantization to n_bits. Returns (quantized_int, scale)."""
+    qmax = 2**(n_bits - 1) - 1
+    qmin = -qmax - 1
+
+    scale = np.abs(x).max() / qmax
+    if scale == 0:
+        scale = 1.0
+
+    x_int = np.round(x / scale).clip(qmin, qmax).astype(np.int32)
+    return x_int, scale
+
+def dequantize_symmetric(x_int, scale):
+    return scale * x_int.astype(np.float32)
+
+# Compare quality at various bit widths on a normally-distributed weight vector
+np.random.seed(0)
+W = np.random.normal(0, 0.1, 256)
+
+print(f"{'Bits':>5} | {'MSE':>14} | {'Max err':>10}")
+print("-" * 40)
+for n_bits in [8, 4, 3, 2]:
+    W_int, scale = quantize_symmetric(W, n_bits=n_bits)
+    W_dq = dequantize_symmetric(W_int, scale)
+    mse = ((W - W_dq) ** 2).mean()
+    max_err = np.abs(W - W_dq).max()
+    print(f"{n_bits:>5} | {mse:>14.8f} | {max_err:>10.4f}")
+
+print("\\nObservations:")
+print("- INT8: nearly indistinguishable from FP32 (MSE ~1e-7)")
+print("- INT4: visible quantization error (MSE ~1e-5) but still small")
+print("- INT3, INT2: error grows fast — only 8 and 4 distinct values respectively")
+print("\\nThis is why INT8 and INT4 are the production standards;")
+print("sub-INT4 requires special techniques and accepts some quality loss.")
+```
+</RunnableCode>
+
+<WidgetFrame title="Quantization explorer" caption="Watch a weight distribution get quantized at different bit widths. Slider for bit width (16, 8, 4, 2); toggle between INT (uniform spacing) and NF (normal-spaced) levels. Histogram shows the original distribution, the quantization grid, and the resulting error. The widget makes the precision/storage tradeoff visceral — INT8 is nearly lossless, INT4 is visible but small, INT2 destroys quality.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 83 (marquee)
+  </div>
+</WidgetFrame>
+
+<Callout type="aside">
+Quantization theory often presents the float-to-int mapping as a "lossy compression," but for LLMs what matters is whether the lossy output behaves like the lossless original on downstream tasks — not whether each weight is reproduced exactly. **Modern quantization at INT8 and INT4 with the right granularity and outlier handling is empirically nearly lossless** (under one percent on standard benchmarks) even though the per-weight error is non-zero. The dequantized weights are not the same; the model's outputs are, near enough.
+</Callout>
+
+The next section covers granularity — the engineering choice that affects quality the most, by a wide margin.
+
+## Granularity — per-tensor, per-channel, per-group
+
+### Three granularities
+
+**Per-tensor** quantization uses one scale and zero point for the entire weight matrix. It is the cheapest variant in both compute and memory, but the quality drops sharply whenever the tensor has any outlier values — a single big-magnitude row sets the scale, and every other row loses resolution. **Per-channel** quantization uses one scale and zero point per output channel (per row of the weight matrix). Each row gets its own grid sized to its own dynamic range, which handles row-wise outliers without burning resolution on the rest. **Per-channel is the standard for INT8** and the default choice in `bitsandbytes`, vLLM, and TGI. **Per-group** quantization uses one scale and zero point per group of $G$ contiguous weights within a row, where $G$ is typically $64$ or $128$. Each group gets its own grid, and the grid is sized to the local statistics rather than the row-wide ones. **Per-group is essential for INT4.**
+
+### Why per-group matters for INT4
+
+At INT4 there are only $16$ distinct values on the grid. Local statistics dominate global ones at that resolution — a group of $64$ contiguous weights almost always has a much smaller dynamic range than the whole row, so the local grid is much finer than a global one would be. The cost of per-group is storage overhead: at $G = 64$ in INT4 the scales add about $0.5$ bits per weight; at $G = 128$ they add about $0.25$. **Group sizes of $64$ and $128$ are the practical defaults.** Below $32$ the scale overhead becomes a serious tax on the compression ratio; above $256$ the grid starts losing the locality that motivated per-group in the first place and quality drops noticeably. **GPTQ, AWQ, and the NF4 recipe in QLoRA all default to $G = 64$ or $G = 128$** — the consensus is narrow because the tradeoff is so well-explored.
+
+<RunnableCode>
+```python
+import numpy as np
+
+def quantize_per_tensor(W, n_bits=4):
+    qmax = 2**(n_bits - 1) - 1
+    scale = np.abs(W).max() / qmax
+    return np.round(W / scale).clip(-qmax-1, qmax) * scale
+
+def quantize_per_channel(W, n_bits=4):
+    qmax = 2**(n_bits - 1) - 1
+    scales = np.abs(W).max(axis=1, keepdims=True) / qmax
+    scales = np.where(scales == 0, 1.0, scales)
+    return np.round(W / scales).clip(-qmax-1, qmax) * scales
+
+def quantize_per_group(W, n_bits=4, group_size=64):
+    qmax = 2**(n_bits - 1) - 1
+    rows, cols = W.shape
+    assert cols % group_size == 0
+
+    W_q = np.zeros_like(W)
+    for g in range(cols // group_size):
+        start, end = g * group_size, (g + 1) * group_size
+        chunk = W[:, start:end]
+        scales = np.abs(chunk).max(axis=1, keepdims=True) / qmax
+        scales = np.where(scales == 0, 1.0, scales)
+        W_q[:, start:end] = np.round(chunk / scales).clip(-qmax-1, qmax) * scales
+    return W_q
+
+# Setup: a weight matrix with one outlier row (10x larger magnitudes)
+np.random.seed(0)
+W = np.random.normal(0, 0.1, (64, 256))
+W[0] *= 10
+
+print(f"{'Granularity':<28} | {'MSE':>12} | {'Max err':>10}")
+print("-" * 58)
+for name, fn in [
+    ("Per-tensor",              lambda x: quantize_per_tensor(x, n_bits=4)),
+    ("Per-channel (per-row)",   lambda x: quantize_per_channel(x, n_bits=4)),
+    ("Per-group (G=128)",       lambda x: quantize_per_group(x, n_bits=4, group_size=128)),
+    ("Per-group (G=64)",        lambda x: quantize_per_group(x, n_bits=4, group_size=64)),
+]:
+    W_q = fn(W)
+    mse = ((W - W_q) ** 2).mean()
+    max_err = np.abs(W - W_q).max()
+    print(f"{name:<28} | {mse:>12.6f} | {max_err:>10.4f}")
+
+print("\\nObservations:")
+print("- Per-tensor at INT4 is destroyed by the outlier row")
+print("  (the one big row sets the scale; everyone else loses resolution)")
+print("- Per-channel handles outlier rows (each row gets its own scale)")
+print("- Per-group is better still — each group of 64-128 weights gets its own scale")
+print("\\nINT4 + per-group is the standard configuration for modern LLM quantization.")
+```
+</RunnableCode>
+
+<WidgetFrame title="Granularity visualizer" caption="Watch the same weight matrix get quantized at INT4 with three granularities: per-tensor, per-channel, per-group. The matrix has one outlier row (10× larger weights); see how per-tensor is destroyed by the outlier while per-group preserves quality. Slider for group size shows the quality/storage tradeoff. The widget makes 'why per-group matters' visceral.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 84 (secondary)
+  </div>
+</WidgetFrame>
+
+<Callout type="note">
+For a weight matrix $W \in \mathbb{R}^{\text{out} \times \text{in}}$, per-channel quantization gives **one scale per *output* dimension** — the scale tensor has shape $(\text{out},)$. A common bug is quantizing per-*input*-channel instead, which produces worse quality because activations flow column-wise into the matmul: a per-input-channel scale gets multiplied through differently and the per-row dynamic range stops being controlled. Check which axis you are scaling, and check it twice.
+</Callout>
+
+The next section grounds the basic mapping in its canonical example — INT8 — and tells the story of the engineering insight that made INT8 viable at LLM scale.
+
+## INT8 — the canonical example
+
+### The straightforward recipe
+
+For each weight matrix $W$, compute a per-channel scale $s = \max(|W|) / 127$, quantize $W_q = \text{round}(W / s)$ clipped to $[-128, 127]$, and store $W_q$ (INT8) alongside $s$ (one float per channel). At inference time, the GPU does the matmul in INT8 using dedicated tensor-core instructions — modern A100 and H100 hardware has fused INT8 matmul kernels that accept INT8 inputs, accumulate in INT32, and produce an FP16 or FP32 output after dequantization. **The whole pipeline is one fused kernel call**; there is no Python-level dequantize-then-multiply loop in production.
+
+For pure weight quantization (W8A16, weights at INT8 and activations at BF16) the recipe basically ends there. Per-channel symmetric quantization plus a fused INT8 weight load is enough to get near-lossless quality on most architectures — and you pick up a $2\times$ bandwidth speedup on decode for free, because the weights are now half the size they were in BF16. **This was the easy regime.** Activations, on the other hand, are where the trouble starts.
+
+### The LLM.int8 wrinkle
+
+In $2022$, Dettmers and collaborators discovered something surprising about LLM activations: a small population of feature dimensions — typically under half a percent — have magnitudes hundreds of times larger than the rest. These are the **outlier features**, and they emerge consistently across scales above roughly $6.7$B parameters. **Naive INT8 quantization on activations is destroyed by them**: the outlier scales dominate the per-tensor or per-channel grid, and everything that is not an outlier gets crushed into the quantization noise. The model loses double-digit perplexity points and starts producing garbage.
+
+The LLM.int8 fix is mixed-precision matmul. **Identify the outlier dimensions dynamically per matmul** — typically using a threshold like "six standard deviations above the mean" — and **keep those dimensions in FP16 while quantizing the rest to INT8**. The matmul splits into two paths: an INT8 × INT8 bulk path for the common dimensions, and an FP16 × FP16 path for the outlier dimensions; the two outputs are added. **Result: nearly lossless INT8 quantization at LLM scale**, with a small overhead from the FP16 sidecar.
+
+<Callout type="note">
+**LLM.int8 was the paper that made INT8 quantization viable for LLMs.** Pre-$2022$, INT8 at LLM scale was widely thought to cause significant quality loss; the academic consensus was that you needed quantization-aware training and accept the cost. Dettmers and collaborators identified the outlier feature problem, gave the mixed-precision fix, shipped the `bitsandbytes` library, and turned INT8 into the **default starting point** for LLM serving in the Hugging Face ecosystem. **This is the canonical example of "engineering insight unlocking a deployment regime"** — and it is the template the field has followed for every subsequent compression advance.
+</Callout>
+
+The next section takes the same recipe and pushes it from INT8 down to INT4 and NF4, where the engineering tradeoffs sharpen and where the QLoRA story from Ch 15 finally gets its full unpacking.
+
+## INT4 and NF4 — going lower
+
+### INT4 with group-wise scales
+
+INT4 gives $16$ distinct values. That is not many. The arithmetic is the same as INT8 — clip, round, scale — but the grid is so coarse that two things become necessary. First, **per-group scales** are essential: $G = 64$ or $G = 128$ to keep the local dynamic range controlled. Second, **modern PTQ algorithms** (next section) become valuable because the rounding error is now large enough that compensating across weights pays off. Plain round-to-nearest at INT4 per-group is typically one to three perplexity points worse than FP16; GPTQ or AWQ at INT4 per-group is under one. **The combination of per-group plus a calibration-aware PTQ method is what makes INT4 production-ready.**
+
+The storage math works out cleanly. Four bits per weight, plus one FP16 or FP32 scale per group of $G$, plus optionally a quantized zero point. At $G = 128$ with FP16 scales, the overhead is $16/128 = 0.125$ bits per weight, so the effective footprint is about $4.13$ bits per weight. A $7$B model at INT4 per-group lands at roughly $3.6$ GB; a $70$B model lands at roughly $35$ GB. Both fit comfortably on hardware that could not hold them at BF16.
+
+### NF4 — quantiles of the normal
+
+Standard INT4 places its $16$ levels at evenly-spaced grid points. That is the right thing to do when the distribution being quantized is uniform, but it is the *wrong* thing to do when the distribution is normal — which weights typically are. Dettmers's $2023$ insight: **place the $16$ levels at the equiprobable quantiles of a standard normal**, so that each level represents one-sixteenth of the probability mass. Resolution concentrates where the weights actually live (near zero) and thins out where they do not (in the tails). The construction is symmetric around zero and normalized so the extreme levels sit at $\pm 1.0$.
+
+The $16$ NF4 levels are (approximately):
+
+```
+-1.000, -0.696, -0.526, -0.395, -0.285, -0.184, -0.091,  0.000,
+ 0.080,  0.160,  0.246,  0.338,  0.440,  0.563,  0.723,  1.000
+```
+
+Notice the density: levels are tightly packed near zero (where most weights live) and spread out in the tails (where weights are sparse). **On normally-distributed weights, NF4 gives roughly one to two percent better quality than INT4 round-to-nearest at the same bit width** — for free, structurally, by matching the grid to the distribution.
+
+### Double quantization
+
+The per-group scales themselves are a meaningful storage line item. FP32 scales at $G = 64$ cost about $0.5$ bits per weight; that is not enormous but it is bigger than the headline "four bits per weight" suggests. **Double quantization** (also from the QLoRA paper) takes the scales and quantizes *them*, grouping every $256$ scales into a super-group and quantizing the super-group to FP8 with its own (FP32) super-group scale. The math layers cleanly and the savings come out to roughly $0.3$ bits per weight. **NF4 with double quantization lands at about $4.13$ bits per weight effective** — a tiny overhead above the raw $4$-bit weights, with quality that is competitive with INT8 on most benchmarks.
+
+<RunnableCode>
+```python
+import numpy as np
+from scipy.stats import norm
+
+def compute_nf4_levels():
+    """16 NF4 levels as equiprobable normal quantiles, normalized to [-1, 1]."""
+    levels_half = []
+    for i in range(8):
+        # Center of bin i: (i + 0.5) / 16 of probability mass above zero
+        p = (i + 0.5) / 16
+        levels_half.append(norm.ppf(0.5 + p / 2))
+    # Symmetric construction
+    levels = [-x for x in reversed(levels_half)] + levels_half
+    # Normalize so the absolute max is 1.0
+    max_level = max(abs(l) for l in levels)
+    return [l / max_level for l in levels]
+
+NF4_LEVELS = np.array(compute_nf4_levels())
+print("NF4 levels (16, symmetric, normalized to [-1, 1]):")
+for l in NF4_LEVELS:
+    print(f"  {l:+.4f}")
+
+# Spacing between adjacent levels: dense near zero, sparse in tails
+spacings = np.diff(NF4_LEVELS)
+print(f"\\nGrid spacing (dense near zero, coarse in tails):")
+print(f"  Spacing near zero (levels 7-8):  {spacings[7]:.4f}")
+print(f"  Spacing at the tail (levels 0-1): {spacings[0]:.4f}")
+print(f"  Ratio (tail / center): {spacings[0] / spacings[7]:.2f}x coarser in tails")
+
+print("\\nObservations:")
+print("- Levels are denser near zero (where normally-distributed weights are concentrated)")
+print("- Tails get coarser resolution (where weights are sparse)")
+print("- This matches the actual weight distribution of a trained model")
+print("- Tradeoff: NF4 is tuned for normal-like distributions;")
+print("  for post-ReLU activations (skewed positive), uniform INT4 may be better")
+```
+</RunnableCode>
+
+<Callout type="aside">
+You first saw NF4 in **Chapter 15** as the quantization layer of QLoRA — the recipe that stores the frozen base model in $4$ bits while training LoRA adapters in BF16. **NF4 with double quantization is what made fine-tuning Llama-65B on a single A100 possible.** Chapter 15 treated it as a black box ("we use this $4$-bit format called NF4"); this section opens the box. Equiprobable normal quantiles, per-group scales, double-quantized scale factors. The pieces fit together: **NF4 is the quantization recipe; QLoRA is the training pattern that exploits it.** Two chapters, one technique seen from both sides.
+</Callout>
+
+The next section covers the post-training quantization algorithms that close the remaining quality gap at INT4 — GPTQ and AWQ.
+
+## Modern PTQ — GPTQ and AWQ
+
+### Round-to-nearest as baseline
+
+The baseline post-training quantization method is **round-to-nearest** (RTN): quantize each weight independently to its nearest grid point and ship it. Fast, simple, no calibration data, no extra compute. The limitation is that RTN ignores **correlations between weights**: errors in one weight are not compensated by adjustments in others, and the per-weight errors accumulate through the layer's matmul. At INT8 the rounding error is small enough that this does not matter; at INT4 it does, and the quality gap between RTN and the modern methods becomes worth closing.
+
+### GPTQ — Hessian-aware
+
+**GPTQ** (Frantar et al., $2023$) is the academic-quality answer. Run a small calibration set through the model — typically about $128$ sequences of $2048$ tokens — and use the activations to compute an approximate **Hessian** of the per-layer reconstruction loss. Then quantize the weights of each layer one at a time, in a fixed order, and **after each weight is rounded, adjust the remaining (unquantized) weights to compensate** for the rounding error. The Hessian determines how much each remaining weight should move:
+
+<Equation label="18.gptq-update">
+$$\Delta w_j = -\frac{(w_q - w_i)}{[H^{-1}]_{i,i}} [H^{-1}]_{i,j}$$
+</Equation>
+
+When weight $i$ gets rounded to $w_q$ with error $(w_q - w_i)$, weight $j$ is updated by an amount proportional to the inverse Hessian's off-diagonal entry $[H^{-1}]_{i,j}$. **The total reconstruction error at the layer output stays small** because the unquantized weights absorb what would otherwise have been propagated downstream. The cost of running GPTQ on a $7$B model is around one GPU-hour; the quality lands near-FP16 at INT4. **It is what the open-source `gptq-for-llama` and AutoGPTQ projects implement.**
+
+### AWQ — activation-aware
+
+**AWQ** (Lin et al., $2023$) is the surprisingly simple alternative. Use the same calibration set, but instead of computing a Hessian, just measure which weight channels multiply the **largest-magnitude activations** during calibration. Those channels are the ones that contribute most to the layer's output — and their quantization errors propagate hardest. **Scale those important channels up before quantization** (and apply the inverse scale to the activations at inference time, so the net matmul is unchanged) — this pushes the important weights into the high-resolution part of the quantization grid where the rounding error per weight is smallest. **Net cost: about ten times cheaper than GPTQ to compute.** Net quality: competitive, often within a quarter-perplexity-point at INT4.
+
+In practice the choice between GPTQ and AWQ is operational, not religious. **AWQ is faster to apply and slightly easier to integrate; GPTQ has a marginal quality edge on the hardest benchmarks.** Both are widely supported in vLLM, TensorRT-LLM, TGI, and llama.cpp. Both achieve under one percent degradation on standard benchmarks at INT4. **Pick whichever your inference stack supports first**; the difference is not worth a long debate.
+
+<Callout type="note">
+"PTQ doesn't need calibration data" is a common misconception. **RTN does not** — just round each weight to its nearest grid point. But **GPTQ and AWQ both use a small calibration dataset** (about $128$ sequences of $2048$ tokens) to estimate per-layer statistics. **Calibration matters**: $128$ random web sequences and $128$ task-relevant sequences can produce noticeably different quantized models. If your target distribution is code, calibrate on code. If it is dialog, calibrate on dialog. **Use representative calibration data** — not just "any data you have lying around." This is one of those quiet operational details that separates a tutorial-quality quantization from a production one.
+</Callout>
+
+The next section turns from weights to activations — a separate problem with its own techniques, and one that is harder than weight quantization for a structural reason.
+
+## Activation quantization
+
+### Why activations are harder
+
+Weights are **static**: quantization happens once, offline, and the result is shipped. Activations are **dynamic**: each input produces a different distribution, and the quantization has to be redone on every forward pass. That makes activation quantization both more expensive (the runtime cost is per-inference, not amortized) and more error-prone (the distribution at calibration time may not match the distribution at serving time). Activations also tend to have **larger dynamic range** than weights — LayerNorm centers them but does not bound them, and outlier features (the same ones from the LLM.int8 story) sit on the activation side, not the weight side. **Without care, activation quantization causes much more quality loss than weight quantization.**
+
+### SmoothQuant
+
+**SmoothQuant** (Xiao et al., $2023$) attacks the problem with a clean mathematical trick. The quantization difficulty of weights and activations is **coupled** through the matmul $W \cdot a$: if the activations have a hard outlier in channel $i$, then weight column $i$ multiplies that outlier, and the result is sensitive to both. SmoothQuant introduces a per-channel scaling factor $s_i$ and rewrites the matmul as $(W_i \cdot s_i)(a_i / s_i)$ — algebraically the same product, but **the activation range is now smaller** (easier to quantize) **and the weight range is larger** (still easy because weights are static and the scaling is known in advance). The factor $s_i$ is chosen per channel from calibration data to balance the difficulty between the two sides.
+
+The **W8A8 stack** (eight-bit weights, eight-bit activations) becomes practical once SmoothQuant is in the loop. The matmul runs entirely in INT8 — both operands quantized — and the kernel returns FP16. **In practice, however, W4A16 is more common than W8A8** for decode workloads. Decode is bottlenecked by weight loading from HBM, not by activation compute, so quantizing weights aggressively (INT4) while keeping activations cheap to compute (BF16) gives most of the speedup with less engineering complexity. **vLLM and TGI both default to W4A16 with GPTQ or AWQ weights** for their INT4 inference paths.
+
+<Callout type="aside">
+For decode workloads (Ch 17 §2), **W4A16 — four-bit weights, sixteen-bit activations — is the typical production configuration**, not full W8A8. Decode is memory-bound by weight loading; quantizing weights gives the most leverage, and quantizing activations adds engineering complexity for a modest additional speedup. The W8A8 stack matters more for prefill (compute-bound) and for embedded/edge deployments where compute is the binding constraint. **Read the workload before reaching for the most aggressive recipe.**
+</Callout>
+
+The final section pulls Ch 17 and Ch 18 together — the combined effect of inference optimization and quantization on what it actually costs to serve a $70$B model.
+
+## The full picture — combining with Ch 17
+
+### The optimization stack
+
+A modern production inference stack does not pick one of these techniques; it stacks all of them. **Each one attacks a different bottleneck**, and they compose multiplicatively:
+
+| Optimization | Source | Effect |
+|---|---|---|
+| KV cache | Ch 17 | $O(N^2) \to O(N)$ per token |
+| Continuous batching | Ch 17 | High GPU utilization |
+| Flash Attention | Ch 17 | $O(N^2) \to O(N)$ memory |
+| Speculative decoding | Ch 17 | $2$–$3\times$ decode amortization |
+| PagedAttention | Ch 17 | $2$–$4\times$ concurrent requests |
+| **Weight quantization** | **Ch 18** | **$2$–$4\times$ weight bandwidth** |
+| **KV cache quantization** | **Ch 18** | **$2$–$4\times$ cache memory** |
+
+The combined effect on a $70$B model running on a single A100 is roughly an order of magnitude. **Naive baseline: about $50$ tokens per second, single-stream, one sequence at a time.** **Production stack with Ch 17 plus Ch 18: about $500$ to $1000$ tokens per second aggregate, many concurrent sequences.** That is a $10$ to $20\times$ total speedup, on identical hardware, from purely systems-level optimizations — no architectural changes, no smaller model, no different training.
+
+The economic consequence is decisive. **A service handling a billion tokens per day** on naive inference needs roughly $30$ A100s of capacity. On the production stack, the same workload fits on two or three. **Order-of-magnitude operational cost savings.** That is the difference between an LLM product that runs at margin and one that bleeds compute money on every request.
+
+### What's next
+
+**Chapter 19 closes Phase 12** with sampling: top-k, top-p, temperature, beam search, constrained decoding, JSON-mode. Where this chapter and Ch 17 reduced the *cost* of inference, Ch 19 governs the *behavior* — how the decoder actually picks tokens given the logits the (quantized) forward pass produced. **After Ch 19, Phase 12 is complete** and the back half of the curriculum opens: capabilities (Ch 20–23: reasoning, tools, RAG, multimodal), safety and evaluation (Ch 24–26), and agents (Ch 27–30).
+
+Quantization is the optimization that **decides whether a model can be deployed at all**. A $70$B model in BF16 needs two A100s just for weights; in INT4 it fits comfortably on one with batching headroom. The basic float-to-int mapping is short math; the engineering choices around it — granularity (per-group at INT4), outlier handling (LLM.int8), level placement (NF4 for normally-distributed weights), PTQ method (GPTQ or AWQ), activation handling (SmoothQuant), KV cache quantization — are dense and operationally consequential. **Modern recipes at INT8 and INT4 are nearly lossless.** Combined with Ch 17's optimizations, they move the cost of serving an LLM by an order of magnitude. That is the lever this chapter hands you, and the one Ch 19 will finish handing you the rest of.
