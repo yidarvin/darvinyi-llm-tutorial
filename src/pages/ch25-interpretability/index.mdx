@@ -6,7 +6,7 @@ description: Interpretability — the discipline of opening up trained LLMs and 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SAEFeatureExplorer } from '@components/widgets';
+import { SAEFeatureExplorer, LinearProbingVisualizer } from '@components/widgets';
 
 Chapter 24 covered safety from the outside in: alignment training, refusal calibration, red-teaming, the helpful-versus-harmless trade-off. **All of those techniques operate on model behavior.** Behavior is one signal; the model's internals are another. **Interpretability is the discipline of reading those internals.** Probes that decode concepts from hidden states. Sparse autoencoders that pull apart superposition into monosemantic features. Circuits — small weight subgraphs that implement specific algorithms. Causal interventions that test whether a component actually matters. **The goal is two-fold**: understand what the model is computing, and verify that it is computing what we want.
 
@@ -62,10 +62,8 @@ What probes *don't* tell you matters as much. **Causation** — a probe says the
 
 A robust empirical finding: concepts come online at different depths. **Early layers** — surface features (token identity, position). **Middle layers** — syntactic and semantic features. **Late layers** — task-specific and output-aligned features. The *layer-wise feature emergence* pattern is one of probing's most reproducible results across architectures and training regimes.
 
-<WidgetFrame title="Linear probing visualizer" caption="Pick a concept (sentiment, syntax, named entity, refusal); see probe accuracy at each layer of a small transformer. The layer-wise emergence pattern becomes visible — different concepts come online at different depths. Demonstrates the foundational interpretability technique and what it can (and can't) tell you about a model's internals.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 143 (secondary)
-  </div>
+<WidgetFrame title="Linear probing visualizer" caption="Six concepts (token identity, sentence boundaries, part-of-speech, named entities, sentiment, refusal patterns) probed across 12 layers of a small transformer. Each concept's probe accuracy curve reveals where in the network the concept becomes most decodable. The pattern: surface features peak early, syntactic features in early-middle, semantic features in mid-late, task-specific features at the very end. One of probing's most robust empirical findings — and a window into how computation flows through transformer layers.">
+  <LinearProbingVisualizer client:visible />
 </WidgetFrame>
 
 <RunnableCode>
@@ -377,6 +375,399 @@ Key labs and groups, with rough specialization. **Anthropic** — SAEs (Bricken 
 </Callout>
 
 The next section closes the chapter and previews Phase 14's remaining trajectory.
+
+## Exercises
+
+Four exercises that lock in the interpretability toolkit. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+The exercises trace the chapter's arc: train a linear probe from scratch (Ex 1) → train a toy sparse autoencoder (Ex 2) → run activation patching to verify causal information flow (Ex 3) → label SAE features by examining their top activating inputs (Ex 4).
+
+### Exercise 1 (easy) — Linear probe from scratch
+
+Implement a linear probe that decodes a binary concept from hidden states. Evaluate at multiple layers and report which layer best decodes the concept.
+
+<details>
+<summary>Hint</summary>
+
+The training loop:
+1. Initialize `w` (shape `(d,)`) and `b` (scalar) randomly.
+2. For each iteration: compute logits = `hidden_states @ w + b`; apply sigmoid to get probs; compute cross-entropy loss; update via gradient descent.
+3. The gradient of the cross-entropy loss is: `(probs - labels) @ hidden_states / N` for `w`, mean for `b`.
+
+For multi-layer evaluation: train one probe per layer; report which layer achieved the highest test accuracy.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def train_linear_probe(hidden_states, labels, n_iterations=500, lr=0.01, seed=0):
+    """
+    Train a logistic regression probe.
+    hidden_states: shape (N, d)
+    labels: shape (N,) — binary 0/1
+    Returns: (w, b) tuple where w has shape (d,)
+    """
+    N, d = hidden_states.shape
+    np.random.seed(seed)
+    # TODO:
+    # 1. Initialize w (random small values) and b (0.0)
+    # 2. For n_iterations:
+    #    - Compute logits = hidden_states @ w + b
+    #    - Compute probs = sigmoid(logits)
+    #    - Compute gradient: dw = hidden_states.T @ (probs - labels) / N
+    #                       db = mean(probs - labels)
+    #    - Update: w -= lr * dw; b -= lr * db
+    # 3. Return (w, b)
+    pass
+
+
+def probe_accuracy(hidden_states, labels, w, b):
+    """Predict labels from hidden states and return accuracy."""
+    preds = (hidden_states @ w + b > 0).astype(int)
+    return (preds == labels).mean()
+
+
+# Synthetic data: 12 layers, 200 examples
+# At each layer, the concept is decodable to varying degrees
+np.random.seed(42)
+N = 200
+n_layers = 12
+d = 64
+
+# Generate hidden states across layers
+# The concept is most decodable at layer 5 (middle layers, like POS tagging)
+hidden_per_layer = []
+labels = np.array([1] * (N // 2) + [0] * (N // 2))
+# Random concept direction
+concept_dir = np.random.randn(d)
+concept_dir /= np.linalg.norm(concept_dir)
+# Per-layer signal strength (peaks at layer 5)
+signal_strengths = [0.4, 0.7, 1.0, 1.3, 1.5, 1.7, 1.5, 1.3, 1.0, 0.7, 0.5, 0.3]
+
+for layer_idx in range(n_layers):
+    h = np.random.randn(N, d) * 0.5
+    h[:N // 2] += concept_dir * signal_strengths[layer_idx]
+    hidden_per_layer.append(h)
+
+# Test: train probe at each layer; find best
+# TODO: complete the loop below
+# accuracies = []
+# for layer_idx in range(n_layers):
+#     w, b = train_linear_probe(hidden_per_layer[layer_idx], labels)
+#     acc = probe_accuracy(hidden_per_layer[layer_idx], labels, w, b)
+#     accuracies.append(acc)
+#
+# best_layer = max(range(n_layers), key=lambda i: accuracies[i])
+# print(f"Probe accuracy by layer:")
+# for i, acc in enumerate(accuracies):
+#     marker = '  *peak*' if i == best_layer else ''
+#     print(f"  L{i:>2}:  {acc:.2%}{marker}")
+# print(f"\\nPeak: layer {best_layer} (signal strength {signal_strengths[best_layer]})")
+#
+# # Observations:
+# # - Peak layer is wherever the signal is strongest
+# # - Real probes show similar curves: concept emerges at a specific depth
+# # - The shape of the curve (early/middle/late peak) hints at concept type
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Toy sparse autoencoder
+
+Train a sparse autoencoder on synthetic data with a known number of "true features." Report how many live features the trained SAE produces.
+
+<details>
+<summary>Hint</summary>
+
+The SAE training loop:
+1. Encoder: `f = ReLU(W_enc x + b_enc)`, shape `(N, D)` where `D > d`.
+2. Decoder: `x_hat = W_dec f + b_dec`.
+3. Loss = reconstruction (MSE) + sparsity (L1 penalty on `f`).
+4. Gradients via chain rule (manual or with autograd).
+
+A "live" feature is one that activates above a threshold on at least some input.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+np.random.seed(7)
+d = 24        # input dim
+D = 96        # SAE hidden dim (wider)
+N = 400       # examples
+n_true_features = 10
+
+# Build true features and synthesize inputs as sparse combinations
+true_features = np.random.randn(n_true_features, d)
+true_features /= np.linalg.norm(true_features, axis=1, keepdims=True)
+
+X = np.zeros((N, d))
+for i in range(N):
+    active = np.random.choice(n_true_features, size=2, replace=False)
+    coeffs = np.random.rand(2)
+    X[i] = coeffs[0] * true_features[active[0]] + coeffs[1] * true_features[active[1]]
+X += np.random.randn(N, d) * 0.05
+
+
+def train_sae(X, D, lr=0.02, sparsity_lambda=0.05, n_iterations=1500, seed=11):
+    """
+    Train a sparse autoencoder.
+    X: shape (N, d)
+    D: hidden dim (wider than d)
+    Returns: (W_enc, b_enc, W_dec, b_dec)
+    """
+    N_, d = X.shape
+    np.random.seed(seed)
+    W_enc = np.random.randn(D, d) * 0.1
+    b_enc = np.zeros(D)
+    W_dec = np.random.randn(d, D) * 0.1
+    b_dec = np.zeros(d)
+
+    # TODO:
+    # For n_iterations:
+    #   1. Forward: pre = X @ W_enc.T + b_enc; f = ReLU(pre); x_hat = f @ W_dec.T + b_dec
+    #   2. Loss = reconstruction (MSE) + sparsity (lambda * mean(L1 of f))
+    #   3. Backward (manual): chain rule through the decoder, ReLU, encoder
+    #   4. Update all four parameters
+
+    return W_enc, b_enc, W_dec, b_dec
+
+
+def count_live_features(X, W_enc, b_enc, threshold=0.01):
+    """Count features that activate above threshold on at least one input."""
+    f = np.maximum(0, X @ W_enc.T + b_enc)
+    return (f > threshold).any(axis=0).sum()
+
+
+# Test
+# W_enc, b_enc, W_dec, b_dec = train_sae(X, D)
+# n_live = count_live_features(X, W_enc, b_enc)
+# print(f"True feature count: {n_true_features}")
+# print(f"Live SAE features:  {n_live} (of {D} possible)")
+#
+# # Compute final reconstruction error
+# f = np.maximum(0, X @ W_enc.T + b_enc)
+# x_hat = f @ W_dec.T + b_dec
+# recon_err = np.mean(np.sum((X - x_hat) ** 2, axis=1))
+# print(f"Reconstruction MSE: {recon_err:.4f}")
+#
+# # Observations:
+# # - The wider hidden layer gives room to un-pack the true features
+# # - With proper sparsity, SAE recovers approximately n_true_features
+# # - Live feature count is sensitive to sparsity_lambda — too high → too few features
+# # - Real SAE training: same mechanics, much larger scale
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Activation patching across layers
+
+Implement activation patching to identify which layer carries the relevant information for a behavioral difference between two prompts.
+
+<details>
+<summary>Hint</summary>
+
+The patching loop:
+1. Run two prompts: a "clean" one (correct answer) and a "corrupted" one (wrong answer).
+2. For each layer L, replace layer L's output for the corrupted prompt with layer L's output from the clean prompt.
+3. Measure how much the output flips toward the clean answer.
+4. The layer with the biggest flip is where the information lives.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+# A mock 4-layer network: each layer transforms its input nonlinearly.
+np.random.seed(0)
+
+n_layers = 4
+d = 8
+
+# Random weights per layer
+W = [np.random.randn(d, d) * 0.5 for _ in range(n_layers)]
+
+
+def model_layers(x):
+    """Run all layers; return list of intermediate activations + final output."""
+    h = x
+    activations = [h]
+    for L in range(n_layers):
+        h = np.tanh(h @ W[L])
+        activations.append(h)
+    # Final scalar output: dot with a fixed readout vector
+    readout = np.array([0.5, -0.3, 0.4, -0.1, 0.2, 0.1, -0.2, 0.3])
+    out = activations[-1] @ readout
+    return activations, out
+
+
+def patched_forward(clean_acts, corrupt_acts, patch_layer):
+    """
+    Re-run the network using corrupt_acts up to patch_layer, then clean_acts after.
+    Returns the patched output.
+    """
+    # TODO:
+    # 1. Start with corrupt_acts (these were the activations from the corrupted prompt)
+    # 2. Replace the activation at patch_layer + 1 with clean_acts[patch_layer + 1]
+    # 3. Re-run subsequent layers from there
+    # 4. Compute and return the final output
+    pass
+
+
+# Two prompts: clean vs corrupted (differ only in input)
+clean_input = np.array([1.0, 0.5, -0.5, 0.2, 0.1, -0.3, 0.4, 0.0])
+corrupt_input = np.array([-1.0, 0.5, -0.5, 0.2, 0.1, -0.3, 0.4, 0.0])  # first dim flipped
+
+clean_acts, out_clean = model_layers(clean_input)
+corrupt_acts, out_corrupt = model_layers(corrupt_input)
+
+print(f"Clean output:     {out_clean:.4f}")
+print(f"Corrupted output: {out_corrupt:.4f}")
+print(f"Gap to recover:   {out_clean - out_corrupt:.4f}\\n")
+
+# Patch at each layer; report which layer transfers the most info
+# TODO: complete the loop
+# for layer_idx in range(n_layers):
+#     patched = patched_forward(clean_acts, corrupt_acts, layer_idx)
+#     recovery = (patched - out_corrupt) / (out_clean - out_corrupt)   # 0..1
+#     print(f"Patch after layer {layer_idx}: output = {patched:.4f}  "
+#           f"recovery = {recovery:.0%}")
+#
+# # Observations:
+# # - Recovery should approach 100% as we patch later layers
+# # - The earliest layer where recovery is high tells you where the info lives
+# # - In real activation patching: same logic, applied to specific heads or MLPs
+# # - This is the foundation of mechanistic circuit discovery (Conmy 2023)
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — SAE feature labeling
+
+Given an SAE feature represented by its top activating inputs, assign it a human-readable label. Evaluate label accuracy against a curated set of "ground truth" features.
+
+<details>
+<summary>Hint</summary>
+
+The feature-labeling pipeline:
+1. For each feature, look at its top-K activating inputs (text snippets).
+2. Identify common patterns: shared topics, common keywords, semantic themes.
+3. Generate a short label that captures the common concept.
+
+For this exercise, mock the labeling step with a keyword-frequency heuristic. Real feature labeling uses an LLM to read the inputs and produce a description.
+
+To evaluate: compare your labels to ground-truth labels for some features. Report accuracy as exact-match or label-similarity.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`from collections import Counter
+import re
+
+# Sample SAE features: each has top activating inputs + a ground-truth label.
+# In real labeling: an LLM reads the inputs and produces a description.
+# This exercise uses a keyword-frequency heuristic instead.
+
+FEATURES = [
+    {
+        'id': 'feat_001',
+        'ground_truth_label': 'Python loops',
+        'top_inputs': [
+            'for i in range(10): print(i)',
+            'for item in my_list: process(item)',
+            'while True: data = fetch(); if not data: break',
+            'for key in dictionary: print(key, dictionary[key])',
+        ],
+    },
+    {
+        'id': 'feat_002',
+        'ground_truth_label': 'French language',
+        'top_inputs': [
+            'Bonjour, comment allez-vous aujourd\\'hui?',
+            'Je voudrais commander un café, s\\'il vous plaît.',
+            'La Tour Eiffel est un monument iconique.',
+            'Nous partons en vacances en Provence.',
+        ],
+    },
+    {
+        'id': 'feat_003',
+        'ground_truth_label': 'Refusal patterns',
+        'top_inputs': [
+            "I can't help with that request.",
+            "I'm not able to provide that information.",
+            "I won't be assisting with this.",
+            "I have to decline — that would violate my guidelines.",
+        ],
+    },
+    {
+        'id': 'feat_004',
+        'ground_truth_label': 'Sentiment positive',
+        'top_inputs': [
+            "I absolutely love this product, it's wonderful!",
+            "Great work team, this is fantastic news!",
+            "Amazing experience, would highly recommend!",
+            "What a delightful surprise, truly excellent.",
+        ],
+    },
+]
+
+
+def extract_common_words(texts, top_n=3):
+    """Find the most-common content words across a list of texts."""
+    stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at',
+                 'to', 'for', 'with', 'and', 'or', 'but', 'i', 'you', 'he', 'she',
+                 'it', 'we', 'they', 'this', 'that', 'these', 'those', 'of', 'my',
+                 'your', 'his', 'her', 'its', 'our', 'their', 'be', 'have', 'has'}
+    words = []
+    for text in texts:
+        for word in re.findall(r"[a-zA-Z']+", text.lower()):
+            if word not in stopwords and len(word) > 1:
+                words.append(word)
+    return [w for w, _ in Counter(words).most_common(top_n)]
+
+
+def label_feature(feature):
+    """
+    Generate a short human-readable label for a feature.
+    Heuristic: look for common keywords; map to known categories.
+    """
+    # TODO:
+    # 1. Get common words from the top activating inputs
+    # 2. Pattern-match against known categories:
+    #    - if 'for' or 'while' or 'range' → "Python loops"
+    #    - if accented characters or French-pattern words → "French language"
+    #    - if "can't" or "won't" or "decline" or "won't" → "Refusal patterns"
+    #    - if "love" or "great" or "amazing" or "excellent" → "Sentiment positive"
+    # 3. Return the matched label, or "unknown" if no match
+    pass
+
+
+# Test
+# correct = 0
+# print(f"{'Feature':>10}  {'Ground truth':<25}  {'Generated':<25}  {'Match'}")
+# print('-' * 80)
+# for feat in FEATURES:
+#     generated = label_feature(feat)
+#     match = generated == feat['ground_truth_label']
+#     correct += match
+#     print(f"{feat['id']:>10}  {feat['ground_truth_label']:<25}  {generated:<25}  {'✓' if match else '✗'}")
+#
+# print(f"\\nAccuracy: {correct}/{len(FEATURES)} = {correct / len(FEATURES):.0%}")
+#
+# # Observations:
+# # - Keyword-frequency heuristics catch obvious patterns
+# # - Subtle features (abstract behaviors, multi-input concepts) need real LLMs to label
+# # - This is one of interpretability's labor bottlenecks — labeling at scale is hard
+# # - Production feature-labeling pipelines use frontier LLMs to read inputs and describe
+`}
+  packages={[]}
+/>
 
 ## Phase 14 ahead
 

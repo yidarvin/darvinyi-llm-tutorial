@@ -85,7 +85,7 @@ export const PARTS: Part[] = [
     title: 'Safety, Interpretability & Evaluation',
     chapters: [
       { num: 24, slug: 'ch24-safety',           title: 'Guardrails & safety', partNum: 8, status: 'published' },
-      { num: 25, slug: 'ch25-interpretability', title: 'Interpretability',    partNum: 8, status: 'draft' },
+      { num: 25, slug: 'ch25-interpretability', title: 'Interpretability',    partNum: 8, status: 'published' },
       { num: 26, slug: 'ch26-evaluation',       title: 'Evaluation',          partNum: 8, status: 'planned' },
     ],
   },
