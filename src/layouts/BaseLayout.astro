@@ -1,5 +1,6 @@
 ---
 import '@/styles/global.css';
+import SearchDialog from '@components/search/SearchDialog';
 
 export interface Props {
   title?: string;
@@ -41,5 +42,6 @@ const fullTitle = title === 'LLM Tutorial' ? title : `${title} · LLM Tutorial`;
   <body>
     <a href="#main" class="skip-link">Skip to main content</a>
     <slot />
+    <SearchDialog client:idle />
   </body>
 </html>

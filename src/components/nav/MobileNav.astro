@@ -1,8 +1,13 @@
 ---
 import { PARTS } from '@lib/chapters';
+import SearchButton from '@components/search/SearchButton';
 const currentPath = Astro.url.pathname;
 const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
 ---
+<div class="mobile-search">
+  <SearchButton compact client:load />
+</div>
+
 <button id="mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <line x1="3" y1="6"  x2="21" y2="6" />
@@ -90,6 +95,16 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
 </script>
 
 <style>
+  .mobile-search {
+    position: fixed;
+    top: 1rem;
+    right: 4rem;
+    z-index: var(--z-nav);
+  }
+  @media (min-width: 1024px) {
+    .mobile-search { display: none; }
+  }
+
   .mobile-nav-toggle {
     position: fixed;
     top: 1rem;

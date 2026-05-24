@@ -1,5 +1,6 @@
 ---
 import { PARTS } from '@lib/chapters';
+import SearchButton from '@components/search/SearchButton';
 
 const currentPath = Astro.url.pathname;
 const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
@@ -8,6 +9,9 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
   <div class="sidebar-header">
     <a href="/" class="sidebar-brand">LLM Tutorial</a>
     <p class="sidebar-tagline">From numpy to agents</p>
+    <div class="sidebar-search">
+      <SearchButton client:load />
+    </div>
   </div>
 
   <nav class="sidebar-nav" aria-label="Chapter index">
@@ -80,6 +84,13 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
     color: var(--text-tertiary);
     margin: 0.25rem 0 0 0;
     max-width: none;
+  }
+  .sidebar-search {
+    margin-top: 0.85rem;
+  }
+  .sidebar-search :global(button) {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .sidebar-nav {

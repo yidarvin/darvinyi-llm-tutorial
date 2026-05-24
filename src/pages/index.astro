@@ -1,12 +1,17 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Footer from '@components/nav/Footer.astro';
+import SearchButton from '@components/search/SearchButton';
 import { PARTS, ALL_CHAPTERS, getFirstPublishedChapter } from '@lib/chapters';
 
 const totalChapters = ALL_CHAPTERS.length;
 const startHere = getFirstPublishedChapter();
 ---
 <BaseLayout>
+  <div class="home-search">
+    <SearchButton client:load />
+  </div>
+
   <main id="main">
     <section class="hero">
       <div class="hero-glow" aria-hidden="true"></div>
@@ -94,6 +99,14 @@ const startHere = getFirstPublishedChapter();
 </BaseLayout>
 
 <style>
+  /* Top-right search button (home page has no sidebar/nav). */
+  .home-search {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: var(--z-nav);
+  }
+
   /* Hero */
   .hero {
     position: relative;
