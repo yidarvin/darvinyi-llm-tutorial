@@ -56,7 +56,7 @@ export const PARTS: Part[] = [
     title: 'Post-training',
     chapters: [
       { num: 13, slug: 'ch13-sft',          title: 'Supervised fine-tuning',                  partNum: 5, status: 'published' },
-      { num: 14, slug: 'ch14-alignment',    title: 'Alignment (RLHF, DPO, RLVR, CAI)',        partNum: 5, status: 'planned' },
+      { num: 14, slug: 'ch14-alignment',    title: 'Alignment (RLHF, DPO, RLVR, CAI)',        partNum: 5, status: 'draft' },
       { num: 15, slug: 'ch15-peft',         title: 'Parameter-efficient fine-tuning',         partNum: 5, status: 'planned' },
       { num: 16, slug: 'ch16-distillation', title: 'Distillation',                            partNum: 5, status: 'planned' },
     ],
