@@ -6,7 +6,7 @@ description: Sampling — how a transformer's logits become emitted tokens. Gree
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SamplingDistribution } from '@components/widgets';
+import { SamplingDistribution, ConstrainedDecoding } from '@components/widgets';
 
 Chapter 17 made the forward pass faster. Chapter 18 made it smaller. This chapter is about what happens *after* the forward pass: how a vector of logits — one score per vocabulary token — becomes the next emitted text token. **The choice matters enormously.** Greedy decoding produces robotic, repetitive output. Pure random sampling produces incoherent nonsense. Carefully-designed strategies (temperature + nucleus + a mild repetition penalty) produce natural, varied, useful text. The algorithms are short; the impact is huge.
 
@@ -344,6 +344,318 @@ Beam search dominated machine translation for years ($2014$ – $2020$) but has 
 
 The final section covers the production-critical topic of constrained decoding — how to guarantee structured outputs like JSON — and then closes Phase 12.
 
+## Exercises
+
+Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Greedy and temperature
+
+Implement greedy decoding and temperature-scaled sampling. Verify the qualitative behavior: greedy is deterministic; low temperature is conservative; high temperature is noisy.
+
+<details>
+<summary>Hint</summary>
+
+**Greedy**: `np.argmax(logits)`.
+
+**Temperature**: scale logits by $1/T$ before softmax; then sample with probability proportional to the result.
+
+Use `np.random.choice(len(probs), p=probs)` to sample. Use a fixed seed for reproducibility.
+
+Numerical stability: subtract `logits.max()` before exponentiating to avoid overflow.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+def greedy(logits):
+    """Emit argmax."""
+    # TODO: return the index of the highest-probability token
+    pass
+
+def temperature_sample(logits, T=1.0, rng=None):
+    """Sample from softmax(logits / T)."""
+    # TODO:
+    # 1. Scale logits by 1/T
+    # 2. Apply softmax
+    # 3. Sample using rng.choice
+    pass
+
+# Test on logits with one clear winner
+np.random.seed(0)
+logits = np.random.normal(0, 1, 50)
+logits[5] = 4.0   # clear winner
+
+rng = np.random.RandomState(42)
+# print(f"Greedy: always {greedy(logits)}")
+#
+# for T in [0.3, 1.0, 2.0]:
+#     samples = [temperature_sample(logits, T=T, rng=rng) for _ in range(10)]
+#     print(f"T = {T}: samples = {samples}")
+#
+# # Observations:
+# # - Greedy: always token 5
+# # - T = 0.3: mostly token 5 (sharp)
+# # - T = 1.0: balanced — 5 dominant with some variety
+# # - T = 2.0: scattered across many tokens (too noisy)
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Top-p sampling
+
+Implement top-p (nucleus) sampling. Verify the nucleus size adapts to distribution shape — small for peaked, large for flat.
+
+<details>
+<summary>Hint</summary>
+
+Top-p algorithm:
+1. Compute softmax probabilities.
+2. Sort by probability (descending).
+3. Find the smallest $k$ such that $\sum_{i=1}^{k} p_i \geq p$.
+4. Keep those $k$ tokens; mask the rest with $-\infty$.
+5. Renormalize and sample.
+
+Use `np.argsort(probs)[::-1]` for descending sort. Use `np.searchsorted` to find the cutoff index.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+def top_p_indices(probs, p=0.95):
+    """
+    Return the set of indices in the top-p nucleus and the nucleus size.
+
+    Algorithm:
+    1. Sort by probability descending
+    2. Cumulative sum
+    3. Find smallest k with cumsum[k-1] >= p
+    """
+    # TODO: implement
+    pass
+
+def top_p_sample(logits, p=0.95, T=1.0, rng=None):
+    """Apply top-p truncation and sample."""
+    # TODO:
+    # 1. Apply temperature
+    # 2. Compute softmax
+    # 3. Find nucleus indices
+    # 4. Mask non-nucleus tokens with -inf
+    # 5. Renormalize and sample
+    pass
+
+# Test adaptive behavior across distribution shapes
+np.random.seed(0)
+
+def make_distribution(shape='peaked', V=50):
+    np.random.seed(0)
+    z = np.random.normal(0, 1, V)
+    if shape == 'peaked':
+        z[0] += 5.0
+    elif shape == 'bimodal':
+        z[0] += 3.0
+        z[1] += 2.5
+    return softmax(z)
+
+# print(f"{'Shape':<10} | nucleus size at p=0.5, p=0.9, p=0.95")
+# print("-" * 50)
+# for shape in ['peaked', 'bimodal', 'flat']:
+#     probs = make_distribution(shape)
+#     sizes = []
+#     for p in [0.5, 0.9, 0.95]:
+#         _, n = top_p_indices(probs, p)
+#         sizes.append(n)
+#     print(f"{shape:<10} | {sizes}")
+#
+# # Observations:
+# # - Peaked: nucleus is small (~1-3 even at p=0.95)
+# # - Bimodal: nucleus naturally includes both peaks
+# # - Flat: nucleus is large (need many tokens to reach 95% mass)
+# # This is why top-p is the modern default — it adapts.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Repetition penalty
+
+Implement a frequency penalty: each token's logit is reduced proportional to how many times it has appeared in the generation so far. Verify the effect on a token that has been repeated.
+
+<details>
+<summary>Hint</summary>
+
+Frequency penalty: $z'_i = z_i - \alpha \cdot \text{count}_i$.
+
+Track token counts as you sample. After sampling each token, increment its count.
+
+For the demo: generate a sequence of 20 tokens with and without penalty. Compare how often the highest-probability token gets repeated.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+def apply_frequency_penalty(logits, token_counts, alpha=0.5):
+    """Reduce logits by alpha * count for each token seen."""
+    # TODO: return logits - alpha * token_counts
+    pass
+
+def sample_with_penalty(logits, T=1.0, alpha=0.0, n=20, rng=None):
+    """
+    Sample n tokens with frequency penalty alpha.
+    Returns the list of sampled token indices.
+    """
+    if rng is None: rng = np.random
+    V = len(logits)
+    token_counts = np.zeros(V)
+    samples = []
+    for _ in range(n):
+        # TODO:
+        # 1. Apply frequency penalty (if alpha > 0)
+        # 2. Sample with temperature T
+        # 3. Update token_counts
+        # 4. Append to samples
+        pass
+    return samples
+
+# Demo: logits where token 5 is very preferred
+np.random.seed(0)
+logits = np.random.normal(0, 1, 30)
+logits[5] = 4.0   # strong preference
+
+# Without penalty: token 5 dominates
+# With penalty: variety increases as count grows
+rng_no_pen = np.random.RandomState(42)
+rng_pen = np.random.RandomState(42)
+
+# samples_no_penalty = sample_with_penalty(logits, T=1.0, alpha=0.0, n=20, rng=rng_no_pen)
+# samples_with_penalty = sample_with_penalty(logits, T=1.0, alpha=0.5, n=20, rng=rng_pen)
+#
+# print(f"Without penalty: {samples_no_penalty}")
+# print(f"With penalty:    {samples_with_penalty}")
+#
+# from collections import Counter
+# print(f"\\nToken 5 count:")
+# print(f"  Without penalty: {Counter(samples_no_penalty)[5]} / 20")
+# print(f"  With penalty:    {Counter(samples_with_penalty)[5]} / 20")
+#
+# # Observation: penalty reduces repetition of token 5
+# # but at high alpha can prevent natural repetition.
+# # Production: alpha = 0.1 is usually sufficient.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — FSM masking for constrained decoding
+
+Implement constrained decoding via FSM masking for a tiny JSON-like grammar. At each step, mask out tokens that would violate the current FSM state.
+
+<details>
+<summary>Hint</summary>
+
+Define a small grammar via state transitions. For each state, list the valid token IDs. At each decode step:
+
+1. Get current FSM state
+2. Determine valid token set
+3. Mask out invalid tokens (set logits to $-\infty$)
+4. Sample from masked distribution
+5. Update state based on emitted token
+
+Use a dict: `{state: {token_id: next_state}}`.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def softmax(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+# Tiny vocabulary
+VOCAB = ['{', '}', '"', ':', 'name', 'Alice', 'random']
+# IDs:      0    1    2    3    4       5         6
+
+# FSM transitions: {state: {token_id: next_state}}
+# Grammar: { "name" : "Alice" }   (slightly simplified)
+TRANSITIONS = {
+    'START':         {0: 'AFTER_BRACE'},                # only '{' valid
+    'AFTER_BRACE':   {2: 'KEY_OPENED'},                 # only '"'
+    'KEY_OPENED':    {4: 'KEY_NAME'},                   # only 'name'
+    'KEY_NAME':      {2: 'KEY_CLOSED'},                 # only '"'
+    'KEY_CLOSED':    {3: 'COLON'},                      # only ':'
+    'COLON':         {2: 'VALUE_OPENED'},               # only '"'
+    'VALUE_OPENED':  {5: 'VALUE_NAME'},                 # only 'Alice'
+    'VALUE_NAME':    {2: 'VALUE_CLOSED'},               # only '"'
+    'VALUE_CLOSED':  {1: 'DONE'},                       # only '}'
+    'DONE':          {},
+}
+
+def valid_tokens(state):
+    """Return list of valid token IDs at the given state."""
+    return list(TRANSITIONS.get(state, {}).keys())
+
+def constrained_decode(logits_fn, state, rng=None):
+    """
+    Greedily decode under constraints.
+
+    logits_fn(state) → logits (here we just use random logits for demo)
+    Returns the emitted sequence and final state.
+    """
+    if rng is None: rng = np.random
+    emitted = []
+
+    while state != 'DONE':
+        logits = logits_fn(state)
+        # TODO:
+        # 1. Get valid tokens at current state
+        # 2. Mask invalid tokens to -inf
+        # 3. Take argmax of masked logits (or sample with softmax)
+        # 4. Append the token; update state
+        pass
+
+    return emitted, state
+
+# Demo: simulated "model preferences" (random logits)
+def fake_logits(state):
+    rng_state = sum(ord(c) for c in state) % 100
+    np.random.seed(rng_state)
+    z = np.random.normal(0, 1, len(VOCAB))
+    # Often the model would prefer 'random' (token 6) — invalid!
+    z[6] += 1.5
+    return z
+
+# emitted, final_state = constrained_decode(fake_logits, 'START')
+# emitted_str = ' '.join(VOCAB[i] for i in emitted)
+# print(f"Emitted: {emitted_str}")
+# print(f"Joined:  {''.join(VOCAB[i] for i in emitted)}")
+# print(f"Final state: {final_state}")
+# print(f"\\nWithout constraints, the model would have picked 'random' often.")
+# print(f"FSM masking guarantees the output follows the grammar.")
+`}
+  packages={["numpy"]}
+/>
+
 ## Constrained decoding and modern recipes
 
 ### Why constrained decoding matters
@@ -362,10 +674,8 @@ Apply the usual sampling pipeline — temperature, top-p, repetition penalty if 
 
 Production implementations vary by ecosystem. **Outlines** (Willard & Louf, 2023) compiles regex to FSMs; works with any Hugging Face model. **OpenAI JSON mode** (`response_format = json_object`) constrains output to valid JSON. **Anthropic structured outputs** enforce tool schemas under the hood. **Llama.cpp grammar mode** accepts BNF grammars and applies them as masking constraints at every decode step. The mechanics are similar across all of them; the API surface differs.
 
-<WidgetFrame title="Constrained decoding" caption="A small JSON grammar masking the decoder. Walk through a step-by-step generation; at each step, see which tokens are valid (sampleable) vs invalid (masked to -∞). The model picks the most-likely valid token. The widget makes 'how does JSON mode work' concrete.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 88 (secondary)
-  </div>
+<WidgetFrame title="Constrained decoding" caption="Step-by-step generation of valid JSON. At each FSM state, only certain vocabulary tokens are valid; invalid tokens are masked (rose). The ★ marks the model's *preferred* token without constraints — often invalid! Constrained decoding picks the highest-probability valid token instead. The widget makes 'how does JSON mode work' concrete.">
+  <ConstrainedDecoding client:visible />
 </WidgetFrame>
 
 ### Phase 12 — complete
