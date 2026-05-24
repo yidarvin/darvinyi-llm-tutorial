@@ -40,3 +40,4 @@ export { default as ConstrainedDecoding } from './ch19/ConstrainedDecoding';
 export { default as TestTimeComputeCurves } from './ch20/TestTimeComputeCurves';
 export { default as SelfConsistencyAggregator } from './ch20/SelfConsistencyAggregator';
 export { default as ToolCallTrace } from './ch21/ToolCallTrace';
+export { default as ToolSchemaValidator } from './ch21/ToolSchemaValidator';

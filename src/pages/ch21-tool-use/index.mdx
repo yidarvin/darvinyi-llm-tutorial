@@ -6,7 +6,7 @@ description: Tool use — how production agents call functions, query databases,
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { ToolCallTrace } from '@components/widgets';
+import { ToolCallTrace, ToolSchemaValidator } from '@components/widgets';
 
 Chapter 20 ended with reasoning models that can think for minutes before answering — but they can only *describe* what they would do, not *do* it. A reasoning model that cannot act on the world is limited. **Tool use** removes that limit. Modern LLMs are trained to emit structured calls to external functions; the surrounding system executes those calls; the results flow back into the model's context. The model decides when to invoke a tool and which tool to invoke. This is the bridge from chat to agency.
 
@@ -150,10 +150,8 @@ The model picks tools by reading their descriptions; vague descriptions produce 
 
 The production sweet spot for tool descriptions is **50 to 200 characters**, plus one or two example inputs when helpful. Below 50 characters the description is usually too thin to disambiguate from neighboring tools; above 200 characters the description bloats the context window without proportionate selection accuracy. Each tool's description is paid for at every model call in the conversation, so the per-tool budget compounds when the catalog grows.
 
-<WidgetFrame title="Tool schema validator" caption="Edit a JSON Schema; try different tool calls; see which pass and which fail. Structural validation by the API catches type errors and missing required fields at the boundary; semantic validation happens inside the tool. The widget makes 'what does constrained decoding guarantee' concrete.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 122 (secondary)
-  </div>
+<WidgetFrame title="Tool schema validator" caption="Three preset tool schemas (get_weather, search_database, create_event); multiple example tool calls per schema covering valid and invalid cases. Watch what structural validation catches: missing required fields, wrong types, out-of-range values, invalid enum choices, unknown tool names. The widget makes 'what constrained decoding guarantees' tangible — and what tool-level validation still has to handle.">
+  <ToolSchemaValidator client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
@@ -327,6 +325,365 @@ Adoption in early $2025$ is broad enough that engineers building tool-using syst
 </Callout>
 
 The final section closes with computer use — the frontier generalization of tool use — and Phase 13's trajectory from here.
+
+## Exercises
+
+Four exercises that lock in the production tool-use stack. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+The exercises trace the chapter's arc: define a schema (Ex 1) → run the agent loop (Ex 2) → route across many tools (Ex 3) → handle side effects safely (Ex 4).
+
+### Exercise 1 (easy) — Define a tool schema
+
+Convert a Python function signature into a JSON-Schema-style tool schema. Cover name, description, required vs optional parameters, and at least one enum.
+
+<details>
+<summary>Hint</summary>
+
+A tool schema needs:
+- `name`: a stable identifier (snake_case typical)
+- `description`: tells the model when to use this tool
+- `input_schema.properties`: the parameter definitions
+- `input_schema.required`: list of required parameter names
+
+For each parameter, include:
+- `type`: "string" / "integer" / "number" / "boolean"
+- `description`: tells the model what value to pass
+- `enum`: if the value must be one of a closed set
+- `minimum` / `maximum`: for numeric ranges
+- `default`: for optional parameters
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`# Convert this Python function into a tool schema.
+# (In production: this is the boundary you write once per tool.)
+
+def schedule_meeting(title: str, duration_minutes: int = 30, urgency: str = "normal"):
+    """
+    Schedule a meeting on the user's calendar.
+    
+    Parameters:
+        title (str): The meeting's title or topic.
+        duration_minutes (int): Length in minutes. Range 5-480.
+        urgency (str): One of 'low', 'normal', 'high'.
+    """
+    pass
+
+# TODO: Define the tool schema as a dict.
+schedule_meeting_schema = {
+    "name": "schedule_meeting",
+    "description": "TODO: write a description that helps the model decide when to use this tool.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            # TODO: add properties for title, duration_minutes, urgency
+            # Include type, description, and any constraints (enum, minimum, maximum, default).
+        },
+        "required": [
+            # TODO: list the required field names
+        ],
+    },
+}
+
+# Verify
+import json
+# print(json.dumps(schedule_meeting_schema, indent=2))
+# 
+# Expected structure (yours should match):
+# {
+#   "name": "schedule_meeting",
+#   "description": "...",
+#   "input_schema": {
+#     "type": "object",
+#     "properties": {
+#       "title": {"type": "string", "description": "..."},
+#       "duration_minutes": {"type": "integer", "description": "...", "minimum": 5, "maximum": 480, "default": 30},
+#       "urgency": {"type": "string", "description": "...", "enum": ["low", "normal", "high"], "default": "normal"},
+#     },
+#     "required": ["title"],
+#   },
+# }
+`}
+  packages={[]}
+/>
+
+### Exercise 2 (medium) — Implement the agent loop
+
+Build the agent loop pattern: a function that takes a mock model, a tool registry, and a user message; iterates think → act → observe → repeat until the model returns a final answer or hits `max_iterations`.
+
+<details>
+<summary>Hint</summary>
+
+The loop:
+1. Send `messages` to the model (mocked here)
+2. Check `stop_reason`:
+   - If `"end_turn"`: return the text — done
+   - If `"tool_use"`: extract the tool call; execute it; append the result; loop
+3. Track iterations; break at `max_iterations` to prevent infinite loops
+
+For the mock model: simulate a multi-step response by counting prior tool uses in `messages`.
+
+Production loops also handle: parallel tool calls, partial errors (some tools succeed, others fail), and observation truncation.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def mock_model(messages, tools):
+    """
+    Mock LLM. In production this is a real API call.
+    Behavior: emit web_search on first turn, calculator on second, final on third.
+    """
+    n_tool_uses = sum(
+        1 for m in messages
+        if m["role"] == "assistant" and any(
+            isinstance(c, dict) and c.get("type") == "tool_use" for c in m.get("content", [])
+        )
+    )
+    
+    if n_tool_uses == 0:
+        return {
+            "stop_reason": "tool_use",
+            "content": [{"type": "tool_use", "id": "1", "name": "web_search", "input": {"query": "current weather Tokyo"}}],
+        }
+    if n_tool_uses == 1:
+        return {
+            "stop_reason": "tool_use",
+            "content": [{"type": "tool_use", "id": "2", "name": "calculator", "input": {"expression": "(65-32)*5/9"}}],
+        }
+    return {
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": "Tokyo is 65°F (about 18.3°C)."}],
+    }
+
+# Tool registry — name → function
+def web_search(query): return f"65°F, cloudy. Tokyo current weather."
+def calculator(expression): return f"{eval(expression):.2f}"
+
+TOOLS = {
+    "web_search": web_search,
+    "calculator": calculator,
+}
+
+def agent_loop(model, tools, user_message, max_iterations=10):
+    """
+    Run the agent loop until the model produces a text response or we hit max_iterations.
+    """
+    messages = [{"role": "user", "content": user_message}]
+    
+    for iteration in range(max_iterations):
+        response = model(messages, list(tools.keys()))
+        
+        # TODO:
+        # 1. Append the assistant's response (response["content"]) to messages.
+        # 2. If response["stop_reason"] == "end_turn", extract the text and return it.
+        # 3. Otherwise (tool_use): for each tool_use block in response["content"]:
+        #    a. Look up the function in \`tools\`
+        #    b. Call it with **block["input"]
+        #    c. Append a tool_result message
+        # 4. Continue to next iteration.
+        pass
+    
+    return None   # hit max_iterations
+
+# Test
+# answer = agent_loop(mock_model, TOOLS, "What's the weather in Tokyo in Celsius?")
+# print(f"Final answer: {answer}")
+# # Expected: "Tokyo is 65°F (about 18.3°C)."
+`}
+  packages={[]}
+/>
+
+### Exercise 3 (medium) — Multi-tool routing via embeddings
+
+Implement embedding-based tool retrieval for a large tool catalog. Given a user query and a catalog of 20 tools (with mock embeddings), return the top-5 most relevant tools to present to the model.
+
+<details>
+<summary>Hint</summary>
+
+The pattern:
+1. Pre-embed each tool's `description` (offline; cached)
+2. At query time, embed the user's request
+3. Compute cosine similarity between query and each tool's embedding
+4. Return the top-K most similar tools
+
+For the exercise: use mock embeddings (random 8-dim vectors, but seeded to be reproducible). In production: use a small embedding model like `text-embedding-3-small` or `all-MiniLM-L6-v2`.
+
+Cosine similarity: $\\cos(q, t) = \\frac{q \\cdot t}{\\|q\\| \\|t\\|}$
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+# Mock embeddings (in production: use a real embedding model)
+np.random.seed(42)
+TOOLS = [
+    {"name": "web_search", "description": "Search the web for current information.", "embedding": np.random.randn(8)},
+    {"name": "calculator", "description": "Evaluate mathematical expressions.", "embedding": np.random.randn(8)},
+    {"name": "send_email", "description": "Compose and send an email.", "embedding": np.random.randn(8)},
+    {"name": "create_event", "description": "Create a calendar event.", "embedding": np.random.randn(8)},
+    {"name": "search_database", "description": "Query the company knowledge base.", "embedding": np.random.randn(8)},
+    {"name": "get_weather", "description": "Get current weather for a city.", "embedding": np.random.randn(8)},
+    {"name": "translate", "description": "Translate text between languages.", "embedding": np.random.randn(8)},
+    {"name": "summarize", "description": "Summarize long text into bullets.", "embedding": np.random.randn(8)},
+    {"name": "execute_code", "description": "Run code in a sandboxed environment.", "embedding": np.random.randn(8)},
+    {"name": "fetch_url", "description": "Fetch the contents of a URL.", "embedding": np.random.randn(8)},
+    {"name": "list_files", "description": "List files in a directory.", "embedding": np.random.randn(8)},
+    {"name": "read_file", "description": "Read the contents of a file.", "embedding": np.random.randn(8)},
+    {"name": "write_file", "description": "Write contents to a file.", "embedding": np.random.randn(8)},
+    {"name": "git_status", "description": "Show git working-tree status.", "embedding": np.random.randn(8)},
+    {"name": "run_tests", "description": "Run the project's test suite.", "embedding": np.random.randn(8)},
+    {"name": "deploy", "description": "Deploy the application to production.", "embedding": np.random.randn(8)},
+    {"name": "slack_message", "description": "Send a Slack message to a channel.", "embedding": np.random.randn(8)},
+    {"name": "create_ticket", "description": "Create a support ticket.", "embedding": np.random.randn(8)},
+    {"name": "search_logs", "description": "Search application logs.", "embedding": np.random.randn(8)},
+    {"name": "set_timer", "description": "Set a timer / reminder.", "embedding": np.random.randn(8)},
+]
+
+def embed_query(query):
+    """Mock query embedding. Production: real embedding model."""
+    # Mock: same dim, seeded by hash of query string
+    seed = sum(ord(c) for c in query)
+    rng = np.random.RandomState(seed)
+    return rng.randn(8)
+
+def cosine_similarity(a, b):
+    """Cosine similarity between two vectors."""
+    # TODO: implement
+    pass
+
+def retrieve_tools(query, tools, top_k=5):
+    """Return the top-K most-relevant tools by cosine similarity."""
+    # TODO:
+    # 1. Embed the query
+    # 2. Compute cosine similarity to each tool's embedding
+    # 3. Sort descending; return top_k
+    pass
+
+# Test on a few different queries
+# queries = [
+#     "what's the weather in Paris",
+#     "send a message to the team",
+#     "find the bug in the test suite",
+#     "schedule a meeting next week",
+# ]
+# 
+# for q in queries:
+#     top = retrieve_tools(q, TOOLS, top_k=5)
+#     print(f"\\nQuery: '{q}'")
+#     for tool, score in top:
+#         print(f"  {tool['name']:>18}  (score: {score:>5.2f})  — {tool['description'][:50]}")
+# 
+# # Observations:
+# # - With *random* embeddings, retrieval is noisy — the demo shows the *pattern*, not the quality
+# # - With *real* embeddings, semantically-similar tools rank higher (weather query → weather tool)
+# # - Production catalogs use trained embedding models; refresh embeddings when descriptions change
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Idempotent tool dispatch
+
+Implement a tool dispatcher that handles side-effect-causing tools safely. Use idempotency keys to prevent duplicate executions on retry, and an audit log to track every call.
+
+<details>
+<summary>Hint</summary>
+
+Idempotent dispatch pattern:
+1. Each tool call includes an **idempotency key** (typically a UUID)
+2. Maintain a **cache** keyed by `(tool_name, idempotency_key)`
+3. Before executing: check the cache; if a prior call with the same key exists, return the cached result without re-executing
+4. After executing: store the result in the cache
+5. **Audit log**: append every call (whether executed or cached) for review
+
+This pattern is essential for tools with side effects (sending emails, creating tickets, charging cards). Without it, an agent loop that retries a failed step could send duplicate emails.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import uuid
+from datetime import datetime
+
+class IdempotentDispatcher:
+    """
+    Tool dispatcher with idempotency-key-based deduplication and audit logging.
+    """
+    
+    def __init__(self):
+        self.tools = {}                       # name → function
+        self.cache = {}                       # (tool_name, idem_key) → result
+        self.audit = []                       # list of audit entries
+    
+    def register(self, name, fn):
+        self.tools[name] = fn
+    
+    def dispatch(self, tool_name, args, idem_key=None):
+        """
+        Execute a tool call. If an idempotency key is provided and we've seen
+        it before, return the cached result without re-executing.
+        """
+        if idem_key is None:
+            idem_key = str(uuid.uuid4())
+        
+        # TODO:
+        # 1. Construct cache_key = (tool_name, idem_key)
+        # 2. If cache_key in self.cache: log a "cached" entry to self.audit; return self.cache[cache_key]
+        # 3. Otherwise:
+        #    - Look up the function in self.tools
+        #    - If not found: log + return error
+        #    - Execute with **args
+        #    - Store result in self.cache[cache_key]
+        #    - Append "executed" entry to self.audit
+        #    - Return result
+        pass
+    
+    def get_audit_log(self):
+        return self.audit
+
+# Demo: send_email tool with side effects
+sent_emails = []
+
+def send_email(to, subject, body):
+    """Side-effect: append to sent_emails."""
+    email = {"to": to, "subject": subject, "body": body, "ts": datetime.now()}
+    sent_emails.append(email)
+    return {"status": "sent", "id": len(sent_emails)}
+
+dispatcher = IdempotentDispatcher()
+dispatcher.register("send_email", send_email)
+
+# Send an email (first call: executes; appends to sent_emails)
+# r1 = dispatcher.dispatch("send_email", {"to": "alice@x.com", "subject": "Hi", "body": "Hello!"}, idem_key="email-001")
+# print(f"First call:  {r1}")
+# print(f"Sent emails: {len(sent_emails)}")
+# 
+# # Retry the same call with the same idempotency key (should NOT send again)
+# r2 = dispatcher.dispatch("send_email", {"to": "alice@x.com", "subject": "Hi", "body": "Hello!"}, idem_key="email-001")
+# print(f"Retry:       {r2}")
+# print(f"Sent emails: {len(sent_emails)}    (should still be 1)")
+# 
+# # New call with different idempotency key (DOES send)
+# r3 = dispatcher.dispatch("send_email", {"to": "bob@x.com", "subject": "Hi Bob", "body": "Hello!"}, idem_key="email-002")
+# print(f"New call:    {r3}")
+# print(f"Sent emails: {len(sent_emails)}    (should be 2)")
+# 
+# # Audit log
+# print(f"\\nAudit log ({len(dispatcher.get_audit_log())} entries):")
+# for entry in dispatcher.get_audit_log():
+#     print(f"  {entry}")
+# 
+# # Observation:
+# # - Same idempotency key → cached; no duplicate side effect
+# # - New idempotency key → executed
+# # - Audit log records every dispatch (executed or cached) for review
+# # - This is the production pattern for side-effect-causing tools.
+`}
+  packages={[]}
+/>
 
 ## The full picture
 
