@@ -52,5 +52,4 @@ export { default as LinearProbingVisualizer } from './ch25/LinearProbingVisualiz
 export { default as BenchmarkHeatmap } from './ch26/BenchmarkHeatmap';
 export { default as LLMJudgeBiasDemo } from './ch26/LLMJudgeBiasDemo';
 export { default as AgenticLoopVisualizer } from './ch27-agent-foundations/AgenticLoopVisualizer';
-// Session 153 will add:
-// export { default as AgentPatternCatalog } from './ch27-agent-foundations/AgentPatternCatalog';
+export { default as AgentPatternCatalog }   from './ch27-agent-foundations/AgentPatternCatalog';

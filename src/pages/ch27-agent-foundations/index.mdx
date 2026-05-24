@@ -6,7 +6,7 @@ description: Agent foundations — the chapter that turns a chat model into an a
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { AgenticLoopVisualizer } from '@components/widgets';
+import { AgenticLoopVisualizer, AgentPatternCatalog } from '@components/widgets';
 
 Phase 14 closed with three disciplines complete: safety (what we want), interpretability (what's there), evaluation (how we measure). **Phase 15 opens here** — and Phase 15 is about composition. Capable, disciplined models assembled into systems that observe, think, act, and iterate. **This chapter is the foundational one**: what an agent is, what the loop looks like, what worked and what didn't in the 2023 boom, and where the field stands in 2025.
 
@@ -325,10 +325,8 @@ The next section covers the patterns that real production agents follow — and 
 
 Five patterns recur across modern agent systems, and the choice of pattern depends on the task. **Single-agent linear** — one agent, one task, one execution path; right for simple tasks where the path is obvious. **Single-agent iterative (ReAct)** — one agent, looping; right for multi-step tasks with unknown depth. **Hierarchical (planner + executor)** — one agent plans, another executes; right for complex multi-step workflows where planning matters. **Reflexion** (Shinn $2023$) — self-critique loops that iterate on failures; right for tasks where iteration improves performance. **Multi-agent** (preview of Ch 29) — multiple agents with specialized roles; right for tasks that genuinely decompose into expertise.
 
-<WidgetFrame title="Agent pattern catalog" caption="Five common agent patterns visualized side-by-side: single-agent linear, ReAct iterative, hierarchical planner-executor, Reflexion self-critique, and a multi-agent preview. Each pattern shows the data flow and key tradeoffs. Demonstrates that 'agent' isn't one architecture but a family of them — and the choice matters.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 153 (secondary)
-  </div>
+<WidgetFrame title="Agent pattern catalog" caption="Five agent patterns visualized side-by-side: single-agent linear (one-shot), single-agent iterative (ReAct), hierarchical (planner-executor), Reflexion (self-critique), and multi-agent (Ch 29 preview). Each shows a small diagram, use cases, pros/cons, and a maturity badge. Demonstrates that 'agent' isn't one architecture but a family of them — and the choice matters. Bridges Ch 27 (conceptual) toward Ch 28 (engineering).">
+  <AgentPatternCatalog client:visible />
 </WidgetFrame>
 
 ### Anti-patterns
@@ -425,6 +423,423 @@ Production agents work well in **constrained, well-defined domains** — coding 
 </Callout>
 
 The next section closes the chapter and lays out Phase 15.
+
+## Exercises
+
+Four exercises that lock in agent foundations. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+The exercises trace the chapter's arc: build a minimal ReAct agent (Ex 1) → add Reflexion-style memory (Ex 2) → add error handling with retries (Ex 3) → design your own agent for a given task (Ex 4). After these, the reader is ready for Ch 28's engineering deep-dive.
+
+### Exercise 1 (easy) — Minimal ReAct agent
+
+Implement a minimal ReAct agent that loops over a task, calling tools and parsing thought/action output until it produces a final answer.
+
+<details>
+<summary>Hint</summary>
+
+The ReAct loop structure:
+1. Maintain a `history` list of strings
+2. Each iteration: pass history to the LLM; parse Thought + Action
+3. If Action is `final_answer(...)`, return its content
+4. Otherwise: execute the action via the tools dict; append observation to history
+5. Cap iterations to prevent runaway loops
+
+Real implementations use JSON / function-calling instead of regex parsing — but the loop structure is identical.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import re
+
+# Mock tools — real agents use actual APIs
+def tool_weather(city):
+    return f"18°C, partly cloudy in {city}"
+
+def tool_date():
+    return "2025-05-22"
+
+TOOLS = {'weather': tool_weather, 'date': tool_date}
+
+
+def mock_llm(prompt):
+    """
+    Mock LLM that produces ReAct-style output based on the history.
+    Real implementation: call Claude/GPT-4 with a system prompt
+    requesting Thought/Action format.
+    """
+    if 'weather' in prompt.lower() and 'Tokyo' not in prompt:
+        return 'Thought: I should check the weather.\\nAction: weather("Tokyo")'
+    if 'Tokyo' in prompt and '2025' not in prompt:
+        return 'Thought: Now I need the date.\\nAction: date()'
+    if '2025-05-22' in prompt:
+        return 'Thought: I have everything.\\nAction: final_answer("Today (May 22, 2025) in Tokyo: 18°C, partly cloudy.")'
+    return 'Action: final_answer("Unable to complete.")'
+
+
+def parse_react(text):
+    """Extract thought and action from LLM output."""
+    thought_match = re.search(r'Thought:\\s*(.+?)(?=\\nAction:|$)', text, re.DOTALL)
+    action_match = re.search(r'Action:\\s*(.+?)(?=\\n|$)', text, re.DOTALL)
+    return (
+        thought_match.group(1).strip() if thought_match else '',
+        action_match.group(1).strip() if action_match else '',
+    )
+
+
+def execute_action(action_str, tools):
+    """Parse 'tool_name(args)' and execute."""
+    match = re.match(r'(\\w+)\\((.*)\\)', action_str)
+    if not match:
+        return f"Error: malformed action"
+    tool_name, args = match.group(1), match.group(2).strip().strip('"').strip("'")
+    if tool_name == 'final_answer':
+        return None
+    if tool_name not in tools:
+        return f"Error: unknown tool '{tool_name}'"
+    return tools[tool_name](args) if args else tools[tool_name]()
+
+
+def react_agent(task, tools=TOOLS, max_iterations=8):
+    """
+    Run a ReAct agent on the task.
+    Returns the final answer string (or "Max iterations reached.").
+    """
+    history = [f"Task: {task}"]
+
+    # TODO:
+    # For each iteration up to max_iterations:
+    #   1. prompt = '\\n'.join(history)
+    #   2. response = mock_llm(prompt)
+    #   3. thought, action = parse_react(response)
+    #   4. Append 'Thought: {thought}' and 'Action: {action}' to history
+    #   5. Print thought and action
+    #   6. If action starts with 'final_answer':
+    #        - Extract the answer using regex on action
+    #        - Return the extracted answer
+    #   7. Else:
+    #        - observation = execute_action(action, tools)
+    #        - Append 'Observation: {observation}' to history
+    #        - Print observation
+    # If loop completes without final_answer, return "Max iterations reached."
+    pass
+
+
+# Test
+# result = react_agent("What's the weather in Tokyo, and what date is it today?")
+# print(f"\\n=== Final answer: {result}")
+#
+# # Observations:
+# # - Each iteration appends 2-3 lines to history (Thought, Action, [Observation])
+# # - max_iterations prevents runaway loops
+# # - Real agents use structured output (JSON) instead of regex
+# # - The loop pattern is identical regardless of LLM provider
+`}
+  packages={[]}
+/>
+
+### Exercise 2 (medium) — Agent with Reflexion-style memory
+
+Add a Reflexion-style memory that captures verbal critiques after failures and feeds them into future attempts.
+
+<details>
+<summary>Hint</summary>
+
+The Reflexion pattern:
+1. Agent attempts a task
+2. If it fails (e.g., test doesn't pass), agent writes a verbal reflection ("what I did wrong, what to try next")
+3. On retry, the reflection is added to the system prompt
+4. Each subsequent attempt sees all prior reflections
+
+For this exercise, mock the "verifier" with a hardcoded pass/fail. Real Reflexion uses programmatic verification (test results, compiler errors, etc.).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`# Reflexion-style agent: retry with verbal reflections after failures.
+
+class ReflectiveAgent:
+    def __init__(self):
+        self.reflections = []  # List of verbal critiques from prior attempts
+
+    def attempt(self, task, attempt_number):
+        """
+        Attempt to solve the task.
+        Returns (answer, did_succeed).
+        Real implementation: call LLM with task + accumulated reflections.
+        """
+        # Build a system prompt with prior reflections
+        reflection_context = ""
+        if self.reflections:
+            reflection_context = "Lessons from prior attempts:\\n" + "\\n".join(
+                f"  Attempt {i+1}: {r}" for i, r in enumerate(self.reflections)
+            )
+
+        print(f"\\n=== Attempt {attempt_number}")
+        if reflection_context:
+            print(reflection_context)
+
+        # Mock: succeed only after 2 reflections (3rd attempt)
+        if len(self.reflections) >= 2:
+            return f"Solution to '{task}'", True
+        else:
+            return f"Failed attempt at '{task}'", False
+
+    def reflect_on_failure(self, task, failed_attempt):
+        """
+        Write a verbal reflection after a failed attempt.
+        Real implementation: ask the LLM to write a critique of its own attempt.
+        """
+        # TODO:
+        # Generate a reflection based on the attempt number.
+        # For demo, use canned reflections:
+        #   attempt 1 -> "I tried X but it didn't work. Next time I should try Y."
+        #   attempt 2 -> "Y was closer but still wrong. The actual issue is Z."
+        # Append the reflection to self.reflections
+        pass
+
+
+def reflexion_run(task, max_attempts=4):
+    """Run an agent with Reflexion until success or max_attempts."""
+    agent = ReflectiveAgent()
+
+    for attempt in range(1, max_attempts + 1):
+        result, succeeded = agent.attempt(task, attempt)
+        if succeeded:
+            print(f"\\n✓ Succeeded on attempt {attempt}: {result}")
+            return result, attempt
+
+        print(f"  Result: {result}")
+        agent.reflect_on_failure(task, result)
+        print(f"  Reflection added: {agent.reflections[-1]}")
+
+    print(f"\\n✗ Failed after {max_attempts} attempts.")
+    return None, max_attempts
+
+
+# Test
+# task = "Compute the area of a circle with radius 5 to 2 decimal places."
+# result, attempts = reflexion_run(task)
+#
+# # Observations:
+# # - Reflections accumulate across attempts
+# # - Each attempt sees all prior reflections in context
+# # - Real Reflexion: LLM writes its own reflections about its own attempts
+# # - Pattern works best with verifiable signals (tests, compilation, evaluation)
+# # - SWE-bench-style agents use Reflexion for iterative bug fixing
+`}
+  packages={[]}
+/>
+
+### Exercise 3 (medium) — Error handling with retry
+
+Add robust error handling to an agent: catch tool failures, retry with exponential backoff, and gracefully fall back when retries are exhausted.
+
+<details>
+<summary>Hint</summary>
+
+The error handling pattern:
+1. Wrap tool calls in try/except
+2. On exception, retry with exponential backoff (1s, 2s, 4s...)
+3. After max retries, return a structured error
+4. The agent should be able to continue (try a different tool, or report failure)
+
+Real production agents also use: circuit breakers (stop hitting a failing tool entirely after N failures), fallback tools, and structured error categorization (retryable vs not).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import random
+import time
+
+
+def flaky_search_tool(query):
+    """A search tool that fails 40% of the time."""
+    if random.random() < 0.4:
+        raise ConnectionError("Search service unavailable")
+    return f"Mock search results for: {query}"
+
+
+def flaky_calculator(expression):
+    """A calculator that fails 20% of the time."""
+    if random.random() < 0.2:
+        raise TimeoutError("Calculator timed out")
+    return eval(expression)
+
+
+TOOLS = {
+    'search': flaky_search_tool,
+    'calc':   flaky_calculator,
+}
+
+
+def execute_with_retry(tool, args, max_retries=3, base_wait=0.001):
+    """
+    Execute a tool with exponential-backoff retry.
+    Returns (result, error_message). One of these is None.
+    """
+    # TODO:
+    # For attempt in range(max_retries):
+    #   try:
+    #     return (tool(args), None)
+    #   except Exception as e:
+    #     wait = base_wait * (2 ** attempt)
+    #     time.sleep(wait)
+    # Return (None, f"Failed after {max_retries} attempts")
+    pass
+
+
+def robust_agent(plan):
+    """
+    Execute a plan (list of (tool_name, args) steps) with error handling.
+    Returns list of (step_result, error) tuples.
+    """
+    results = []
+    for i, (tool_name, args) in enumerate(plan):
+        print(f"\\nStep {i+1}: {tool_name}({args!r})")
+        if tool_name not in TOOLS:
+            print(f"  ✗ Unknown tool '{tool_name}'")
+            results.append((None, f"Unknown tool: {tool_name}"))
+            continue
+
+        result, error = execute_with_retry(TOOLS[tool_name], args)
+        if error:
+            print(f"  ⚠️  {error}")
+            results.append((None, error))
+        else:
+            print(f"  ✓ {result}")
+            results.append((result, None))
+
+    return results
+
+
+# Test
+random.seed(42)
+
+plan = [
+    ('search', 'Bhutan population'),
+    ('search', 'Bhutan area km'),
+    ('calc',   '787000 / 38394'),
+    ('search', 'population density meaning'),  # may fail flakily
+]
+
+results = robust_agent(plan)
+successes = sum(1 for r, e in results if r is not None)
+print(f"\\n=== Summary: {successes}/{len(plan)} steps succeeded ===")
+
+# Observations:
+# - Exponential backoff: waits 1s, 2s, 4s between retries (scaled down here for demo)
+# - Some retries will succeed; others exhaust budget
+# - Robust agents continue after errors instead of crashing
+# - Production: circuit breakers, fallback tools, error categorization
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Design-your-own-agent
+
+For each of three different tasks, pick the most appropriate agent pattern and justify your choice. Implement a sketch of one of them.
+
+<details>
+<summary>Hint</summary>
+
+The mapping from task → pattern:
+- **One-shot lookups** → Linear
+- **Multi-step tasks of unknown depth** → ReAct iterative
+- **Complex workflows that benefit from planning** → Hierarchical
+- **Tasks with verifiable feedback** → Reflexion
+- **Tasks that genuinely decompose into specialized roles** → Multi-agent
+
+Each task below has a "right" pattern (not unique — multiple can work). Read the task carefully; what does it require?
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`# Three tasks. For each, pick the agent pattern that fits best.
+
+TASKS = [
+    {
+        'name': 'task_1',
+        'description': "Look up today's date and tell me what day of the week it is.",
+        # Pattern: Linear (single tool call + format)
+        'recommended_pattern': 'linear',
+    },
+    {
+        'name': 'task_2',
+        'description': "Find the population of Bhutan, look up its area, then compute the population density per square kilometer.",
+        # Pattern: ReAct iterative (chained tool calls)
+        'recommended_pattern': 'react',
+    },
+    {
+        'name': 'task_3',
+        'description': "Write a Python function that passes these 5 test cases. If it fails any, fix it and try again.",
+        # Pattern: Reflexion (verifiable feedback + iteration)
+        'recommended_pattern': 'reflexion',
+    },
+]
+
+
+def choose_pattern(task_description):
+    """
+    Return a string: one of 'linear', 'react', 'hierarchical', 'reflexion', 'multi-agent'.
+    Reasoning heuristic based on task characteristics.
+    """
+    # TODO:
+    # Apply the following heuristics (in order):
+    # 1. If the task mentions "fix", "retry", "test", "iterate" -> 'reflexion'
+    # 2. If the task is "look up X and report" (one fact, one tool) -> 'linear'
+    # 3. If the task is a multi-step chain ("find X, then Y, then compute Z") -> 'react'
+    # 4. If the task says "plan", "build", "design a full system" -> 'hierarchical'
+    # 5. If the task explicitly needs roles ("a researcher, a critic, a writer") -> 'multi-agent'
+    # 6. Default fallback -> 'react'
+    pass
+
+
+def sketch_react_for_task_2():
+    """
+    Implement a sketch of a ReAct agent for task 2 (population density).
+    Returns the final answer string.
+    """
+    # Mock data
+    population = 787000
+    area = 38394
+
+    # TODO:
+    # Simulate the 4-turn ReAct trace:
+    #   Turn 1: think -> search_population_bhutan -> 787000
+    #   Turn 2: think -> search_area_bhutan -> 38394
+    #   Turn 3: think -> calculator(787000 / 38394) -> 20.50
+    #   Turn 4: think -> final_answer
+    # Print the trace; return the final answer string.
+    pass
+
+
+# Run
+print("=== Pattern recommendations ===\\n")
+for task in TASKS:
+    chosen = choose_pattern(task['description'])
+    correct = chosen == task['recommended_pattern']
+    marker = '✓' if correct else '✗'
+    print(f"{task['name']}: {task['description'][:60]}...")
+    print(f"  Chosen: {chosen}    {marker} (expected: {task['recommended_pattern']})\\n")
+
+# Run sketch for task 2
+# print("=== Sketch: ReAct agent for task 2 ===\\n")
+# answer = sketch_react_for_task_2()
+# print(f"\\nFinal answer: {answer}")
+
+# Observations:
+# - Pattern choice depends on task structure
+# - Reflexion needs verifiable feedback (tests, compilation, evaluation)
+# - Multi-agent is rarely the best choice unless roles are genuinely distinct
+# - Most production tasks land in Linear or ReAct
+# - The choice is engineering judgment, not algorithmic
+`}
+  packages={[]}
+/>
 
 ## Phase 15 opens — chapter map
 
