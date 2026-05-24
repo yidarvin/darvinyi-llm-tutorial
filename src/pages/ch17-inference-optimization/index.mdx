@@ -6,6 +6,7 @@ description: Inference optimization — how to serve trained LLMs efficiently at
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { KVCacheAnimation } from '@components/widgets';
 
 Phase 11 left you with a trained model — pre-trained, supervised-fine-tuned, preference-aligned, optionally PEFT-adapted, optionally distilled. The mathematical object exists. Phase 12 asks the engineering question that follows: **how do you actually serve it?** A transformer forward pass is conceptually simple; serving one at production scale is an entire discipline. Naive implementations are shockingly inefficient. They rerun every layer for every generated token, pad short sequences to match long ones in the batch, and materialize huge intermediate attention matrices that the GPU spends most of its time reading and writing rather than computing. **A production stack does none of this.**
 
@@ -81,10 +82,8 @@ where $L$ is the number of layers, $H$ is the number of attention heads, $d_{\te
 
 For Llama-7B at $4$K context, plugging in $L = 32$, $H = 32$, $d_{\text{head}} = 128$, $N = 4096$ gives roughly $270$ MB per sequence — manageable. For Llama-70B at $128$K context, with $L = 80$, $H = 64$ (post-GQA), $d_{\text{head}} = 128$, $N = 131072$, the number jumps to roughly $22$ GB *per sequence*. **The KV cache dominates inference memory at long context.** Model weights are fixed regardless of how many users you serve; the cache scales linearly with both context length and concurrent requests. This is the fundamental tension of long-context serving: the algorithmic speedup is enormous, but the price is paid in memory, and at $128$K and beyond the cache becomes the binding constraint on how many concurrent sequences a GPU can hold.
 
-<WidgetFrame title="KV cache lifecycle" caption="Watch the KV cache fill during prefill (all prompt tokens processed at once), then grow one slot at a time during decode. The animation shows the transition from compute-bound prefill to memory-bound decode, with the cache size growing linearly. Hover any cache slot to see what's stored. The widget makes the central inference optimization visceral.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 78 (marquee)
-  </div>
+<WidgetFrame title="KV cache lifecycle" caption="Animated visualization of the cache filling during prefill (all prompt tokens at once) and decode (one new token per step). Concrete example: prompt 'The capital of France is' → generated 'Paris.' Prefill fills 5 slots simultaneously (amber); decode fills 2 more slots one at a time (cyan). Play/pause/reset controls; speed slider. The widget makes the central inference optimization visceral.">
+  <KVCacheAnimation client:visible />
 </WidgetFrame>
 
 The runnable cell below simulates the speedup directly. It defines a toy "transformer" — four layers of $W \cdot x$ with a quadratic-attention term — and times $50$ decode steps both ways: recomputing the entire prefix each step versus carrying a KV cache forward. Even on a CPU, even with small dimensions, the recomputation tax is visible. Real transformers see a much larger gap because real attention is genuinely $O(N^2)$ per layer.

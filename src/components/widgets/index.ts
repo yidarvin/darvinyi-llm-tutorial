@@ -31,3 +31,4 @@ export { default as LoRAArchitecture } from './ch15/LoRAArchitecture';
 export { default as ParameterBudgetCalculator } from './ch15/ParameterBudgetCalculator';
 export { default as TemperatureScaling } from './ch16/TemperatureScaling';
 export { default as DistillationPipeline } from './ch16/DistillationPipeline';
+export { default as KVCacheAnimation } from './ch17/KVCacheAnimation';
