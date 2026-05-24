@@ -1,0 +1,152 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controlsPanel, .breakdownPanel, .gpuPanel, .summaryPanel {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+
+.panelTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.6rem;
+  font-weight: 500;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.controlRow:last-child { margin-bottom: 0; }
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  min-width: 90px;
+}
+.disabled { opacity: 0.4; }
+.disabled .controlLabel { color: var(--text-tertiary); }
+
+.optionButtons { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.optionButton {
+  padding: 0.3rem 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.optionButton:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text-primary); }
+.optionButton:disabled { cursor: not-allowed; }
+.optionActive {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  background: color-mix(in srgb, var(--cyan-500) 6%, transparent);
+  font-weight: 500;
+}
+
+/* Memory bars */
+.barRow {
+  display: grid;
+  grid-template-columns: 180px 1fr 80px;
+  gap: 0.7rem;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  padding: 0.3rem 0;
+}
+.barLabel { color: var(--text-secondary); }
+.barSubLabel { color: var(--text-tertiary); font-size: 0.7rem; }
+.barTrack {
+  height: 14px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+.barFill {
+  height: 100%;
+  transition: width 200ms;
+}
+.barValue { color: var(--text-primary); text-align: right; }
+
+.barBase      { background: linear-gradient(90deg, var(--cyan-700), var(--cyan-500)); }
+.barTrainable { background: linear-gradient(90deg, var(--emerald-700), var(--emerald-400)); }
+.barGrad      { background: linear-gradient(90deg, var(--amber-700), var(--amber-400)); }
+.barOptim     { background: linear-gradient(90deg, var(--violet-700), var(--violet-400)); }
+.barAct       { background: linear-gradient(90deg, var(--rose-700), var(--rose-400)); }
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 2px solid var(--border-default);
+  font-family: 'JetBrains Mono', monospace;
+}
+.totalLabel { font-size: 0.85rem; color: var(--text-primary); font-weight: 500; letter-spacing: 0.05em; }
+.totalValue { font-size: 1.1rem; color: var(--cyan-300); font-weight: 500; }
+
+/* GPU options */
+.gpuRow {
+  display: grid;
+  grid-template-columns: 24px 1fr 80px 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.3rem 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+.gpuMarker { font-size: 0.9rem; font-weight: 600; }
+.gpuLabel { color: var(--text-primary); }
+.gpuMemory { color: var(--text-tertiary); font-size: 0.72rem; }
+.gpuStatus { color: var(--text-secondary); }
+.gpuFits .gpuMarker { color: var(--emerald-400); }
+.gpuNoFit .gpuMarker { color: var(--rose-400); }
+.gpuNoFit .gpuLabel, .gpuNoFit .gpuStatus { color: var(--text-tertiary); }
+.recommendedTag { color: var(--emerald-400); font-weight: 500; }
+
+/* Summary */
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.25rem 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.summaryLabel { color: var(--text-secondary); }
+.summaryValue { color: var(--text-primary); font-weight: 500; }
+
+.caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .controlRow { flex-direction: column; align-items: flex-start; }
+  .controlLabel { min-width: 0; }
+  .barRow { grid-template-columns: 130px 1fr 65px; gap: 0.4rem; font-size: 0.72rem; }
+  .gpuRow { grid-template-columns: 20px 1fr 60px 1fr; gap: 0.3rem; font-size: 0.72rem; }
+}
