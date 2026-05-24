@@ -1,0 +1,283 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel, .controlsPanel, .legendPanel, .plotPanel,
+.queryReadoutPanel, .neighborsPanel, .insightPanel, .caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+.titlePanel { padding: 0.7rem 1rem; }
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 110px;
+}
+.queryButtons { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.queryButton {
+  padding: 0.35rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.queryButton:hover { border-color: var(--cyan-500); color: var(--cyan-300); }
+.queryButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.legendPanel {
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 1rem;
+}
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+.legendImageMarker,
+.legendTextMarker,
+.legendQueryMarker,
+.legendRingMarker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.95rem;
+}
+.legendImageMarker {
+  background: color-mix(in srgb, var(--amber-400) 25%, transparent);
+}
+.legendTextMarker {
+  background: color-mix(in srgb, var(--cyan-400) 25%, transparent);
+}
+.legendQueryMarker {
+  color: var(--cyan-300);
+  font-size: 1.1rem;
+}
+.legendRingMarker {
+  border: 2px solid var(--cyan-400);
+  color: var(--cyan-300);
+  font-size: 0.7rem;
+}
+
+.plotPanel { padding: 0.7rem 0.7rem; }
+.plotSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.plotFrame {
+  fill: var(--bg-primary);
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+  rx: 4;
+}
+.clusterLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  fill: var(--text-tertiary);
+  text-anchor: start;
+  opacity: 0.45;
+  font-style: italic;
+}
+.connectionLine {
+  stroke: var(--cyan-400);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  opacity: 0.55;
+}
+.itemBg {
+  transition: all 250ms;
+}
+.itemBgImage {
+  fill: color-mix(in srgb, var(--amber-400) 18%, transparent);
+  stroke: color-mix(in srgb, var(--amber-400) 35%, transparent);
+  stroke-width: 1;
+}
+.itemBgText {
+  fill: color-mix(in srgb, var(--cyan-400) 12%, transparent);
+  stroke: color-mix(in srgb, var(--cyan-400) 30%, transparent);
+  stroke-width: 1;
+}
+.itemBgNeighbor.itemBgImage {
+  fill: color-mix(in srgb, var(--amber-400) 32%, transparent);
+}
+.itemBgNeighbor.itemBgText {
+  fill: color-mix(in srgb, var(--cyan-400) 26%, transparent);
+}
+.itemHighlightRing {
+  fill: none;
+  stroke: var(--cyan-400);
+  stroke-width: 2;
+  opacity: 0.85;
+  animation: pulse 2.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.55; }
+}
+.itemLabel {
+  font-size: 18px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  transition: font-size 250ms;
+}
+.itemLabelNeighbor {
+  font-size: 22px;
+}
+
+.queryMarker {
+  fill: var(--cyan-400);
+  stroke: var(--cyan-300);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--cyan-500) 45%, transparent));
+}
+.queryLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  fill: var(--cyan-300);
+  text-anchor: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .itemHighlightRing { animation: none; }
+}
+
+.queryReadoutPanel {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.55rem 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.88rem;
+}
+.queryReadoutLabel { color: var(--text-tertiary); }
+.queryReadoutText { color: var(--cyan-300); font-weight: 500; }
+
+.neighborsTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.neighborsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.neighborItem {
+  display: grid;
+  grid-template-columns: 22px 28px 60px 1fr 75px;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.4rem 0.55rem;
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--cyan-500) 25%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+.neighborRank {
+  color: var(--cyan-300);
+  font-weight: 600;
+}
+.neighborMarker {
+  font-size: 1.15rem;
+  text-align: center;
+}
+.neighborKind {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+}
+.neighborCaption {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.neighborSim {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  text-align: right;
+}
+
+.insightPanel {
+  background: color-mix(in srgb, var(--cyan-500) 4%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+}
+.insightLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--cyan-300);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.insightText {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .controlLabel { min-width: 0; }
+  .legendPanel { gap: 0.7rem; }
+  .neighborItem {
+    grid-template-columns: 18px 22px 50px 1fr 60px;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+  }
+  .neighborCaption { font-size: 0.7rem; }
+}

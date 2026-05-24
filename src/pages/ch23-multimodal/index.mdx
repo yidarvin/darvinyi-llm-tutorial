@@ -6,6 +6,7 @@ description: Multimodal — how LLMs perceive images, audio, and video. From the
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { CLIPEmbeddingSpace } from '@components/widgets';
 
 Most of the world is not text. Images, audio, video, screenshots, charts, faces, voices — these carry vast information that text alone cannot represent. A text-only LLM can describe a chart it has been told about, but it cannot directly *see* one. **Multimodal models extend the language-model framework to non-text inputs and outputs.** The core technical question is mechanically simple and conceptually deep: how do you turn a non-text modality into something a transformer can process? The answer for vision is to chop the image into patches and treat each patch as a "visual token." The answer for audio is to compute a mel-spectrogram, split it into patches, and do the same thing. **The recipe generalizes. Once a modality is tokenized, the transformer doesn't know the difference between a text token, a visual token, or an audio token — they're all just vectors.**
 
@@ -143,10 +144,8 @@ The training scale is what made CLIP work. The original paper used **$400$M (ima
 
 **Zero-shot classification.** Compare an image's embedding to the embeddings of class-name prompts like "a photo of a cat", "a photo of a dog", and so on; the highest-similarity prompt is the predicted class. No labeled training data needed for the target task. **Text-to-image search.** Embed a query text; find nearest images in the vector store. **Image-to-text search.** Embed a query image; find nearest text passages. Each of these is one cosine-similarity computation away from the same embeddings. **Vision encoder for VLMs.** CLIP's image encoder is the most common visual encoder in modern VLMs — LLaVA uses CLIP-ViT-L; many derivatives swap in SigLIP or other contrastive variants. The shared-space property is what makes the next section's bolt-on architecture possible at all.
 
-<WidgetFrame title="CLIP embedding space" caption="A 2D projection of CLIP image and text embeddings. Reader picks a caption; sees the matching image highlighted; cosine similarities are visualized as distances. The shared image-text embedding space is the foundational technique for every modern vision-language model — and the conceptual bridge between vision and language.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 132 (marquee)
-  </div>
+<WidgetFrame title="CLIP embedding space" caption="A 2D projection of a CLIP-style shared embedding space. Twelve items — 6 image emojis and 6 text snippets — form four content clusters (cats, dogs, cars, boats). Pick a text query; watch its position; see which items light up as its top-3 nearest neighbors. Images and texts both appear in the results because they live in the same embedding space. This is what CLIP gives you: cosine similarity that bridges modalities — the foundation of every modern vision-language model.">
+  <CLIPEmbeddingSpace client:visible />
 </WidgetFrame>
 
 <RunnableCode>
