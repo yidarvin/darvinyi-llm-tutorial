@@ -1,18 +1,38 @@
 ---
 ---
-<aside class="toc" aria-label="On this page">
-  <h4 class="toc-title">On this page</h4>
-  <nav id="toc-nav" class="toc-nav"></nav>
+<aside id="chapter-toc" class="toc" aria-label="On this page" data-state="closed">
+  <div class="toc-inner">
+    <div class="toc-head">
+      <h4 class="toc-title">On this page</h4>
+      <button id="toc-close" class="toc-close" type="button" aria-label="Close table of contents">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="6" y1="6"  x2="18" y2="18" />
+          <line x1="18" y1="6" x2="6"  y2="18" />
+        </svg>
+      </button>
+    </div>
+    <nav id="toc-nav" class="toc-nav"></nav>
+  </div>
 </aside>
+<div id="toc-overlay" class="toc-overlay" hidden></div>
 
 <script is:inline>
   (() => {
-    const tocNav = document.getElementById('toc-nav');
-    const main   = document.querySelector('main.chapter-content');
-    if (!tocNav || !main) return;
+    const toc       = document.getElementById('chapter-toc');
+    const tocNav    = document.getElementById('toc-nav');
+    const overlay   = document.getElementById('toc-overlay');
+    const closeBtn  = document.getElementById('toc-close');
+    const main      = document.querySelector('main.chapter-content');
+    if (!toc || !tocNav || !main) return;
 
     const headings = main.querySelectorAll('h2, h3');
-    if (headings.length === 0) return;
+
+    if (headings.length === 0) {
+      // No anchors to render — hide the drawer trigger if it exists.
+      const trigger = document.getElementById('toc-trigger');
+      if (trigger) trigger.style.display = 'none';
+      return;
+    }
 
     headings.forEach((h) => {
       if (!h.id) return;
@@ -23,22 +43,53 @@
       tocNav.appendChild(link);
     });
 
+    // Highlight active section on scroll.
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((e) => {
         if (!e.isIntersecting) return;
         const id = e.target.id;
         if (!id) return;
         tocNav.querySelectorAll('a').forEach((a) => a.classList.remove('toc-link-active'));
-        const link = tocNav.querySelector(`a[href="#${id}"]`);
+        const link = tocNav.querySelector('a[href="#' + id + '"]');
         if (link) link.classList.add('toc-link-active');
       });
     }, { rootMargin: '-20% 0px -60% 0px' });
-
     headings.forEach((h) => { if (h.id) observer.observe(h); });
+
+    // ── Drawer behavior (only active at narrow viewports — CSS gates visibility).
+    const openDrawer = () => {
+      toc.setAttribute('data-state', 'open');
+      if (overlay) overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+      const trigger = document.getElementById('toc-trigger');
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    };
+    const closeDrawer = () => {
+      toc.setAttribute('data-state', 'closed');
+      if (overlay) overlay.hidden = true;
+      document.body.style.overflow = '';
+      const trigger = document.getElementById('toc-trigger');
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    };
+
+    document.addEventListener('open-toc', openDrawer);
+    closeBtn?.addEventListener('click', closeDrawer);
+    overlay?.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && toc.getAttribute('data-state') === 'open') closeDrawer();
+    });
+    // Close after navigating to a section.
+    tocNav.addEventListener('click', (e) => {
+      const target = /** @type {HTMLElement} */(e.target);
+      if (target && target.closest && target.closest('a')) {
+        setTimeout(closeDrawer, 50);
+      }
+    });
   })();
 </script>
 
 <style>
+  /* Desktop ≥1280 px: sticky sidebar (original behavior). */
   .toc {
     display: none;
     width: var(--toc-width);
@@ -53,6 +104,9 @@
   @media (min-width: 1280px) {
     .toc { display: block; }
   }
+  .toc-inner { display: contents; }
+  .toc-head { display: contents; }
+  .toc-close { display: none; }
 
   .toc-title {
     font-family: 'JetBrains Mono', monospace;
@@ -90,5 +144,82 @@
   .toc-nav :global(a.toc-link-active) {
     color: var(--cyan-400);
     font-weight: 500;
+  }
+
+  /* Tablet + mobile (<1280 px): TOC becomes a right-side drawer. */
+  @media (max-width: 1279px) {
+    .toc {
+      display: block;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(82vw, 320px);
+      height: 100vh;
+      max-height: none;
+      padding: 0;
+      background: var(--bg-primary);
+      border-left: 1px solid var(--border-default);
+      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+      z-index: var(--z-modal);
+      transform: translateX(100%);
+      transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      overflow-y: auto;
+    }
+    .toc[data-state="open"] {
+      transform: translateX(0);
+    }
+    .toc-inner {
+      display: block;
+      padding: 1rem 1.25rem 4rem 1.25rem;
+    }
+    .toc-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding-bottom: 0.75rem;
+      margin-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .toc-title { margin: 0; }
+    .toc-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      min-height: 44px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+    }
+    .toc-close:hover { color: var(--cyan-300); }
+    .toc-nav { font-size: 0.95rem; gap: 0.6rem; }
+    .toc-nav :global(a.toc-link) {
+      display: block;
+      padding: 0.5rem 0;
+      min-height: 36px;
+    }
+    .toc-nav :global(a.toc-link-h3) {
+      padding-left: 1rem;
+    }
+  }
+
+  .toc-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.7);
+    backdrop-filter: blur(2px);
+    z-index: calc(var(--z-modal) - 1);
+  }
+  .toc-overlay[hidden] { display: none; }
+  @media (min-width: 1280px) {
+    .toc-overlay { display: none !important; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toc { transition: none; }
   }
 </style>

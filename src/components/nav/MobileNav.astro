@@ -98,7 +98,7 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
   .mobile-search {
     position: fixed;
     top: 1rem;
-    right: 4rem;
+    right: 4.25rem;
     z-index: var(--z-nav);
   }
   @media (min-width: 1024px) {
@@ -110,8 +110,8 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
     top: 1rem;
     right: 1rem;
     z-index: var(--z-nav);
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
@@ -173,6 +173,11 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
     cursor: pointer;
     padding: 0.25rem;
     border-radius: var(--radius-sm);
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .mobile-nav-close:hover { color: var(--cyan-300); }
 
@@ -196,9 +201,10 @@ const currentSlug = currentPath.replace(/^\//, '').replace(/\/$/, '');
   }
   .mobile-nav-chapter {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.7rem 0.75rem;
+    min-height: 44px;
     font-size: 0.9rem;
     color: var(--text-secondary);
     text-decoration: none;

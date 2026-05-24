@@ -3,6 +3,7 @@
 @import './variables.css';
 @import './base.css';
 @import './content.css';   /* NEW: added in session 03 */
+@import './responsive.css'; /* NEW: site-wide mobile pass — session 134 */
 
 @tailwind base;
 @tailwind components;

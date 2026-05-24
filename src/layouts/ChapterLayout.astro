@@ -31,6 +31,21 @@ const pageTitle = chapter ? `${chapter.num}. ${chapter.title}` : 'Chapter';
             <div class="chapter-eyebrow">Chapter {chapter.num}</div>
             <h1 class="chapter-title">{chapter.title}</h1>
             {description && <p class="chapter-description">{description}</p>}
+            <button
+              id="toc-trigger"
+              class="toc-trigger"
+              type="button"
+              aria-controls="chapter-toc"
+              aria-expanded="false"
+              onclick="document.dispatchEvent(new CustomEvent('open-toc'))"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <line x1="3" y1="6"  x2="14" y2="6" />
+                <line x1="3" y1="12" x2="14" y2="12" />
+                <line x1="3" y1="18" x2="11" y2="18" />
+              </svg>
+              <span>On this page</span>
+            </button>
           </header>
         )}
 
@@ -95,5 +110,51 @@ const pageTitle = chapter ? `${chapter.num}. ${chapter.title}` : 'Chapter';
     color: var(--text-secondary);
     margin: 0;
     max-width: var(--container-prose);
+  }
+
+  /* TOC drawer trigger — visible only below the desktop TOC breakpoint */
+  .toc-trigger {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+    padding: 0.55rem 0.9rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    min-height: 44px;
+    transition: border-color 200ms, color 200ms;
+  }
+  .toc-trigger:hover {
+    border-color: var(--cyan-500);
+    color: var(--cyan-300);
+  }
+  @media (max-width: 1279px) {
+    .toc-trigger { display: inline-flex; }
+  }
+
+  /* Narrow-viewport overrides (session 134 mobile pass).
+   * Heading element sizes (h1-h4) live in src/styles/responsive.css;
+   * the layout-class adjustments live here so they coexist with
+   * the scoped styles above. */
+  @media (max-width: 720px) {
+    .chapter-layout-main { padding: 0 1rem; }
+    .chapter-content { padding: 2.5rem 0; }
+    .chapter-header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+    }
+    .chapter-title { font-size: 32px; }
+    .chapter-description { font-size: 1rem; }
+  }
+  @media (max-width: 380px) {
+    .chapter-layout-main { padding: 0 0.85rem; }
+    .chapter-title { font-size: 28px; }
   }
 </style>

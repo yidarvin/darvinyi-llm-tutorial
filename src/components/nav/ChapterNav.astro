@@ -101,4 +101,17 @@ const { prev, next } = getAdjacentChapters(currentSlug);
   .chapter-nav-disabled .chapter-nav-title {
     color: var(--text-disabled);
   }
+
+  /* Session 134 mobile pass: stack prev/next vertically at narrow widths,
+   * and ensure the cards meet the 44 px touch-target floor. */
+  @media (max-width: 640px) {
+    .chapter-nav {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .chapter-nav-card,
+    .chapter-nav-spacer { width: 100%; }
+    .chapter-nav-card { min-height: 64px; }
+    .chapter-nav-card.chapter-nav-right { text-align: left; }
+  }
 </style>

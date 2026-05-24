@@ -1,0 +1,188 @@
+/* Site-wide mobile pass — session 134
+ *
+ * Cross-cutting responsive rules that complement (don't replace) the
+ * per-widget @media (max-width: 720px) blocks every chapter widget
+ * already ships. See docs/MOBILE_AUDIT.md for the audit that drove this.
+ *
+ * Sections:
+ *   1. Page-level overflow guard
+ *   2. Touch-target sizing
+ *   3. KaTeX equation overflow handling
+ *   4. Code block sizing + inline-code wrap
+ *   5. Table responsive container
+ *   6. Typography scale at narrow viewports
+ *   7. Chapter prev/next stacking
+ *
+ * Loaded after base.css/content.css so it overrides where needed.
+ */
+
+
+/* 1. Page-level overflow guard
+ * ------------------------------------------------------------------
+ * Nothing should cause the page itself to scroll horizontally.
+ * Individual containers (pre, .katex-display, tables) handle their own
+ * x-overflow internally.
+ *
+ * `overflow-x: clip` instead of `hidden` so we don't accidentally
+ * create a scroll container that would break ancestor `position: sticky`
+ * on the desktop sidebar/TOC.
+ */
+body {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+
+img, video, iframe, svg {
+  max-width: 100%;
+}
+
+
+/* 2. Touch-target sizing
+ * ------------------------------------------------------------------
+ * The component files (MobileNav.astro, ChapterNav.astro) hold the
+ * actual `min-height` rules so they coexist with Astro's scoped
+ * styles. This file documents the floor.
+ *
+ * Floor: 44×44 (iOS HIG). Applied at ≤720 px to:
+ *   - .mobile-nav-toggle (hamburger button)
+ *   - .mobile-nav-chapter (chapter rows in the drawer)
+ *   - .mobile-nav-close
+ *   - .chapter-nav-card (prev/next)
+ *   - .toc-close (TOC drawer close button)
+ *
+ * Inline links in prose are exempt — they're not standalone targets;
+ * forcing min-height breaks line-height.
+ */
+
+
+/* 3. KaTeX equation overflow handling
+ * ------------------------------------------------------------------
+ * Display equations get a right-edge gradient cue so the
+ * already-existing overflow-x scroll becomes discoverable.
+ * Slight font shrink at narrow widths gives more equations a chance
+ * to fit inside the viewport without scrolling.
+ */
+.katex-display {
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+}
+.katex-display::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, transparent, var(--bg-primary));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.katex-display.is-overflowing::after {
+  opacity: 1;
+}
+@media (max-width: 720px) {
+  .katex-display { padding: 0.5rem 0.75rem; }
+  .katex-display .katex { font-size: 0.95em; }
+  /* Keep equations on one line so the scroll dimension is consistent */
+  .katex-display > .katex { white-space: nowrap; }
+}
+@media (max-width: 380px) {
+  .katex-display .katex { font-size: 0.88em; }
+}
+
+
+/* 4. Code blocks + inline code
+ * ------------------------------------------------------------------
+ * Block code: already scrolls horizontally inside `pre`. At narrow
+ * widths shrink the font so each scroll move reveals more.
+ * Inline code: a long identifier in a paragraph must wrap, otherwise
+ * it pushes the paragraph past the viewport edge.
+ */
+:not(pre) > code {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  pre {
+    font-size: 13px;
+    padding: 0.85rem;
+  }
+}
+@media (max-width: 380px) {
+  pre {
+    font-size: 12px;
+    padding: 0.75rem;
+  }
+}
+
+
+/* 5. Table responsive container
+ * ------------------------------------------------------------------
+ * `display: block` on `<table>` is the standard CSS-only approach:
+ * the table becomes a scroll container so wide tables (e.g., the
+ * benchmark comparison in Ch 30) scroll inside the chapter content
+ * instead of forcing the whole page wider.
+ *
+ * Cell contents still wrap normally; only the table's bounding box
+ * gets the overflow behavior.
+ */
+.chapter-content table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 720px) {
+  .chapter-content table {
+    font-size: 13px;
+  }
+  .chapter-content table th,
+  .chapter-content table td {
+    padding: 0.4rem 0.6rem;
+  }
+}
+
+
+/* 6. Typography scale at narrow viewports
+ * ------------------------------------------------------------------
+ * Body text stays 16 px (never sub-14). Headings shrink modestly so
+ * the chapter title doesn't dominate the viewport at 320 px.
+ * Headings are global element selectors (defined in base.css), so the
+ * overrides apply cleanly from this global stylesheet. Layout-level
+ * overrides (.chapter-title, .chapter-content, .chapter-layout-main)
+ * live in ChapterLayout.astro so they coexist with its scoped styles.
+ */
+@media (max-width: 720px) {
+  h1 {
+    font-size: 32px;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+  }
+  h2 {
+    font-size: 26px;
+    line-height: 1.25;
+    margin-top: 2.5rem;
+  }
+  h3 {
+    font-size: 22px;
+    line-height: 1.3;
+    margin-top: 2rem;
+  }
+  h4 {
+    font-size: 18px;
+    margin-top: 1.5rem;
+  }
+}
+@media (max-width: 380px) {
+  h1 { font-size: 28px; }
+  h2 { font-size: 22px; }
+  h3 { font-size: 19px; }
+}
+
+
+/* 7. Chapter prev/next stack on narrow viewports
+ * ------------------------------------------------------------------
+ * The actual rules live in ChapterNav.astro (scoped). Below 640 px the
+ * side-by-side prev/next cards stack vertically.
+ */
