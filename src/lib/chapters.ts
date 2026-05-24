@@ -95,7 +95,7 @@ export const PARTS: Part[] = [
     chapters: [
       { num: 27, slug: 'ch27-agent-foundations',          title: 'Agent foundations',               partNum: 9, status: 'published' },
       { num: 28, slug: 'ch28-agent-from-scratch',         title: 'Building an agent from scratch',  partNum: 9, status: 'published' },
-      { num: 29, slug: 'ch29-multi-agent',                title: 'Multi-agent systems',             partNum: 9, status: 'draft' },
+      { num: 29, slug: 'ch29-multi-agent',                title: 'Multi-agent systems',             partNum: 9, status: 'published' },
       { num: 30, slug: 'ch30-agent-eval-and-frameworks',  title: 'Agent evaluation & frameworks',   partNum: 9, status: 'planned' },
     ],
   },
