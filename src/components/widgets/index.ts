@@ -46,5 +46,4 @@ export { default as ChunkingVisualizer } from './ch22/ChunkingVisualizer';
 export { default as CLIPEmbeddingSpace } from './ch23/CLIPEmbeddingSpace';
 export { default as ViTPatchTokenizer } from './ch23/ViTPatchTokenizer';
 export { default as JailbreakTaxonomy } from './ch24/JailbreakTaxonomy';
-// Session 109 will add:
-// export { default as PromptInjectionClassifier } from './ch24/PromptInjectionClassifier';
+export { default as PromptInjectionClassifier } from './ch24/PromptInjectionClassifier';
