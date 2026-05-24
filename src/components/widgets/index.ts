@@ -50,3 +50,4 @@ export { default as PromptInjectionClassifier } from './ch24/PromptInjectionClas
 export { default as SAEFeatureExplorer } from './ch25/SAEFeatureExplorer';
 export { default as LinearProbingVisualizer } from './ch25/LinearProbingVisualizer';
 export { default as BenchmarkHeatmap } from './ch26/BenchmarkHeatmap';
+export { default as LLMJudgeBiasDemo } from './ch26/LLMJudgeBiasDemo';
