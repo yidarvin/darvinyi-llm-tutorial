@@ -6,6 +6,7 @@ description: Retrieval-augmented generation — how production LLMs ground their
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { RetrievalComparator } from '@components/widgets';
 
 A trained LLM's knowledge lives in its weights — call this **parametric memory**. It is fast, always available, and learned from pretraining. It also has three fundamental limits: the training cutoff hides recent events, your company's private docs were never in pretraining, and specific records (a customer's order history, a database row) are too numerous to memorize. **Retrieval-augmented generation (RAG)** addresses all three. Index a corpus; given a query, fetch the most relevant documents; concatenate them into the model's context; generate a grounded answer. The model knows what is in its weights *and* what it can find.
 
@@ -193,10 +194,8 @@ The reason RRF dominates the alternative — a weighted sum of normalized scores
 
 Hybrid retrieval wins most when the workload is diverse. **Mixed query types** in the same workload — half keyword, half semantic — get the biggest lift. **Mixed corpora** (technical docs alongside narrative content) benefit similarly. In mature production systems hybrid is no longer a tunable choice; it is the default, with BM25 and dense both running on every query and RRF combining their results.
 
-<WidgetFrame title="Retrieval comparator" caption="A small corpus with three query types: keyword (exact terms), semantic (paraphrased), and mixed. Run each query through BM25, dense, and hybrid (RRF) retrieval; compare which documents each method returns and at what rank. BM25 catches exact matches; dense catches semantic ones; hybrid catches both. The widget makes 'why hybrid is the production default' visible.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 126 (marquee)
-  </div>
+<WidgetFrame title="Retrieval comparator" caption="A 10-document corpus mixing technical and conceptual content. Four query types demonstrate the operational differences: keyword-heavy (BM25 wins), semantic (Dense wins), paraphrased (Dense wins decisively), mixed (Hybrid wins). Three columns side by side; correct docs are highlighted. Watch how Hybrid stays robust across all query types — never losing badly to either method. This is why hybrid retrieval is the production default in mature RAG systems.">
+  <RetrievalComparator client:visible />
 </WidgetFrame>
 
 <RunnableCode>

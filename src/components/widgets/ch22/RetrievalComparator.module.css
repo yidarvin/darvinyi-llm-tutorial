@@ -1,0 +1,243 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel, .controlsPanel, .summaryPanel, .insightPanel, .caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+.titlePanel { padding: 0.7rem 1rem; }
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Controls */
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 110px;
+}
+.queryButtons { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.queryButton {
+  padding: 0.35rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.queryButton:hover { border-color: var(--cyan-500); color: var(--cyan-300); }
+.queryButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.queryText {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+.queryTextLabel { color: var(--text-tertiary); margin-right: 0.4rem; }
+.queryTextValue { color: var(--cyan-300); font-weight: 500; }
+.queryNote {
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Three-column grid */
+.rankingsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+.rankingColumn {
+  padding: 0.7rem 0.6rem;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.colBM25 { border-left: 4px solid var(--amber-400); }
+.colDense { border-left: 4px solid var(--cyan-400); }
+.colHybrid { border-left: 4px solid var(--emerald-400); }
+
+.columnHeader {
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.columnTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.colBM25 .columnTitle { color: var(--amber-400); }
+.colDense .columnTitle { color: var(--cyan-400); }
+.colHybrid .columnTitle { color: var(--emerald-400); }
+.columnSubtitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  margin-top: 0.1rem;
+}
+
+.rankList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.rankItem {
+  display: grid;
+  grid-template-columns: 22px 16px 1fr auto;
+  gap: 0.3rem;
+  align-items: baseline;
+  padding: 0.35rem 0.4rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  border-radius: 3px;
+  background: var(--bg-primary);
+  border: 1px solid transparent;
+}
+.rankItemCorrect {
+  background: color-mix(in srgb, var(--cyan-500) 6%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--cyan-500) 35%, transparent);
+}
+.rankNumber { color: var(--text-tertiary); font-weight: 500; }
+.rankCorrectMarker {
+  color: var(--cyan-300);
+  font-weight: 700;
+  text-align: center;
+}
+.rankTitle {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+.rankItemCorrect .rankTitle { color: var(--cyan-300); font-weight: 500; }
+.rankScore {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+.scoreLabel { color: var(--text-tertiary); }
+
+/* Summary panel */
+.summaryTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.badge {
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: center;
+}
+.badgeLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+.badgeValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.badgeBest {
+  background: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-primary));
+  border-color: var(--cyan-500);
+}
+.badgeBest .badgeValue { color: var(--cyan-300); }
+.badgeFail {
+  background: color-mix(in srgb, var(--rose-400) 5%, var(--bg-primary));
+  border-color: var(--rose-400);
+}
+.badgeFail .badgeValue { color: var(--rose-400); font-size: 0.78rem; }
+
+/* Insight */
+.insightPanel {
+  background: color-mix(in srgb, var(--cyan-500) 4%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+}
+.insightLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--cyan-300);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.insightText {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Caption */
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .controlLabel { min-width: 0; }
+  .rankingsGrid { grid-template-columns: 1fr; gap: 0.5rem; }
+  .summaryGrid { gap: 0.3rem; }
+  .badge { padding: 0.4rem 0.5rem; }
+  .rankItem { grid-template-columns: 18px 14px 1fr auto; font-size: 0.66rem; }
+  .rankTitle { font-size: 0.68rem; }
+  .rankScore { font-size: 0.62rem; }
+}
