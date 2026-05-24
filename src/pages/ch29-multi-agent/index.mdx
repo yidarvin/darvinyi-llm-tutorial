@@ -6,6 +6,7 @@ description: Multi-agent systems — the composition chapter. When one agent isn
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { MultiAgentTopologyExplorer } from '@components/widgets';
 
 Chapter 27 covered the agent loop. Chapter 28 covered the engineering $80\%$ — tools, schemas, error handling, observability, scaffolding. By the end of Ch 28 you could build a production-grade single-agent system out of real code that survives real traffic. **This chapter asks the next question.** What if one agent isn't enough? **Multi-agent systems** — manager-worker decompositions, peer-to-peer collaborations, hierarchical teams, adversarial debates — are the natural next step. The $2023$ hype around AutoGPT and BabyAGI promised AGI through agent multiplicity; the $2024$–$2025$ reality has been more sober. **Production systems are still mostly single-agent.**
 
@@ -76,10 +77,8 @@ Four factors decide which architecture is right.
 
 **Task structure.** Pipelined work — discrete steps with clear dependencies — points at manager-worker. Genuinely collaborative work where decisions emerge from discussion points at peer-to-peer. **Predictability.** Known steps point at manager-worker; emergent decisions point at peer-to-peer. **Debugging.** Manager-worker traces are easier to read than peer-to-peer — a single decomposition step followed by parallel executions versus an unbounded conversation. **Cost.** Peer-to-peer often runs more LLM calls per task because every agent considers every turn; manager-worker calls only the agents the manager assigns.
 
-<WidgetFrame title="Multi-agent topology explorer" caption="Five architectures visualized side-by-side — single-agent baseline (the chapter's recommended default), manager-worker, peer-to-peer, hierarchical, and proposer-critic-judge. Each shows a small node-and-arrow diagram, use cases, pros and cons, and a maturity badge. The chapter's central architectural vocabulary made concrete — including the single-agent baseline that most tasks should default to.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 163 (marquee 1)
-  </div>
+<WidgetFrame title="Multi-agent topology explorer" caption="Five architectures visualized side-by-side: single-agent baseline (the recommended default), manager-worker, peer-to-peer, hierarchical, proposer-critic-judge. Each shows an SVG node-and-arrow diagram, use cases, pros/cons tradeoffs, an example task, and a maturity badge. Single-agent is listed first deliberately — the chapter's central calibration claim made into the widget's structure.">
+  <MultiAgentTopologyExplorer client:visible />
 </WidgetFrame>
 
 A minimal manager-worker fits in about thirty lines of Python. Three agents — manager, researcher, calculator — and a mock decomposition step. The pattern is small to state and easy to overuse.

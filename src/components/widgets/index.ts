@@ -55,3 +55,4 @@ export { default as AgenticLoopVisualizer } from './ch27-agent-foundations/Agent
 export { default as AgentPatternCatalog }   from './ch27-agent-foundations/AgentPatternCatalog';
 export { default as ToolSchemaBuilder }     from './ch28-agent-from-scratch/ToolSchemaBuilder';
 export { default as AgentTraceInspector }   from './ch28-agent-from-scratch/AgentTraceInspector';
+export { default as MultiAgentTopologyExplorer } from './ch29-multi-agent/MultiAgentTopologyExplorer';
