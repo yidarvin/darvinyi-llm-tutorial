@@ -6,6 +6,7 @@ description: Parameter-efficient fine-tuning (PEFT) — the practical alternativ
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { LoRAArchitecture } from '@components/widgets';
 
 Chapters 13 and 14 left you with the recipes for post-training. Take a base model, run SFT to teach it the chatbot format, layer DPO or RLHF on top to teach it quality, and you have a useful assistant. The recipes are clear; the problem is that doing them at the parameter scale of modern models is operationally brutal. Full fine-tuning of a $70$B-parameter model holds parameters, gradients, and AdamW's two optimizer moments in memory simultaneously — roughly $840$ GB before activations. That is $10\times$ A100s at minimum. Out of reach for most teams.
 
@@ -95,10 +96,8 @@ $$h = W_0 x + \frac{\alpha}{r} B A x, \quad B \in \mathbb{R}^{d \times r}, \quad
 
 LoRA forward pass. $W_0$ is the frozen pre-trained weight; $A$ and $B$ are trainable low-rank factors. $r$ is the rank (typically $8$–$32$); $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$). At step zero, $B = 0$ so $\Delta W = 0$ — the model is identical to the base.
 
-<WidgetFrame title="LoRA architecture" caption="A transformer attention layer with LoRA injected. The base weights W_Q, W_K, W_V, W_O are frozen (large). The LoRA adapters B·A are trainable (small). Slide the rank to see how the trainable parameter count scales. The widget visualizes the parameter ratio — typically under 1% of base weights — at a glance.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 68 (marquee)
-  </div>
+<WidgetFrame title="LoRA architecture" caption="A single attention block with the four projections (W_Q, W_K, W_V, W_O) shown as large frozen matrices and their tiny trainable LoRA adapters (B·A pairs) injected alongside. Slider for rank shows how the trainable parameter count scales — but it stays a tiny fraction of the base. Target-module selector toggles between Q+V only / Q,K,V,O / all linear. The size disparity is the visual punchline: a 7B model has 6.74B frozen params and ~17M trainable.">
+  <LoRAArchitecture client:visible />
 </WidgetFrame>
 
 The runnable cell below builds the LoRA forward pass and verifies that at step $0$, with $B = 0$, the LoRA output exactly equals the base model output. After training (simulated by drawing a non-zero $B$), the outputs diverge.
