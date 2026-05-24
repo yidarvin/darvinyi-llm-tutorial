@@ -355,6 +355,303 @@ The dual failure mode of reward hacking is **mode collapse**: the policy converg
 
 Section 9 closes the chapter by placing this material in the modern post-training stack.
 
+## Exercises
+
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (medium) — Bradley-Terry reward model training
+
+Implement reward model training using the Bradley-Terry loss. Train on synthetic preference pairs where the "ground truth" reward is a simple linear function. Verify that, after training, the model assigns higher reward to chosen responses than rejected.
+
+<details>
+<summary>Hint</summary>
+
+The Bradley-Terry loss is:
+$$\mathcal{L}_{\text{RM}} = -\mathbb{E}_{(x, y_w, y_l)} [\log \sigma(r_\phi(x, y_w) - r_\phi(x, y_l))]$$
+
+For the synthetic setup:
+1. Generate $(x, y_w, y_l)$ tuples. Use a "ground truth" reward $r^*(x, y) = w^T \phi(x, y)$ (e.g., $r^*$ is the dot product of $x$ with $y$).
+2. The "true" preference is determined by which response has higher $r^*$.
+3. Train your reward model $r_\phi(x, y) = w_\phi^T \phi(x, y)$ to predict preferences via BT loss.
+4. After ~100 steps of gradient descent, verify the trained $w_\phi$ correlates with the true $w$.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-np.clip(x, -30, 30)))
+
+def bt_loss(reward_chosen, reward_rejected):
+    """Bradley-Terry loss for a batch of preference pairs."""
+    diff = reward_chosen - reward_rejected
+    return -np.mean(np.log(sigmoid(diff) + 1e-9))
+
+# Setup: 8-dimensional features; true reward = w_true . features
+np.random.seed(0)
+D = 8
+w_true = np.array([1.0, -0.5, 0.3, 0.0, 0.8, -0.2, 0.5, 0.1])
+
+# Generate 200 preference pairs from random features
+N = 200
+def make_pair():
+    y_a = np.random.normal(0, 1, D)
+    y_b = np.random.normal(0, 1, D)
+    if (w_true @ y_a) > (w_true @ y_b):
+        return y_a, y_b   # a is chosen
+    return y_b, y_a       # b is chosen
+
+pairs = [make_pair() for _ in range(N)]
+chosen = np.array([p[0] for p in pairs])
+rejected = np.array([p[1] for p in pairs])
+
+# Initialize reward model: r_phi(y) = w_phi . y
+w_phi = np.random.normal(0, 0.1, D)
+
+# TODO: train w_phi via gradient descent on BT loss
+# learning_rate = 0.1
+# for step in range(500):
+#     reward_chosen = chosen @ w_phi
+#     reward_rejected = rejected @ w_phi
+#     loss = bt_loss(reward_chosen, reward_rejected)
+#     
+#     # Gradient of BT loss w.r.t. w_phi:
+#     # d/dw_phi[-log sigmoid(r_c - r_r)] = -sigmoid(r_r - r_c) * (chosen - rejected)
+#     grad_per_pair = -sigmoid(reward_rejected - reward_chosen)[:, None] * (chosen - rejected)
+#     grad = grad_per_pair.mean(axis=0)
+#     w_phi -= learning_rate * grad
+#     
+#     if step % 100 == 0:
+#         print(f"step {step}: loss={loss:.4f}, cos_sim(w_phi, w_true)={np.dot(w_phi, w_true) / (np.linalg.norm(w_phi) * np.linalg.norm(w_true)):.3f}")
+
+# After training: verify chosen rewards exceed rejected rewards
+# r_c = chosen @ w_phi
+# r_r = rejected @ w_phi
+# accuracy = np.mean(r_c > r_r)
+# print(f"\\nFinal accuracy: {accuracy*100:.1f}% of pairs have chosen > rejected reward.")
+# print(f"Final cosine similarity w_phi vs w_true: {np.dot(w_phi, w_true) / (np.linalg.norm(w_phi) * np.linalg.norm(w_true)):.3f}")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — DPO loss and gradients
+
+Implement the DPO loss and verify by hand that its gradients push the chosen log-probability up and the rejected log-probability down — exactly what the loss landscape widget showed.
+
+<details>
+<summary>Hint</summary>
+
+The DPO loss is:
+$$\mathcal{L}_{\text{DPO}} = -\log \sigma\left(\beta \log \frac{\pi_\theta(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi_\theta(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)}\right)$$
+
+Define implicit rewards $\hat{r}_w = \beta \log(\pi_\theta(y_w)/\pi_{\text{ref}}(y_w))$ and similarly for $\hat{r}_l$. Then:
+$$\mathcal{L} = -\log \sigma(\hat{r}_w - \hat{r}_l)$$
+
+Taking gradients with respect to the chosen and rejected log-probs (treating $\pi_{\text{ref}}$ as constant):
+- $\partial \mathcal{L} / \partial \log \pi_\theta(y_w) = -\beta \cdot (1 - \sigma(\hat{r}_w - \hat{r}_l))$ — this is *negative*, so gradient descent *increases* $\log \pi_\theta(y_w)$.
+- $\partial \mathcal{L} / \partial \log \pi_\theta(y_l) = +\beta \cdot (1 - \sigma(\hat{r}_w - \hat{r}_l))$ — this is *positive*, so gradient descent *decreases* $\log \pi_\theta(y_l)$.
+
+Implement these and verify numerically with finite differences.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-np.clip(x, -30, 30)))
+
+def dpo_loss(logp_w, logp_l, logp_ref_w, logp_ref_l, beta=0.1):
+    """DPO loss for one preference pair."""
+    r_w = beta * (logp_w - logp_ref_w)
+    r_l = beta * (logp_l - logp_ref_l)
+    return -np.log(sigmoid(r_w - r_l) + 1e-9)
+
+def dpo_grad_analytical(logp_w, logp_l, logp_ref_w, logp_ref_l, beta=0.1):
+    """Analytical gradients of DPO loss w.r.t. logp_w and logp_l."""
+    r_w = beta * (logp_w - logp_ref_w)
+    r_l = beta * (logp_l - logp_ref_l)
+    # TODO: compute dL/dlogp_w and dL/dlogp_l
+    # grad_w should be NEGATIVE (descent increases logp_w → assigns more probability to chosen)
+    # grad_l should be POSITIVE (descent decreases logp_l → assigns less probability to rejected)
+    pass
+
+def dpo_grad_numerical(logp_w, logp_l, logp_ref_w, logp_ref_l, beta=0.1, eps=1e-5):
+    """Numerical gradients via finite differences."""
+    base = dpo_loss(logp_w, logp_l, logp_ref_w, logp_ref_l, beta)
+    grad_w = (dpo_loss(logp_w + eps, logp_l, logp_ref_w, logp_ref_l, beta) - base) / eps
+    grad_l = (dpo_loss(logp_w, logp_l + eps, logp_ref_w, logp_ref_l, beta) - base) / eps
+    return grad_w, grad_l
+
+# Test
+logp_w = -8.0
+logp_l = -10.0
+logp_ref_w = -10.0
+logp_ref_l = -10.0
+beta = 0.1
+
+# loss = dpo_loss(logp_w, logp_l, logp_ref_w, logp_ref_l, beta)
+# grad_w_a, grad_l_a = dpo_grad_analytical(logp_w, logp_l, logp_ref_w, logp_ref_l, beta)
+# grad_w_n, grad_l_n = dpo_grad_numerical(logp_w, logp_l, logp_ref_w, logp_ref_l, beta)
+
+# print(f"Loss: {loss:.4f}")
+# print(f"Analytical gradients: dL/dlogp_w = {grad_w_a:.5f}, dL/dlogp_l = {grad_l_a:.5f}")
+# print(f"Numerical gradients:  dL/dlogp_w = {grad_w_n:.5f}, dL/dlogp_l = {grad_l_n:.5f}")
+# print(f"Match: {np.allclose([grad_w_a, grad_l_a], [grad_w_n, grad_l_n], atol=1e-4)}")
+# print(f"\\nSign check:")
+# print(f"  grad_w {'<' if grad_w_a < 0 else '>='} 0 → descent {'increases' if grad_w_a < 0 else 'decreases'} logp_w (chosen)")
+# print(f"  grad_l {'>' if grad_l_a > 0 else '<='} 0 → descent {'decreases' if grad_l_a > 0 else 'increases'} logp_l (rejected)")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (easy) — RLVR math verifier
+
+Implement a verifier for arithmetic word problems. Extract the final numeric answer from a model's response and check it against the ground truth. This is the "reward function" used in RLVR for math tasks.
+
+<details>
+<summary>Hint</summary>
+
+1. Use a regex to extract numbers from the response.
+2. Take the *last* number — it's typically the final answer (e.g., "Let me compute: 5 + 3 = 8. The answer is 8.").
+3. Compare to the ground-truth answer with a small tolerance for floating-point.
+4. Return 1.0 if correct, 0.0 otherwise. **This is the RL reward signal.**
+
+For bonus credit: handle cases where the response contains no number at all (return 0), cases where the response is correct but expressed differently ("eight" instead of "8"), or cases where the wrong number appears earlier in the response but the final answer is correct.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import re
+
+def extract_final_answer(response):
+    """Extract the final numeric answer from a model's response."""
+    # TODO: find all numbers; return the last one as a float
+    # Hint: use re.findall(r'-?\\d+\\.?\\d*', response)
+    pass
+
+def verify_math_answer(response, correct_answer, tolerance=1e-4):
+    """RLVR-style binary reward: 1.0 if correct, 0.0 otherwise."""
+    # TODO: extract, check tolerance, return 0.0 or 1.0
+    pass
+
+# Test on a small dataset of "model responses"
+problems = [
+    {"q": "What is 23 + 47?",         "correct": 70.0,
+     "response": "Let me add: 23 + 47 = 70. The answer is 70."},
+    {"q": "What is 15 * 8?",          "correct": 120.0,
+     "response": "15 times 8 equals 120."},
+    {"q": "What is 144 / 12?",        "correct": 12.0,
+     "response": "144 divided by 12 is 12."},
+    {"q": "Area of circle, radius 5?", "correct": 78.54,
+     "response": "Area = pi * 5^2 = pi * 25 ≈ 78.54"},
+    {"q": "What is 100 - 37?",        "correct": 63.0,
+     "response": "100 minus 37 is 73."},   # WRONG
+    {"q": "What is 6 * 7?",           "correct": 42.0,
+     "response": "I'm not sure, maybe 41."},   # WRONG
+    {"q": "What is sqrt(16)?",        "correct": 4.0,
+     "response": "The square root of 16 is 4."},
+]
+
+# total_reward = 0
+# correct = 0
+# print(f"{'Q':<35} {'Response excerpt':<40} {'Reward':<8}")
+# print("-" * 90)
+# for p in problems:
+#     reward = verify_math_answer(p["response"], p["correct"])
+#     marker = "✓" if reward == 1.0 else "✗"
+#     print(f"{p['q'][:33]:<35} {p['response'][:38]:<40} {marker} {reward}")
+#     total_reward += reward
+#     if reward == 1.0: correct += 1
+# 
+# print(f"\\nTotal reward: {total_reward} / {len(problems)} ({correct}/{len(problems)} correct = {correct/len(problems)*100:.0f}%)")
+# print(f"\\nIn RLVR, this reward signal trains the policy via RL. No learned RM needed.")
+# print(f"The verifier is the reward function. DeepSeek-R1 used this for math + code at scale.")
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Length bias detection
+
+Real reward models often exhibit *length bias*: they give higher rewards to longer responses, regardless of quality. This is one of the most common failures in RLHF/DPO. Detect length bias in a synthetic preference dataset by measuring the correlation between response length and "chosen" status.
+
+<details>
+<summary>Hint</summary>
+
+For each preference pair $(x, y_w, y_l)$:
+1. Compute the length of $y_w$ and $y_l$ (e.g., character count or word count)
+2. Tally: how often is $y_w$ *longer* than $y_l$?
+3. If the answer is far from 50%, your data has length bias.
+
+Detailed analysis:
+- Compute the average length of chosen vs rejected responses
+- Compute the Pearson correlation between $(\text{len}(y_w) - \text{len}(y_l))$ and "chosen vs rejected" labels (always +1 if chosen is longer; -1 if rejected is longer)
+- Report % of pairs where chosen is longer
+
+Mitigations:
+- Length-normalize the reward model
+- Use SimPO (length-normalized DPO)
+- Curate preference data to balance lengths
+- Re-train with length-controlled subsets
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def length_bias_analysis(preference_pairs):
+    """
+    Analyze a list of (chosen, rejected) response pairs for length bias.
+    
+    Returns a dict with: pct_chosen_longer, avg_len_chosen, avg_len_rejected,
+                         len_diff_mean, len_diff_std.
+    """
+    # TODO: compute the requested statistics
+    pass
+
+# Synthetic preference data — some real preferences, some length-biased
+np.random.seed(0)
+def gen_pair(length_bias=0.0):
+    """
+    Generate a (chosen, rejected) pair.
+    length_bias: 0 = no bias; 1 = always pick longer; -1 = always pick shorter.
+    """
+    a = "word " * np.random.randint(5, 30)
+    b = "word " * np.random.randint(5, 30)
+    quality_a = np.random.uniform(-1, 1)   # "true" quality
+    quality_b = np.random.uniform(-1, 1)
+    # Add length bias to perceived quality
+    perceived_a = quality_a + length_bias * len(a) / 100
+    perceived_b = quality_b + length_bias * len(b) / 100
+    if perceived_a > perceived_b:
+        return (a, b)
+    return (b, a)
+
+# Three datasets: no bias, mild bias, strong bias
+no_bias = [gen_pair(0.0) for _ in range(500)]
+mild_bias = [gen_pair(0.5) for _ in range(500)]
+strong_bias = [gen_pair(2.0) for _ in range(500)]
+
+# print(f"{'Dataset':<15} {'% chosen longer':<20} {'avg chosen len':<20} {'avg rejected len':<20}")
+# print("-" * 75)
+# for name, ds in [("no bias", no_bias), ("mild bias", mild_bias), ("strong bias", strong_bias)]:
+#     stats = length_bias_analysis(ds)
+#     print(f"{name:<15} {stats['pct_chosen_longer']:>6.1f}% {'':<13} {stats['avg_len_chosen']:>6.1f}{'':<14} {stats['avg_len_rejected']:>6.1f}")
+# 
+# print(f"\\nFor no-bias data, chosen-longer % should be ~50%.")
+# print(f"For mild-bias data, it climbs to 60-65%.")
+# print(f"For strong-bias data, it climbs to 80-90% — the RM is being length-biased.")
+# print(f"\\nMitigations: length-normalize the reward (SimPO); curate balanced data;")
+# print(f"  control for length in the RM training; periodically check for length bias.")
+`}
+  packages={["numpy"]}
+/>
+
 ## The modern post-training stack
 
 The current production recipe for a chat model, as of late $2024$ to early $2025$, follows a clean six-stage pipeline. Stage one: a **base model** (Chapters 7–10), pre-trained on web text and code at scale. Stage two: **SFT** (Chapter 13) on a curated instruction-response dataset, to teach the model the format of being a helpful assistant. Stage three: **preference optimization** (this chapter), typically DPO in the open-source world or PPO at frontier labs, occasionally iterative DPO with online preference collection. Stage four (optional): **RLVR** for reasoning-focused models, large-scale RL on math and code with verifiable rewards, layered on top of stage three. Stage five (optional): **PEFT** (Chapter 15) for cheap domain-specific behavior on top of an already-aligned model. Stage six (optional): **distillation** (Chapter 16) to compress the fully-trained model into a smaller form factor for deployment.
