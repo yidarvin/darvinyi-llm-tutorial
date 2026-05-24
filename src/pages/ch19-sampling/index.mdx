@@ -6,6 +6,7 @@ description: Sampling — how a transformer's logits become emitted tokens. Gree
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { SamplingDistribution } from '@components/widgets';
 
 Chapter 17 made the forward pass faster. Chapter 18 made it smaller. This chapter is about what happens *after* the forward pass: how a vector of logits — one score per vocabulary token — becomes the next emitted text token. **The choice matters enormously.** Greedy decoding produces robotic, repetitive output. Pure random sampling produces incoherent nonsense. Carefully-designed strategies (temperature + nucleus + a mild repetition penalty) produce natural, varied, useful text. The algorithms are short; the impact is huge.
 
@@ -206,10 +207,8 @@ print("\nTop-p adapts where top-k cannot.")
 ```
 </RunnableCode>
 
-<WidgetFrame title="Sampling distribution explorer" caption="See how the same logits get transformed by different sampling strategies. Sliders for temperature, top-p, and top-k; bars show original probabilities and which tokens survive truncation. The nucleus adapts to distribution shape — small at peaked logits, large at flat ones. The widget makes the modern default's adaptive behavior visceral.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 87 (marquee)
-  </div>
+<WidgetFrame title="Sampling distribution explorer" caption="Pick a distribution shape (peaked / bimodal / flat); adjust temperature, top-p, top-k. The top chart shows the original distribution; the bottom shows the post-pipeline distribution (cyan = in nucleus; rose-faded = masked). Stats panel shows nucleus size, top probability, entropy. Watch nucleus size adapt to distribution shape — small at peaked confidence, large at uncertainty. This is why nucleus sampling is the modern default.">
+  <SamplingDistribution client:visible />
 </WidgetFrame>
 
 <Callout type="note">

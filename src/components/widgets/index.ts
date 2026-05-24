@@ -35,3 +35,4 @@ export { default as KVCacheAnimation } from './ch17/KVCacheAnimation';
 export { default as SpeculativeDecoding } from './ch17/SpeculativeDecoding';
 export { default as QuantizationExplorer } from './ch18/QuantizationExplorer';
 export { default as GranularityVisualizer } from './ch18/GranularityVisualizer';
+export { default as SamplingDistribution } from './ch19/SamplingDistribution';
