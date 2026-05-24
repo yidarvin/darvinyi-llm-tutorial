@@ -6,6 +6,7 @@ description: Preference optimization — the algorithmic centerpiece of post-tra
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { PreferenceLearningPipeline } from '@components/widgets';
 
 Chapter 13 left you with an SFT'd model. It follows the chat template, knows it is the assistant side of a conversation, and produces grammatical responses to instructions. What it does *not* know is how to produce *good* responses. Ask it a hard question and it may confidently invent an answer. Ask it for help on something edgy and it may refuse harmlessly or comply harmfully. The format is there; the quality and the alignment are not.
 
@@ -107,10 +108,8 @@ The objective is an RL one — the policy generates responses, the reward model 
 
 The full PPO update has more moving parts than the chapter has room for: a value function (a second head on the policy or a separate critic) for variance reduction, **Generalized Advantage Estimation** (GAE) for bias-variance trade-off on the value estimates, multiple gradient steps per batch of rollouts, separate hyperparameters for the value-function loss and the entropy bonus. The full algorithm is a specialty topic — see Schulman et al. (2017) for the original derivation and any modern RLHF codebase (TRL, OpenRLHF) for production implementations. What matters for this chapter is the *shape* of the algorithm: generate responses with $\pi_\theta$, score them with $r_\phi$, and update $\pi_\theta$ with a clipped policy-gradient step toward higher reward, subject to the KL constraint.
 
-<WidgetFrame title="Preference learning pipeline" caption="The data flow from a preference pair to a trained policy, comparing classical RLHF and DPO paths side-by-side. RLHF: pair → reward model → PPO → policy. DPO: pair → direct loss → policy. Same input data, two algorithmic paths to similar destinations. Toggle to highlight each path.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 64 (marquee)
-  </div>
+<WidgetFrame title="Preference learning pipeline" caption="The data flow from a preference pair to a trained policy, comparing classical RLHF and DPO pipelines side-by-side. Same preference data; two algorithmic paths. RLHF has a two-stage pipeline (reward model + PPO); DPO collapses to one stage (direct loss). Click any step for details on what it trains, what's frozen, and what's needed.">
+  <PreferenceLearningPipeline client:visible />
 </WidgetFrame>
 
 <Callout type="aside">
