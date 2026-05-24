@@ -51,3 +51,6 @@ export { default as SAEFeatureExplorer } from './ch25/SAEFeatureExplorer';
 export { default as LinearProbingVisualizer } from './ch25/LinearProbingVisualizer';
 export { default as BenchmarkHeatmap } from './ch26/BenchmarkHeatmap';
 export { default as LLMJudgeBiasDemo } from './ch26/LLMJudgeBiasDemo';
+export { default as AgenticLoopVisualizer } from './ch27-agent-foundations/AgenticLoopVisualizer';
+// Session 153 will add:
+// export { default as AgentPatternCatalog } from './ch27-agent-foundations/AgentPatternCatalog';

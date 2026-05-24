@@ -6,6 +6,7 @@ description: Agent foundations — the chapter that turns a chat model into an a
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { AgenticLoopVisualizer } from '@components/widgets';
 
 Phase 14 closed with three disciplines complete: safety (what we want), interpretability (what's there), evaluation (how we measure). **Phase 15 opens here** — and Phase 15 is about composition. Capable, disciplined models assembled into systems that observe, think, act, and iterate. **This chapter is the foundational one**: what an agent is, what the loop looks like, what worked and what didn't in the 2023 boom, and where the field stands in 2025.
 
@@ -113,10 +114,8 @@ Action: final_answer("Today in Tokyo: 18°C, partly cloudy.")
 
 Four properties make ReAct the default. **Reasoning grounds actions** — the agent thinks about *why* it is calling a tool before calling it, making the call less arbitrary. **Actions ground reasoning** — observations correct any mistakes in the model's thinking, so reasoning errors do not compound across turns. **Composability** — multi-step tasks decompose naturally into thought-action-observation triples, with no extra structure required. **Inspectability** — the trace is human-readable; failures are diagnosable from the log.
 
-<WidgetFrame title="Agentic loop visualizer" caption="Step through a ReAct agent's loop over a multi-step task. Watch thoughts, actions, and observations accumulate turn by turn — the canonical agentic pattern in interactive form. Demonstrates the chapter's central operational claim: the LLM's power as an agent comes from the loop, not from any single call. Inspectable, debuggable, and a foundation for everything Phase 15 builds.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 152 (marquee)
-  </div>
+<WidgetFrame title="Agentic loop visualizer" caption="Four ReAct agent scenarios — simple multi-step, computation with verification, research chain, and graceful failure. Step controls (prev/next/play/restart) advance through each agent's turns one phase at a time (think → act → observe). Accumulated context stays visible; the current step is highlighted. A mini loop diagram shows the active phase. Demonstrates the chapter's central operational claim: the agentic loop is iteration — multiple turns of thought-action-observation accumulating context. The capability is the loop, not any single LLM call.">
+  <AgenticLoopVisualizer client:visible />
 </WidgetFrame>
 
 A minimal ReAct agent fits in fifty lines of Python — mock LLM, mock tools, regex parsing, full loop with termination. The point is to see that the loop itself is short; the LLM and parsing handle the complexity.
