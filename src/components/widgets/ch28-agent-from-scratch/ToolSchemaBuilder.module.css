@@ -1,0 +1,201 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel, .controlsPanel, .detailPanel, .caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+.titlePanel { padding: 0.7rem 1rem; }
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Controls */
+.controlRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 110px;
+  padding-top: 0.45rem;
+}
+.toolButtons { display: flex; gap: 0.35rem; flex-wrap: wrap; flex: 1; }
+.toolButton {
+  padding: 0.4rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.toolButton:hover { border-color: var(--cyan-500); color: var(--cyan-300); }
+.toolButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+/* Detail panel */
+.detailHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.detailTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.patternBadge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  font-weight: 500;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid;
+  text-transform: lowercase;
+}
+
+.section { margin-bottom: 0.85rem; }
+.sectionLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+
+/* Tab bar */
+.tabBar {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tab {
+  padding: 0.4rem 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: all 200ms;
+}
+.tab:hover { color: var(--cyan-300); }
+.tabActive {
+  background: var(--bg-primary);
+  border-color: var(--border-subtle);
+  border-top: 2px solid var(--cyan-400);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+/* Code panel */
+.codePanel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  max-height: 360px;
+  overflow: auto;
+  padding: 0.7rem 0.85rem;
+}
+.pythonPre, .jsonPre {
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre;
+}
+.pythonLine {
+  font-family: inherit;
+}
+
+/* Python token colors */
+.py-string  { color: var(--amber-400); }
+.py-comment { color: var(--text-tertiary); font-style: italic; }
+.py-keyword { color: var(--violet-400); font-weight: 500; }
+.py-number  { color: var(--emerald-400); }
+
+/* JSON token colors */
+.json-key     { color: var(--cyan-300); }
+.json-string  { color: var(--amber-400); }
+.json-literal { color: var(--violet-400); }
+.json-number  { color: var(--emerald-400); }
+.json-punct   { color: var(--text-secondary); }
+.json-space   { color: inherit; }
+.json-other   { color: var(--text-primary); }
+
+/* Note */
+.notePanel {
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.noteLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.noteText {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* Caption */
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .controlLabel { min-width: 0; padding-top: 0; }
+  .controlRow { flex-direction: column; }
+  .detailHeader { flex-direction: column; align-items: flex-start; }
+  .pythonPre, .jsonPre { font-size: 0.7rem; }
+  .codePanel { max-height: 280px; padding: 0.5rem 0.6rem; }
+  .tab { padding: 0.3rem 0.5rem; font-size: 0.72rem; }
+}
