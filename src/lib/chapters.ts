@@ -74,7 +74,7 @@ export const PARTS: Part[] = [
     num: 7,
     title: 'Modern Capabilities',
     chapters: [
-      { num: 20, slug: 'ch20-reasoning',         title: 'Reasoning & test-time compute', partNum: 7, status: 'draft' },
+      { num: 20, slug: 'ch20-reasoning',         title: 'Reasoning & test-time compute', partNum: 7, status: 'published' },
       { num: 21, slug: 'ch21-tool-use',          title: 'Tool use',                      partNum: 7, status: 'planned' },
       { num: 22, slug: 'ch22-retrieval-and-rag', title: 'Retrieval & RAG',               partNum: 7, status: 'planned' },
       { num: 23, slug: 'ch23-multimodal',        title: 'Multimodal',                    partNum: 7, status: 'planned' },
