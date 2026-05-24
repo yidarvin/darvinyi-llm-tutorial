@@ -58,3 +58,4 @@ export { default as AgentTraceInspector }   from './ch28-agent-from-scratch/Agen
 export { default as MultiAgentTopologyExplorer }   from './ch29-multi-agent/MultiAgentTopologyExplorer';
 export { default as InterAgentConversationViewer } from './ch29-multi-agent/InterAgentConversationViewer';
 export { default as AgentBenchmarkExplorer }       from './ch30-agent-eval-and-frameworks/AgentBenchmarkExplorer';
+export { default as FrameworkPicker }              from './ch30-agent-eval-and-frameworks/FrameworkPicker';

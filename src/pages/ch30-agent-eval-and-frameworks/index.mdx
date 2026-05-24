@@ -6,7 +6,7 @@ description: "Agent evaluation and production frameworks — the final chapter. 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { AgentBenchmarkExplorer } from '@components/widgets';
+import { AgentBenchmarkExplorer, FrameworkPicker } from '@components/widgets';
 
 Chapter 26 made evaluation a discipline. Phase 14 closed by establishing that capable models without rigorous evaluation are research demos, not products. **Phase 15 then built the agent stack** — foundations (Ch 27), engineering (Ch 28), composition (Ch 29). **This chapter closes both arcs.** It brings Phase 14's evaluation discipline to bear on Phase 15's agent systems, and it closes the curriculum.
 
@@ -236,10 +236,8 @@ Section 5 covers the frameworks that make all of this measurable in real systems
 
 **OpenTelemetry GenAI conventions.** Open standard for LLM trace data — standardized span attributes for model name, token counts, costs. **Strengths**: future-proof; vendor-neutral. **Weaknesses**: requires manual instrumentation. **When to use**: when vendor independence matters.
 
-<WidgetFrame title="Framework picker" caption="Select task characteristics (existing stack, team size, complexity needs, vendor independence) and see framework recommendations across LangSmith, Helicone, Braintrust, Anthropic eval tools, OpenTelemetry, and custom-code paths. Each framework has strengths and weaknesses honestly stated. The right framework is the one your team will actually use.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 170 (marquee 2)
-  </div>
+<WidgetFrame title="Framework picker" caption="Toggle four task characteristics (existing LangChain stack, cost sensitivity, team eval discipline, vendor independence) and see a recommended framework with explicit reasoning. Six frameworks are always visible — LangSmith, Helicone, Braintrust, Anthropic eval tooling, OpenTelemetry GenAI, and custom code — with strengths, weaknesses, and when-to-use guidance for each. The chapter's framework-as-plumbing framing made interactive.">
+  <FrameworkPicker client:visible />
 </WidgetFrame>
 
 **The convergence.** Most platforms now adopt OpenTelemetry-compatible conventions for span attributes. **The plumbing is standardizing**; the UX, UI, and surrounding workflow are what differentiate them. The framework graveyard of the last three years suggests that products that fight the convergence age poorly.
