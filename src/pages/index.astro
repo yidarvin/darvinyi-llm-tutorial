@@ -7,7 +7,7 @@ import { PARTS, ALL_CHAPTERS, getFirstPublishedChapter } from '@lib/chapters';
 const totalChapters = ALL_CHAPTERS.length;
 const startHere = getFirstPublishedChapter();
 ---
-<BaseLayout>
+<BaseLayout jsonLdKind="home">
   <div class="home-search">
     <SearchButton client:load />
   </div>

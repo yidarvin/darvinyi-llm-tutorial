@@ -1,0 +1,73 @@
+---
+/**
+ * Comprehensive SEO meta tags: title, description, canonical,
+ * Open Graph, Twitter Card, author, robots, theme-color.
+ *
+ * The chapter layout and the home page both render this once in <head>;
+ * BaseLayout no longer renders OG/Twitter tags inline.
+ */
+export interface Props {
+  /** Page title (rendered as "<title> · LLM Tutorial"). */
+  title: string;
+  /** Page description (meta + OG + Twitter). */
+  description: string;
+  /** Trailing-slash path (e.g. "ch01-neural-net-primitives") used for canonical + OG image. Empty string = home. */
+  slug?: string;
+  /** Override the OG image (defaults to /og/<slug>.png, or /og/home.png when slug is empty). */
+  ogImage?: string;
+  /** OG type. */
+  type?: 'website' | 'article';
+  /** ISO datestring for article:published_time (chapter pages). */
+  publishedTime?: string;
+  /** Twitter handle without leading @. */
+  twitterCreator?: string;
+}
+
+const {
+  title,
+  description,
+  slug = '',
+  ogImage,
+  type = 'website',
+  publishedTime,
+  twitterCreator = 'darvinistrying',
+} = Astro.props;
+
+const SITE_NAME = 'LLM Tutorial';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://llm-tutorial.darvinyi.com';
+const fullUrl = slug ? `${siteUrl}/${slug}/` : `${siteUrl}/`;
+const fullOgImage = ogImage ?? `${siteUrl}/og/${slug || 'home'}.png`;
+const fullTitle = title === SITE_NAME ? title : `${title} · ${SITE_NAME}`;
+const ogImageAlt = `${title} — ${SITE_NAME}`;
+---
+<title>{fullTitle}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={fullUrl} />
+
+<meta property="og:type" content={type} />
+<meta property="og:site_name" content={SITE_NAME} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={fullUrl} />
+<meta property="og:locale" content="en_US" />
+<meta property="og:image" content={fullOgImage} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content={ogImageAlt} />
+
+{publishedTime && type === 'article' && (
+  <meta property="article:published_time" content={publishedTime} />
+)}
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={fullOgImage} />
+<meta name="twitter:image:alt" content={ogImageAlt} />
+{twitterCreator && (
+  <meta name="twitter:creator" content={`@${twitterCreator}`} />
+)}
+
+<meta name="author" content="Darvin Yi" />
+<meta name="robots" content="index,follow,max-image-preview:large" />
+<meta name="theme-color" content="#0a0e1a" />

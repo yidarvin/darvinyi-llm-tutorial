@@ -43,7 +43,19 @@ export default defineConfig({
     }),
     react(),
     tailwind({ applyBaseStyles: false }),
-    sitemap(),
+    sitemap({
+      filter: (page) => !page.includes('/draft/') && !page.includes('/_dev/'),
+      changefreq: 'monthly',
+      lastmod: new Date(),
+      priority: 0.7,
+      serialize: (item) => {
+        if (item.url === 'https://llm-tutorial.darvinyi.com/') {
+          item.priority = 1.0;
+          item.changefreq = 'weekly';
+        }
+        return item;
+      },
+    }),
   ],
   markdown: {
     shikiConfig: {

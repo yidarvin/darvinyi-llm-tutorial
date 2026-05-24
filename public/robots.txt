@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
+Disallow: /_dev/
+Disallow: /draft/
+
+Crawl-delay: 1
 
 Sitemap: https://llm-tutorial.darvinyi.com/sitemap-index.xml

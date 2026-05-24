@@ -1,0 +1,77 @@
+---
+/**
+ * Schema.org structured data:
+ *   kind="home"    → Course (with provider + courseInstance)
+ *   kind="chapter" → LearningResource (isPartOf the Course, positioned)
+ */
+export interface Props {
+  kind: 'home' | 'chapter';
+  slug?: string;
+  title?: string;
+  description?: string;
+  chapterNum?: number;
+  partName?: string;
+}
+
+const { kind, slug, title, description, chapterNum, partName } = Astro.props;
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://llm-tutorial.darvinyi.com';
+
+const author = {
+  '@type': 'Person',
+  name: 'Darvin Yi',
+  url: 'https://darvinyi.com',
+};
+
+let jsonLd: Record<string, unknown> | null = null;
+
+if (kind === 'home') {
+  jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    name: 'LLM Tutorial',
+    description:
+      '30 chapters from numpy primitives to agent systems in production. A comprehensive engineering-focused curriculum on large language models.',
+    url: `${siteUrl}/`,
+    provider: author,
+    educationalLevel: 'Advanced',
+    inLanguage: 'en',
+    hasCourseInstance: {
+      '@type': 'CourseInstance',
+      courseMode: 'online',
+      instructor: { '@type': 'Person', name: 'Darvin Yi' },
+    },
+  };
+} else if (kind === 'chapter' && slug && title) {
+  jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'LearningResource',
+    name: title,
+    description: description ?? '',
+    url: `${siteUrl}/${slug}/`,
+    learningResourceType: 'Tutorial chapter',
+    inLanguage: 'en',
+    isPartOf: {
+      '@type': 'Course',
+      name: 'LLM Tutorial',
+      url: `${siteUrl}/`,
+    },
+    ...(typeof chapterNum === 'number' ? { position: chapterNum } : {}),
+    educationalLevel: 'Advanced',
+    author,
+    ...(partName
+      ? {
+          educationalAlignment: {
+            '@type': 'AlignmentObject',
+            alignmentType: 'concept',
+            targetName: partName,
+          },
+        }
+      : {}),
+  };
+}
+
+const jsonLdString = jsonLd ? JSON.stringify(jsonLd) : '';
+---
+{jsonLdString && (
+  <script is:inline type="application/ld+json" set:html={jsonLdString} />
+)}
