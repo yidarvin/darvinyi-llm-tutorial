@@ -1,0 +1,326 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel,
+.controlsPanel,
+.tracesPanel,
+.histogramPanel,
+.resultPanel,
+.comparisonPanel,
+.insightPanel,
+.caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+.titlePanel {
+  padding: 0.7rem 1rem;
+}
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 175px;
+}
+.controlValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+  min-width: 70px;
+}
+.slider {
+  flex: 1;
+  min-width: 200px;
+}
+.problemButtons {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.problemButton {
+  padding: 0.35rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.problemButton:hover {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+}
+.problemButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+.questionRow {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.tracesTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.55rem;
+  font-weight: 500;
+}
+.tracesList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.traceRow {
+  display: grid;
+  grid-template-columns: 40px 22px 1fr 60px;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+.traceCorrect {
+  border-color: color-mix(in srgb, var(--cyan-500) 35%, var(--border-subtle));
+}
+.traceWrong {
+  border-color: color-mix(in srgb, var(--rose-400) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--rose-400) 3%, var(--bg-primary));
+}
+.traceIdx {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+}
+.traceStatus {
+  text-align: center;
+  font-weight: 700;
+}
+.traceCorrect .traceStatus {
+  color: var(--cyan-300);
+}
+.traceWrong .traceStatus {
+  color: var(--rose-400);
+}
+.traceReasoning {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.traceAnswer {
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.histogramTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.55rem;
+  font-weight: 500;
+}
+.histogramBars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.histRow {
+  display: grid;
+  grid-template-columns: 60px 1fr 120px;
+  gap: 0.6rem;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+.histAnswerLabel {
+  text-align: right;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.histBarTrack {
+  height: 22px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.histBar {
+  height: 100%;
+  background: var(--text-tertiary);
+  opacity: 0.5;
+  transition: width 250ms ease-out;
+}
+.histBarWinner {
+  background: linear-gradient(90deg, var(--cyan-600, #0891b2), var(--cyan-400));
+  opacity: 1;
+}
+.histBarCorrectAnswer:not(.histBarWinner) {
+  background: color-mix(in srgb, var(--cyan-400) 50%, var(--text-tertiary));
+  opacity: 0.7;
+}
+.histCount {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.resultPanel {
+  background: color-mix(in srgb, var(--cyan-500) 4%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+}
+.resultWrong {
+  background: color-mix(in srgb, var(--rose-400) 4%, var(--bg-elevated));
+  border-color: var(--rose-400);
+}
+.resultRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.88rem;
+  padding: 0.2rem 0;
+}
+.resultLabel {
+  color: var(--text-secondary);
+}
+.resultValue {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.resultCorrect .resultValue {
+  color: var(--cyan-300);
+}
+.resultWrong .resultValue {
+  color: var(--rose-400);
+}
+
+.comparisonTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+.comparisonBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.comparisonRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.compLabel {
+  color: var(--text-secondary);
+}
+.compValue {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.compValueCorrect {
+  color: var(--cyan-300);
+}
+.compValueWrong {
+  color: var(--rose-400);
+}
+
+.insightPanel {
+  background: color-mix(in srgb, var(--cyan-500) 4%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+}
+.insightLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--cyan-300);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.insightText {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong {
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .controlRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .controlLabel,
+  .controlValue {
+    min-width: 0;
+  }
+  .traceRow {
+    grid-template-columns: 30px 18px 1fr 50px;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+  }
+  .histRow {
+    grid-template-columns: 45px 1fr 80px;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+  }
+  .resultRow,
+  .comparisonRow {
+    font-size: 0.76rem;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+}

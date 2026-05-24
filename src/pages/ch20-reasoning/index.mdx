@@ -6,7 +6,7 @@ description: 'Reasoning — the capability that turns deployable models into use
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { TestTimeComputeCurves } from '@components/widgets';
+import { TestTimeComputeCurves, SelfConsistencyAggregator } from '@components/widgets';
 
 Phase 12 ended with a deployable model — efficient on the forward pass, quantized to fit on commodity hardware, and sampling tokens cleanly. But a deployable model is not automatically a *useful* one. For factual questions ("who painted the Mona Lisa?") direct generation works fine: the answer is in the weights and one forward pass suffices. For **hard reasoning** — math word problems, multi-step logic, code with a subtle bug, planning across many moves — direct generation often fails. The model commits to early decisions it cannot revise, and a wrong intermediate step compounds into a wrong final answer. **Reasoning techniques** address this by giving the model space to think before it answers.
 
@@ -119,10 +119,8 @@ Yao et al. 2023 generalized the multi-trace idea to explicit search. **Tree-of-t
 
 The empirical wins are large but narrow. **ToT significantly outperforms CoT on planning puzzles** — Game of 24, creative writing tasks with multiple drafts, crosswords — where the search structure matches the problem's branching structure. On standard math benchmarks the win is smaller, and the cost is much higher: **ToT is typically $10\times$ to $100\times$ more expensive than CoT** for the same query, since each branch is a full sub-rollout. ToT pays off for hard problems that genuinely require backtracking and rarely for problems that do not. In production it is reached for sparingly; for most chat-style reasoning the modern reasoning models of section 7 win on both quality and cost.
 
-<WidgetFrame title="Self-consistency aggregator" caption="N independent CoT traces are sampled; each trace's final answer is extracted; the majority answer is returned. Watch traces accumulate; the most-frequent answer wins. Adjustable N. This is the simplest test-time compute technique that works, and the conceptual ancestor of modern reasoning models.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 116 (secondary)
-  </div>
+<WidgetFrame title="Self-consistency aggregator" caption="Three math problems, each with 20 pre-generated CoT traces (most correct, some wrong). Adjust N from 1 to 20; watch traces accumulate; majority vote emerges as N grows. Gains from N=1 to N=10 are large; past N=10-15, additional traces add little. The simplest test-time compute technique that works — and the conceptual ancestor of modern reasoning.">
+  <SelfConsistencyAggregator client:visible />
 </WidgetFrame>
 
 The implementation of self-consistency itself is short — extract each trace's answer, count, return the mode:
