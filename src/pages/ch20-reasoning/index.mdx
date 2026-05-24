@@ -6,6 +6,7 @@ description: 'Reasoning — the capability that turns deployable models into use
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { TestTimeComputeCurves } from '@components/widgets';
 
 Phase 12 ended with a deployable model — efficient on the forward pass, quantized to fit on commodity hardware, and sampling tokens cleanly. But a deployable model is not automatically a *useful* one. For factual questions ("who painted the Mona Lisa?") direct generation works fine: the answer is in the weights and one forward pass suffices. For **hard reasoning** — math word problems, multi-step logic, code with a subtle bug, planning across many moves — direct generation often fails. The model commits to early decisions it cannot revise, and a wrong intermediate step compounds into a wrong final answer. **Reasoning techniques** address this by giving the model space to think before it answers.
 
@@ -289,10 +290,8 @@ The empirical fact that $\beta > 0$ is the load-bearing observation — inferenc
 
 The implication for deployment is real and the operational evidence is now everywhere. **Test-time compute is now a deployment knob.** o1's API exposes `reasoning_effort = low | medium | high`. R1's serving stack accepts `max_thinking_tokens`. Before 2024 there was no such knob; there was just the model. **Cost-quality trade-off**: $10\times$ to $100\times$ inference compute for hard problems can outperform a $10\times$ larger model, and is often the better economic choice when the harder model would have to be trained, served, and maintained from scratch.
 
-<WidgetFrame title="Test-time compute scaling" caption="Accuracy vs compute curves across reasoning techniques. Direct generation (1× compute), CoT, self-consistency (N×), best-of-N with PRM, tree-of-thoughts (10-100×), and modern reasoning models. Slider for problem difficulty. The widget makes 'why test-time compute scaling matters' visible — easy problems plateau, hard problems benefit dramatically.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 115 (marquee)
-  </div>
+<WidgetFrame title="Test-time compute scaling" caption="Accuracy vs inference compute across six reasoning techniques. Pick a problem difficulty (easy / medium / hard) and watch the curves. On easy problems, everyone reaches the ceiling fast — extra compute is wasted. On hard problems, modern reasoning models pull 30+ points ahead. This is Snell 2024's central empirical insight, and the economic foundation of the o1/R1 paradigm.">
+  <TestTimeComputeCurves client:visible />
 </WidgetFrame>
 
 <Callout type="note">

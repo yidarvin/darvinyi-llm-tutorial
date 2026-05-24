@@ -37,3 +37,4 @@ export { default as QuantizationExplorer } from './ch18/QuantizationExplorer';
 export { default as GranularityVisualizer } from './ch18/GranularityVisualizer';
 export { default as SamplingDistribution } from './ch19/SamplingDistribution';
 export { default as ConstrainedDecoding } from './ch19/ConstrainedDecoding';
+export { default as TestTimeComputeCurves } from './ch20/TestTimeComputeCurves';
