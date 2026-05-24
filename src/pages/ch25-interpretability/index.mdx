@@ -1,0 +1,394 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch25-interpretability
+description: Interpretability — the discipline of opening up trained LLMs and reading what's inside. From the foundational technique (linear probes — train a tiny classifier on hidden states), through the polysemanticity problem (one neuron, many concepts) and the superposition explanation, to sparse autoencoders as a path through superposition (Anthropic's Towards Monosemanticity and Scaling Monosemanticity), mechanistic interpretability and circuits (induction heads, IOI circuit), causal interventions (logit lens, activation patching, ROME), and the current state of a rapidly-evolving research field. The middle chapter of Phase 14 — where safety asks "what we want," interpretability asks "what's actually there," and Ch 26 will ask "how do we measure both."
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Chapter 24 covered safety from the outside in: alignment training, refusal calibration, red-teaming, the helpful-versus-harmless trade-off. **All of those techniques operate on model behavior.** Behavior is one signal; the model's internals are another. **Interpretability is the discipline of reading those internals.** Probes that decode concepts from hidden states. Sparse autoencoders that pull apart superposition into monosemantic features. Circuits — small weight subgraphs that implement specific algorithms. Causal interventions that test whether a component actually matters. **The goal is two-fold**: understand what the model is computing, and verify that it is computing what we want.
+
+This is not a settled science. **Interpretability research is empirical and progressing fast.** Probes have existed since $2016$; the modern sparse-autoencoder breakthrough (Bricken et al., Anthropic) is from $2023$; circuit discovery is largely an artisanal craft on small models. **What works today.** Linear probes for many concepts at $80$ – $95\%$ accuracy on hidden states of frontier models. Sparse autoencoders scaled to Claude $3$ Sonnet with millions of extracted features (Templeton $2024$). Dozens of identified circuits in transformers, including induction heads and the indirect-object-identification circuit. **What is open.** Coverage — do our methods find all the features? Scale — most mechanistic-interpretability work is on small models. Automation — interpreting features still requires humans.
+
+**Why interpretability matters for safety.** Sleeper agents (Hubinger $2024$, referenced in Chapter 24) demonstrated that behavioral safety training can leave invisible backdoors. **Interpretability is the only known route to catch these.** For engineers, interpretability tools are increasingly used in production — Anthropic's monitoring work, OpenAI's interpretability team, deployed feature-clamping pilots. By the end of this chapter you should have both the conceptual toolkit and the operational realism. Chapter 26 then covers how to measure all of this quantitatively, and Phase 15 will assemble the full stack — capability and discipline together — into complete agent architectures.
+
+## The interpretability question
+
+### Two senses of black-box
+
+A trained LLM is opaque in two senses. **Internal opacity** — we cannot easily tell what computations are happening at each layer. **External opacity** — we cannot always predict what the model will do on new inputs. Chapter 24 addressed external opacity through alignment training and red-teaming. **This chapter addresses internal opacity through interpretability research.**
+
+The two are not interchangeable. A well-aligned model behaves correctly on the inputs we test, but behavior alone does not tell us how it produces those outputs, or whether the same internal computation will hold under distribution shift. Interpretability is the second channel — read the model's internals directly rather than infer them from outputs.
+
+### Two complementary goals
+
+Interpretability research has two goals that are sometimes confused but should be kept distinct.
+
+<Equation label="25.interpretability-goals">
+$$\text{understanding} \;:\; \text{what does the model compute?} \quad\text{vs.}\quad \text{verification} \;:\; \text{is it doing what we want?}$$
+</Equation>
+
+**Understanding** is the explanatory goal — describe what the model is computing in human-interpretable terms. **Verification** is the operational goal — confirm or refute alignment claims by reading internal state. The two share methods but have different success criteria; a technique that yields rich understanding may still be too costly or partial to verify production claims, and vice versa.
+
+Three forces make this matter now. **Sleeper agents** (Hubinger $2024$, Chapter 24) demonstrated that behavioral safety training can leave invisible backdoors that survive standard alignment. **Frontier capability** — models that can reason, plan, and act are increasingly hard to evaluate by behavior alone; reading internals provides a second channel. **Trust at scale** — production deployments need confidence that does not depend on perfect red-teaming.
+
+The empirical scale of the field in early $2025$ is worth keeping in mind. **Probe accuracy** for common concepts: $80$ – $95\%$ on hidden states of frontier models. **SAE feature count** (Templeton $2024$): millions extracted from Claude $3$ Sonnet. **Known circuits**: dozens — induction heads, the indirect-object-identification (IOI) circuit, copy-suppression heads, and others. **Active research labs**: Anthropic, OpenAI, DeepMind, Apollo Research, EleutherAI, plus academic groups including Conjecture and Redwood Research.
+
+<Callout type="aside">
+Interpretability is **the verification arm of safety**. Where Chapter 24's techniques shape behavior, interpretability **reads the model's internals to check that the shaping worked**. Both arms matter — behavioral testing and mechanistic verification together — and they answer different questions. This chapter is the working-engineer's introduction to a rapidly-evolving field. The methods are real and the open problems are larger than the methods.
+</Callout>
+
+The next section introduces the foundational technique — probes.
+
+## Probes — reading concepts from hidden states
+
+### The probing recipe
+
+The foundational interpretability technique (Alain & Bengio $2016$) has four steps. **Run inputs through a frozen LLM.** **Extract hidden states at a chosen layer** — typically the residual-stream activations after some block. **Train a small classifier — usually linear — on those hidden states to predict a concept of interest.** **Report the classifier's accuracy** as your *probe accuracy* for that concept at that layer.
+
+What you can probe for spans three categories. **Syntactic concepts** — part-of-speech, dependency relations, sentence boundaries. **Semantic concepts** — sentiment, entity type, factual properties. **Abstract concepts** — deception, hedging, intent, refusal. The same recipe works across all three; the differences live in what data you label and which layer you read.
+
+Why linear probes specifically. **Simple** — fewer parameters than the underlying model, which reduces the risk that the probe "learns the concept" from scratch instead of reading it out. **Fast** — trains in seconds on a few thousand examples. **Interpretable** — a linear weight vector is itself a direction in representation space, and you can analyze it directly.
+
+### What probes tell you (and don't)
+
+What probes tell you is narrow but important. *Is concept $X$ linearly decodable from layer $L$?* — yes or no, with probe accuracy as the signal. *At which layer does concept $X$ emerge?* — train probes at every layer and find where accuracy spikes. *How does concept $X$ evolve across layers?* — compare probe accuracies layer by layer.
+
+What probes *don't* tell you matters as much. **Causation** — a probe says the concept is *present*, not that the model *uses* it. The model might decode a concept and ignore it downstream. **Mechanism** — a probe does not tell you *how* the concept is computed, only that it is there. **Robustness** — probes work in-distribution; out-of-distribution accuracy can collapse without warning.
+
+### Layer-wise feature emergence
+
+A robust empirical finding: concepts come online at different depths. **Early layers** — surface features (token identity, position). **Middle layers** — syntactic and semantic features. **Late layers** — task-specific and output-aligned features. The *layer-wise feature emergence* pattern is one of probing's most reproducible results across architectures and training regimes.
+
+<WidgetFrame title="Linear probing visualizer" caption="Pick a concept (sentiment, syntax, named entity, refusal); see probe accuracy at each layer of a small transformer. The layer-wise emergence pattern becomes visible — different concepts come online at different depths. Demonstrates the foundational interpretability technique and what it can (and can't) tell you about a model's internals.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 143 (secondary)
+  </div>
+</WidgetFrame>
+
+<RunnableCode>
+```python
+import numpy as np
+
+# A linear probe: train logistic regression on hidden-state vectors
+# to predict a binary concept.
+
+def train_linear_probe(hidden_states, labels, n_iterations=500, lr=0.01):
+    """
+    hidden_states: shape (N, d) — N examples of hidden vectors
+    labels: shape (N,) — binary 0/1 labels
+    Returns: weight vector w of shape (d,) and bias b.
+    """
+    N, d = hidden_states.shape
+    np.random.seed(0)
+    w = np.random.randn(d) * 0.01
+    b = 0.0
+
+    for _ in range(n_iterations):
+        logits = hidden_states @ w + b
+        probs = 1 / (1 + np.exp(-logits))
+        grad_w = hidden_states.T @ (probs - labels) / N
+        grad_b = (probs - labels).mean()
+        w -= lr * grad_w
+        b -= lr * grad_b
+    return w, b
+
+
+def probe_accuracy(hidden_states, labels, w, b):
+    preds = (hidden_states @ w + b > 0).astype(int)
+    return (preds == labels).mean()
+
+
+# Mock: pretend we have hidden states from a 256-dim layer
+np.random.seed(7)
+N, d = 200, 256
+
+# Synthetic concept: a specific direction in the representation
+true_direction = np.random.randn(d)
+true_direction /= np.linalg.norm(true_direction)
+
+# Generate hidden states; inject the concept for half the examples
+hidden_states = np.random.randn(N, d) * 0.5
+labels = np.zeros(N, dtype=int)
+labels[N // 2:] = 1
+hidden_states[N // 2:] += true_direction * 1.5
+
+# Train probe
+w, b = train_linear_probe(hidden_states, labels)
+acc = probe_accuracy(hidden_states, labels, w, b)
+print(f"Probe accuracy: {acc:.2%}")
+
+# How aligned is the probe direction to the true direction?
+w_normed = w / np.linalg.norm(w)
+alignment = abs(np.dot(w_normed, true_direction))
+print(f"Direction alignment: {alignment:.3f}  (1.0 = perfect)")
+
+# Observations:
+# - Probe recovers the true direction even from noisy hidden states
+# - A linear classifier finding a concept means the concept is linearly decodable
+# - But probe accuracy does NOT prove the model uses this information downstream
+# - Causal interventions (section 6) are needed to confirm relevance
+```
+</RunnableCode>
+
+<Callout type="note">
+"A probe achieving high accuracy means the model uses that information" is **false**. **A probe shows information is decodable; not that the model uses it.** The model might decode the concept and ignore it downstream. **Probes must be combined with causal interventions** to confirm relevance — covered in section 6. This is the single most common misuse of probing results in the field, and the easiest one to correct: report probe accuracy and at least one intervention together, or label probe results as correlational only.
+</Callout>
+
+The next section explains why neuron-level inspection does not work — polysemanticity.
+
+## The polysemanticity problem
+
+### One neuron, many concepts
+
+What you find when you look at neurons: a single neuron in a trained LLM activates on **many unrelated concepts**. Neuron $1234$ might fire on Python `for` loops, French sentences about cooking, and digit-grouped numbers. Neuron $5678$ might fire on negation, present tense, and the word "however." This is **polysemanticity** — one neuron, multiple concepts.
+
+Polysemanticity is the rule, not the exception. Early efforts to inspect individual neurons produced confusing results precisely because the substrate is polysemantic. Neuron-level interpretability is not a path forward by itself; the concepts you want to find are not stored one-per-neuron.
+
+### Superposition
+
+Why does this happen? **Superposition** (Elhage $2022$) is the explanation. Models need to represent **many more features than they have neurons**. The solution that gradient descent finds is to **store features as approximately-orthogonal directions** in the residual stream, not as individual neurons. When the model needs feature $F$, the relevant direction lights up — which can manifest as activation on several different neurons.
+
+<Equation label="25.superposition">
+$$d_{\text{model}} \;\ll\; \text{number of meaningful features} \;\;\Longrightarrow\;\; \text{features must share neurons}$$
+</Equation>
+
+Three consequences follow. **Neuron-level interpretability is misleading** — a single neuron is not a "feature." **Concepts are encoded in directions**, not units — a feature is a learned vector in activation space. **Decoding requires finding the right directions** — not just inspecting raw activations. Probes work because they find the right *direction* — a linear combination of neurons that aligns with a concept. But you cannot just inspect a model's neurons and know what it is doing. **You need a method to extract the meaningful directions from activations.**
+
+<Callout type="warning">
+"Each neuron in an LLM represents a specific concept" is **false**. **Polysemanticity is the rule, not the exception.** This is why early efforts to inspect individual neurons produced confusing results: neurons do not correspond to concepts; **directions do**. Once you accept that, the field's modern direction — sparse autoencoders to find those directions — follows naturally from the constraint. The right unit of interpretation is the feature, not the neuron, and a feature is a direction in residual-stream space.
+</Callout>
+
+The next section introduces the modern technique that exploits this insight — sparse autoencoders.
+
+## Sparse autoencoders
+
+### The recipe
+
+Sparse autoencoders, or SAEs (Bricken $2023$, Templeton $2024$), are the path through superposition. The recipe is five steps. **Take model activations $\mathbf{x} \in \mathbb{R}^{d}$** from a chosen layer — typically the residual stream after some block. **Train an autoencoder with a much wider hidden layer** — often $8 \times$ to $128 \times$ the residual dimension — and a sparsity penalty. **Encoder**: $\mathbf{f} = \text{ReLU}(W_{\text{enc}} \mathbf{x} + \mathbf{b}_{\text{enc}})$, with $W_{\text{enc}} \in \mathbb{R}^{D \times d}$ and $D \gg d$. **Decoder**: $\hat{\mathbf{x}} = W_{\text{dec}} \mathbf{f} + \mathbf{b}_{\text{dec}}$. **Loss**: $\lVert \mathbf{x} - \hat{\mathbf{x}} \rVert_2^2 + \lambda \lVert \mathbf{f} \rVert_1$ — reconstruction plus an $L_1$ sparsity penalty on the hidden code.
+
+What you get is $D$ "features" $\mathbf{f}_1, \ldots, \mathbf{f}_D$, each a sparse signal across the dataset. For each feature you can **identify the inputs that activate it** — the top-$K$ examples in the dataset that drive that feature high. Most features turn out to be **monosemantic** — they activate on a single interpretable concept, in a way that single neurons do not.
+
+Why this works. The wider layer gives the autoencoder room to **un-pack** superposed features. The sparsity penalty forces each input to be reconstructed by **few features**, which pushes the SAE toward a basis where each direction has a single semantic meaning. Together, the SAE approximates the implicit feature decomposition the model was using internally.
+
+### What features look like
+
+Sanitized examples from Templeton $2024$ on Claude $3$ Sonnet give a sense of what the feature dictionary contains. A feature that activates on **Golden Gate Bridge mentions**. A feature that activates on **code vulnerabilities**. A feature that activates on **scientific reasoning steps**. A feature that activates on **deception or secrecy**. A feature that activates on **specific languages** — Spanish, Mandarin. A feature that activates on **abstract emotional states**. The range is wide enough that "feature dictionary" is the right mental model.
+
+### Why this matters for safety
+
+Three properties make SAEs the interpretability community's current flagship for safety. **Surfaces concepts the model uses internally** — including potentially-dangerous ones (manipulation, dishonesty), which a behavioral test would miss if you do not think to probe for them. **Enables targeted intervention** — clamp a feature's activation high or low, and observe how behavior changes. **Validates alignment claims** — confirm that "deception" features do not activate during honest behavior, or that "refusal" features fire on requests the model declines.
+
+<WidgetFrame title="SAE feature explorer" caption="Browse a curated set of SAE features — each labeled with its interpretable concept (Golden Gate Bridge, code vulnerabilities, deceptive framings, etc.). Pick a feature; see the top-K inputs that activate it. The shared embedding space (decoder weights) shows related features clustering together. The widget makes the SAE → monosemantic features pipeline concrete — Anthropic's flagship interpretability direction.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 142 (marquee)
+  </div>
+</WidgetFrame>
+
+<RunnableCode>
+```python
+import numpy as np
+
+# A tiny sparse autoencoder.
+# Real SAEs operate on residual stream activations (d ~ 512-4096) with
+# wider hidden dims (D = 8x-128x d) and millions of training examples.
+# Toy version: d=32, D=128, 500 examples.
+
+np.random.seed(11)
+d = 32       # activation dim
+D = 128      # SAE hidden dim (wide)
+N = 500
+
+# Synthesize inputs from a small number of "true" features
+n_true_features = 12
+true_features = np.random.randn(n_true_features, d)
+true_features /= np.linalg.norm(true_features, axis=1, keepdims=True)
+
+X = np.zeros((N, d))
+for i in range(N):
+    active = np.random.choice(n_true_features, size=2, replace=False)
+    coeffs = np.random.rand(2)
+    X[i] = coeffs[0] * true_features[active[0]] + coeffs[1] * true_features[active[1]]
+X += np.random.randn(N, d) * 0.05
+
+# Initialize SAE
+W_enc = np.random.randn(D, d) * 0.1
+b_enc = np.zeros(D)
+W_dec = np.random.randn(d, D) * 0.1
+b_dec = np.zeros(d)
+
+# Train
+n_iterations = 1500
+lr = 0.02
+sparsity_lambda = 0.05
+
+for step in range(n_iterations):
+    pre = X @ W_enc.T + b_enc
+    f = np.maximum(0, pre)
+    x_hat = f @ W_dec.T + b_dec
+
+    dx_hat = -2 * (X - x_hat) / N
+    dW_dec = dx_hat.T @ f
+    db_dec = dx_hat.sum(axis=0)
+    df = dx_hat @ W_dec + sparsity_lambda / N
+    df_pre = df * (pre > 0)
+    dW_enc = df_pre.T @ X
+    db_enc = df_pre.sum(axis=0)
+
+    W_enc -= lr * dW_enc; b_enc -= lr * db_enc
+    W_dec -= lr * dW_dec; b_dec -= lr * db_dec
+
+    if step % 300 == 0:
+        active = (f > 0.01).any(axis=0).sum()
+        avg_per_input = (f > 0.01).sum(axis=1).mean()
+        recon = np.mean(np.sum((X - x_hat) ** 2, axis=1))
+        print(f"step {step:>4}  recon {recon:.4f}  "
+              f"sparsity {avg_per_input:.1f} active/input  "
+              f"{active} live of {D}")
+
+print(f"\nTrue feature count: {n_true_features}")
+print(f"SAE recovers approximately this number of live features.")
+
+# Observations:
+# - The SAE is wider than the input (D > d) — room to un-pack superposition
+# - Sparsity penalty forces few features active per input
+# - Trained SAE recovers approximately the original feature count
+# - In real SAEs at production scale: millions of features, mostly monosemantic
+```
+</RunnableCode>
+
+The next section turns from "what features the model uses" to "how the model computes" — mechanistic interpretability.
+
+## Mechanistic interpretability — circuits
+
+### The mech-interp ambition
+
+Mechanistic interpretability — *mech-interp* in the field's shorthand — has a bigger ambition than probes or SAEs. Not just identify *what* concepts the model uses, but **identify *how* the model computes** them — tracing specific algorithmic computations through specific weight subgraphs. **A circuit** is a small subgraph of weights — a few attention heads plus MLPs — that implements a specific, interpretable algorithm, verifiable by activation patching or direct inspection.
+
+### Canonical examples
+
+Three circuits are worth knowing by name. **Curve detectors in InceptionV1** (Cammarata $2020$) — convolutional neurons that detect curves at various orientations, built from simpler edge detectors in lower layers, verified by examining activations and weight patterns. The reference example from the original Distill circuits thread, and the proof-of-concept that mechanistic interpretability is a tractable empirical project.
+
+**Induction heads in transformers** (Elhage $2021$, Olsson $2022$) — a pair of attention heads that implement: *find the previous occurrence of the current token; copy what came after it.* Pattern: `A B ... A → B`. **Load-bearing for in-context learning** — ablating induction heads drops in-context learning capability substantially, which is a strong causal claim about a non-obvious component of model behavior.
+
+**The Indirect Object Identification (IOI) circuit** — a specific GPT-$2$-small circuit for sentences like *"When John and Mary went to the store, John gave a drink to Mary."* The circuit identifies "Mary" as the indirect object. It decomposes into roughly $25$ attention heads with named roles — S-inhibition heads, name-mover heads, and others. **The first circuit in a real LLM mapped at component-level detail**, and the canonical case study for what mech-interp produces when it succeeds.
+
+### Why it's hard at scale
+
+The methodology is straightforward to describe. Identify a behavior — e.g., "the model copies text from earlier in context." Hypothesize a circuit that might implement it. Verify by activation patching — remove or alter the hypothesized components and see whether the behavior breaks. Refine and characterize the components' individual roles.
+
+Three obstacles make this hard at scale. **Most behaviors are not localized** — they span many layers and heads, and the "circuit" you would draw is more like a wide subnetwork than a small subgraph. **Components are polysemantic** — they participate in many circuits, which means analyzing one circuit in isolation is misleading about what the component does in general. **Verification is labor-intensive** — confirming a circuit can take weeks of activation patching and ablation studies even on a small model.
+
+<Callout type="aside">
+"Mechanistic interpretability scales to GPT-$4$-sized models" is **mostly false** as of early $2025$. **Most published circuit work is on small models** — GPT-$2$ small, toy transformers, the InceptionV1 vision-model circuits from the Distill thread. **SAEs scale better** (Templeton $2024$ reached Claude $3$ Sonnet); circuit discovery does not yet. **This is one of the field's largest open problems** — automated circuit discovery (ACDC and successors) is an active research direction precisely because the manual craft does not scale.
+</Callout>
+
+The next section covers the techniques that verify circuits — causal interventions.
+
+## Causal interventions
+
+### From correlation to causation
+
+Probes correlate; interventions cause. The discipline pivots from "concept $X$ is present in the activations" to "concept $X$ *causes* behavior $Y$" via direct manipulation of the model. **A probe** shows that information is decodable from a layer. **An intervention** shows that the layer's encoding of that information **affects downstream behavior**. **Both are necessary**; neither alone suffices, and the most common methodological error in published interpretability work is treating a high probe accuracy as sufficient evidence for a causal claim.
+
+### The intervention toolkit
+
+Five techniques carry most of the causal-intervention work in modern interpretability.
+
+**Logit lens** (nostalgebraist $2020$) — project intermediate residual stream activations through the unembedding matrix; see what the model "would predict" at each layer. Surfaces the layer-by-layer evolution of predictions. The simplest causal-intervention technique and a useful baseline.
+
+**Tuned lens** (Belrose $2023$) — a refined logit lens with learned layer-specific projections. More accurate than the unmodified logit lens; the same conceptual frame.
+
+**Activation patching** — run two prompts, a *clean* one that produces the correct answer and a *corrupted* one that produces the wrong answer. Copy activations from clean to corrupted at specific points. If the corrupted prompt now produces the correct answer, those activations carry the relevant information. Identifies *which components store specific information* and is the workhorse of mech-interp.
+
+**ROME** (Meng $2022$) — identify MLP layers that store factual associations; surgically edit MLP weights to change a fact (e.g., *"Paris is the capital of France"* $\to$ *"Berlin is the capital of France"*). Demonstrates causal localization — facts have specific weights — and serves as a clean proof-of-concept for the entire intervention paradigm.
+
+**Steering vectors** — add a learned direction to the residual stream to push the model toward a behavior; subtract to push it away. Crude but effective for behavior modulation, and a common starting point for "make the model more X" interventions before reaching for the heavier machinery.
+
+**Feature clamping** — the SAE-enabled variant of steering. Force an SAE feature's activation high or low; observe the behavioral effect. Maps SAE features to causal influence in a way that pure observation cannot.
+
+<RunnableCode>
+```python
+import numpy as np
+
+# Mock model: a simple two-layer "transformer" with handcrafted behavior.
+# Real activation patching operates on actual transformer hidden states.
+
+def layer1(x):
+    return np.tanh(x)
+
+def layer2(h):
+    return h @ np.array([0.5, -0.5, 0.3])
+
+def model_forward(x):
+    h1 = layer1(x)
+    out = layer2(h1)
+    return h1, out
+
+
+# Two prompts: clean produces correct answer; corrupted produces wrong.
+clean_input = np.array([1.0, 0.5, -0.5])
+corrupt_input = np.array([-1.0, 0.5, -0.5])      # only first dim differs
+
+h1_clean, out_clean = model_forward(clean_input)
+h1_corrupt, out_corrupt = model_forward(corrupt_input)
+
+print(f"Clean output:     {out_clean:.4f}")
+print(f"Corrupted output: {out_corrupt:.4f}\n")
+
+# Patch: replace layer1's output for corrupted input with clean's h1.
+# If output flips to clean, layer1's output carries the relevant info.
+def patched_forward(h1_to_use):
+    return layer2(h1_to_use)
+
+patched = patched_forward(h1_clean)
+print(f"Patched (corrupted input, clean's layer1 output): {patched:.4f}")
+print(f"Matches clean output? {np.isclose(patched, out_clean)}")
+print()
+print("Conclusion: Layer1's output causally determines the difference.")
+print("This is the basic logic of activation patching at scale.")
+
+# Observations:
+# - Patching pinpoints WHERE specific information lives in the network
+# - Combined with probes (section 2), gives both correlation AND causation
+# - Real activation patching: tests individual attention heads, MLPs, single neurons
+# - The IOI circuit was identified primarily via systematic activation patching
+```
+</RunnableCode>
+
+The next section takes stock of where the field is.
+
+## The current state of the field
+
+### What works
+
+Four areas of progress as of early $2025$. **Probing** — mature; works well for many concepts; layer-wise emergence is well-characterized across architectures. **Sparse autoencoders** — rapidly advancing; Anthropic's flagship direction; scaling to frontier models with Templeton $2024$. **Circuits** — dozens identified in small models, with the canonical examples (induction heads, IOI) well-established; scaling beyond GPT-$2$ small is the open frontier. **Causal interventions** — well-developed methodology; widely used; combined with SAEs and circuits routinely in current papers.
+
+### What's open
+
+Five open problems define the field's near-term research agenda. **Coverage** — do our methods find *all* the model's features? Almost certainly not; current SAEs are large but presumably incomplete dictionaries. **Scale** — most mech-interp work is on small models; frontier models are largely uncharted at the circuit level. **Automation** — discovering circuits and interpreting features still requires significant human labor; ACDC and successors attack this but have not removed the bottleneck. **Verification** — how do we know a circuit truly explains a behavior, versus offering a partial story that happens to fit the patching results? **Generalization** — do circuits found at one scale or task transfer to others?
+
+Where research is heading shapes what engineers should expect over the next few years. **Larger SAE deployments** — more features, more models. **Cross-layer circuit discovery** — tracing computations across all layers, not just within a few. **Safety applications** — using interpretability to detect specific dangerous behaviors before they manifest in evaluations. **Real-time monitoring** — applying interpretability tools to production model inference, which is a substantial engineering project on top of the research advances.
+
+Key labs and groups, with rough specialization. **Anthropic** — SAEs (Bricken $2023$, Templeton $2024$); circuits (Elhage $2021$); interpretability as a core safety bet. **OpenAI** — sparse coding and probing; dedicated interpretability team. **DeepMind** — mechanistic interpretability; circuit discovery. **Apollo Research** — focused on detecting deceptive alignment via interpretability. **EleutherAI** — open-source interpretability tools, including TransformerLens. **Academic groups** including Conjecture, Redwood Research, and university labs.
+
+<Callout type="note">
+"Interpretability is a solved science" is **false**. **It is an empirical, rapidly-evolving discipline**, not a mature science. New methods emerge yearly; older methods get superseded. **Engineers should treat interpretability tools as research-grade**, with appropriate caveats. The same care applies as in any rapidly-progressing area — the techniques work in the regimes they have been demonstrated in, but the field is moving and yesterday's best practice is sometimes today's footnote.
+</Callout>
+
+The next section closes the chapter and previews Phase 14's remaining trajectory.
+
+## Phase 14 ahead
+
+### Connecting interp to eval
+
+Phase 14 is three chapters with a shared central question. **Can capable models be made trustworthy at scale?** Chapter 24 covered what we want the model to do, how we train it, and how we red-team. Chapter 25 — this chapter — covers what the model is *actually* computing internally. Chapter 26 covers how we measure capability and safety quantitatively, including the methodology problems that make many published benchmark numbers misleading.
+
+The connection between the three is structural. **Safety plus evaluation without interpretability** is behavioral testing only — catches what we think to test for; misses what we do not. **Safety plus interpretability without evaluation** gives us tools but no measurement — we cannot say *"is this model safer than the last?"* **Interpretability plus evaluation without safety** gives us tools and measurements but no operational discipline. All three together is a complete safety practice — *what* we want, *what* the model is computing, *whether* it is improving.
+
+### The phase's central question
+
+Interpretability is the verification arm of safety. Probes read concepts from hidden states; sparse autoencoders pull apart superposition into monosemantic features; circuits reveal how the model computes; causal interventions confirm that components actually matter. **None of these techniques is complete; together, they are a microscope on alignment.** Production deployments use them — Anthropic's SAE work on Claude $3$ Sonnet, OpenAI's interpretability team, deployed feature-clamping pilots — and the toolkit is improving rapidly.
+
+Chapter 26 opens the evaluation discipline. If interpretability tells you what the model is computing, evaluation tells you how well — capability benchmarks, safety benchmarks, leaderboards, what they measure and what they miss. **Together with Chapter 24, the three disciplines of Phase 14 turn capability into trustworthiness.** Phase 15 then assembles the full stack — capability and discipline together — into complete agent architectures. Three chapters from the curriculum's end.
