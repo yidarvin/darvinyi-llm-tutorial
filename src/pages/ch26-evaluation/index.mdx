@@ -1,0 +1,438 @@
+---
+layout: ../../layouts/ChapterLayout.astro
+slug: ch26-evaluation
+description: Evaluation — the discipline that turns intuition about LLM quality into measurement. From the operational definition of an eval (three flavors — standard benchmarks, open-ended evaluation, eval design), through capability benchmarks (MMLU, HumanEval, HellaSwag, GPQA, MATH), safety benchmarks (HarmBench, TruthfulQA, ToxiGen, WMDP), agentic benchmarks (SWE-bench, GAIA, OSWorld), LLM-as-judge methodology and its biases (Zheng 2023), eval failure modes (saturation, contamination, reward hacking, Goodhart's law), and designing new evals. Closes Phase 14's discipline arc — safety, interpretability, evaluation — and bridges to Phase 15 (Agents), the curriculum's final arc.
+---
+
+import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
+import { RunnableCode } from '@components/code';
+
+Chapter 24 covered safety from the outside — alignment training, red-teaming, what we want the model to do. Chapter 25 covered interpretability from the inside — probes, sparse autoencoders, circuits, what the model is *actually* computing. **This chapter covers the third discipline of Phase 14: how do we measure both?** Evaluation turns *"this model is better"* into a measurable claim. Without it, AI development is opinion and marketing. With it, claims become comparable — across models, across techniques, across releases. **It is the bridge from craft to engineering.**
+
+Modern AI evaluation is three flavors. **Standard benchmarks** — fixed test sets with known answers (MMLU, HumanEval, HellaSwag, GPQA, MATH). **Open-ended evaluation** — LLM-as-judge methodology (MT-Bench), crowdsourced human preferences (Chatbot Arena), structured rubrics. **Eval design** — making new evaluations for new capabilities (SWE-bench for agentic coding, GAIA for general AI assistants, OSWorld for computer use). This chapter covers all three, plus their failure modes — saturation, contamination, reward hacking, Goodhart's law — and how production teams design their own evals.
+
+The discipline is not a solved science. **Benchmarks saturate within $12$ – $36$ months.** Major benchmarks (GSM8K, MATH, MMLU, HumanEval) have documented contamination. Models routinely reward-hack benchmarks they are optimized against. **Modern AI eval is a dashboard, not a number.** By the end of this chapter you should know which benchmarks exist, what they measure, how they fail, and how to design your own. **Then Phase 15 opens** with agents — ReAct foundations, agents from scratch, multi-agent orchestration, agent-eval frameworks. **The curriculum's final arc.**
+
+## What is an evaluation?
+
+### The operational definition
+
+What eval teams actually do, stripped of jargon, is four steps. **Define what to measure** — a specific capability, safety property, alignment claim, or utility signal. **Build or choose a test set** — a fixed benchmark, a dynamic arena, a human-evaluation protocol. **Run models against it** and compute a score. **Compare across models** to claim improvement, equivalence, or regression. The discipline is what fills in each of those steps rigorously.
+
+### Three flavors
+
+Modern AI evaluation decomposes operationally into three families that share methodology but answer different questions.
+
+<Equation label="26.eval-flavors">
+$$\text{standard benchmarks} \;\;\Vert\;\; \text{open-ended evaluation} \;\;\Vert\;\; \text{eval design}$$
+</Equation>
+
+**Standard benchmarks** — fixed test sets with known answers; MMLU, HumanEval, HarmBench are the canonical examples. **Open-ended evaluation** — LLM-as-judge, human evaluation, dynamic arenas where there is no single right answer; MT-Bench and Chatbot Arena are the references. **Eval design** — making new evaluations for new capabilities, as the field did with SWE-bench for agentic coding, GAIA for general AI assistants, WMDP for dangerous-knowledge proxy.
+
+Why evaluation is hard, in five points. **Calibration** — a score of $75\%$ does not mean the model is *"$75\%$ capable;"* the meaning depends entirely on the distribution. **Saturation** — when models max out a benchmark, it stops being informative. **Contamination** — if test data appeared in pretraining, scores inflate without anyone necessarily noticing. **Goodhart's law** — when a metric becomes a target, it ceases to be a good metric. **Distribution shift** — benchmark distribution is rarely the deployment distribution.
+
+The empirical scale of the field in early $2025$ is worth keeping in mind. **Frontier model release cycles** — $6$ to $12$ months. **Active benchmarks** — roughly $50$ to $100$ widely cited, with hundreds more domain-specific. **Saturation pace** — a hard benchmark can saturate in $12$ to $24$ months from release. **Cost of running** — $1{,}000$ to $100{,}000$ inferences per model per benchmark, often thousands of dollars per evaluation pass.
+
+<Callout type="aside">
+Evaluation is **the bridge from craft to engineering**. Without it, AI development cannot claim verifiable progress; with it, comparisons across models, prompts, and techniques become rigorous. **But evaluation is also where engineering meets economics** — leaderboard rankings affect billions in market cap, which creates incentives to game metrics. This chapter is the operational toolkit, with the failure modes built in rather than papered over.
+</Callout>
+
+The next section covers the largest category — capability benchmarks.
+
+## Capability benchmarks
+
+### The landscape
+
+The capability-benchmark landscape in early $2025$ is built around a handful of names every working engineer should recognize.
+
+| Benchmark | Released | What it measures | Saturation |
+|-----------|----------|------------------|------------|
+| MMLU | $2020$ | $57$ subjects, multiple choice | Mostly saturated (~$88$ – $90\%$) |
+| HumanEval | $2021$ | Python code generation | Saturated (~$95\%$+) |
+| HellaSwag | $2019$ | Common-sense reasoning | Saturated (~$95\%$+) |
+| MATH | $2021$ | Competition math | Saturated (~$95\%$+) |
+| **GPQA** | **$2023$** | **Graduate-level science** | **Active (~$55$ – $70\%$ frontier)** |
+| BBH | $2022$ | $23$ hard tasks | Mostly saturated |
+| MMLU-Pro | $2024$ | Harder MMLU variant | Active |
+
+The pattern is consistent. **Most benchmarks saturate in $12$ to $36$ months.** GPQA (Rein $2023$) is the modern hard benchmark; new ones are released as old ones max out. The cycle is now structural — frontier capability outruns benchmark design, and the response is *another* benchmark rather than a new capability claim.
+
+What capability benchmarks measure well is narrow but real. **Knowledge breadth** — MMLU spans $57$ subjects across STEM, humanities, social sciences. **Code synthesis** — HumanEval is a clean signal of "can produce working code under hidden test cases." **Math reasoning** — MATH stress-tests step-by-step computation on competition problems. **Logical and scientific reasoning** — GPQA pushes graduate-level questions that are "Google-proof," meaning humans with web access still score around $34\%$.
+
+What they measure poorly is also real. **Open-ended generation quality** — no clean metric exists. **Conversational ability** — single-turn evals miss conversational drift across turns. **Long-context reasoning** — most benchmarks are short. **Real-world tasks** — everything in a benchmark is a stylized version of work, not work itself.
+
+### Methodology
+
+Three formats carry most capability benchmarks. **Multi-choice format** (MMLU, GPQA) — easy to score, fast to run, vulnerable to surface heuristics like "always pick C." **Open-ended format with hidden tests** (HumanEval, MATH) — test-case verification gives a cleaner signal but costs more compute. **Chain-of-thought variants** — most modern benchmarks now report CoT-allowed and CoT-restricted scores separately because the gap is large enough to matter.
+
+### Score interpretation
+
+A bare score is almost never enough. **Random baseline** for a four-choice multiple-choice question is $25\%$. **Frontier model expectation** as of $2025$ is $60$ to $90\%$ on active hard benchmarks, $90\%$+ on saturated ones. **Human expert ceiling** is $80$ to $95\%$ on most benchmarks, with humans rarely scoring $100\%$ even on tasks they designed. Quoting a single number without these reference points gives no information about how to compare.
+
+<WidgetFrame title="Benchmark heatmap" caption="A heatmap of ~10 frontier models × ~10 benchmarks (capability + safety + agentic). Each cell shows the model's score with color coding. Sort by any column to see the ranking on that benchmark. Visualizes the eval landscape at a glance — and which benchmarks have saturated (whole columns near 95%+). Demonstrates the chapter's central operational claim: modern AI eval is a dashboard, not a number.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 116 (marquee)
+  </div>
+</WidgetFrame>
+
+<RunnableCode>
+```python
+# A minimal benchmark scoring harness.
+# Real benchmarks: thousands of items, more nuanced scoring.
+# The harness pattern (run + score + summarize) is the same at any scale.
+
+TEST_ITEMS = [
+    {'q': 'What is 2 + 2?',                   'category': 'math',    'answer': '4'},
+    {'q': 'What is 5 * 7?',                   'category': 'math',    'answer': '35'},
+    {'q': 'What is sqrt(144)?',               'category': 'math',    'answer': '12'},
+    {'q': 'When was the Declaration signed?', 'category': 'history', 'answer': '1776'},
+    {'q': 'First US president?',              'category': 'history', 'answer': 'George Washington'},
+    {'q': 'What year did WWII end?',          'category': 'history', 'answer': '1945'},
+]
+
+
+def mock_model(question):
+    """Pretend this is a real model API call."""
+    answers = {
+        '2 + 2':       '4',
+        '5 * 7':       '35',
+        'sqrt(144)':   '12',
+        'Declaration': '1776',
+        'First US':    'George Washington',
+        'WWII end':    '1944',                     # wrong!
+    }
+    for keyword, answer in answers.items():
+        if keyword in question:
+            return answer
+    return '???'
+
+
+def run_benchmark(items, model_fn):
+    results = []
+    for item in items:
+        pred = model_fn(item['q'])
+        correct = pred.strip().lower() == item['answer'].strip().lower()
+        results.append({**item, 'predicted': pred, 'correct': correct})
+    return results
+
+
+def summarize(results):
+    n = len(results)
+    correct = sum(r['correct'] for r in results)
+    by_category = {}
+    for cat in set(r['category'] for r in results):
+        cat_results = [r for r in results if r['category'] == cat]
+        by_category[cat] = sum(r['correct'] for r in cat_results) / len(cat_results)
+    return {'overall': correct / n, 'by_category': by_category, 'n': n, 'correct': correct}
+
+
+results = run_benchmark(TEST_ITEMS, mock_model)
+summary = summarize(results)
+
+print(f"Benchmark results")
+print(f"  Overall: {summary['correct']}/{summary['n']} = {summary['overall']:.0%}")
+print(f"  By category:")
+for cat, acc in summary['by_category'].items():
+    print(f"    {cat:>10}:  {acc:.0%}")
+
+# Observations:
+# - Even a tiny benchmark surfaces per-category variation (math vs history)
+# - Real benchmarks: thousands of items, paraphrase-tolerant scoring
+# - Per-category breakdown beats overall accuracy — never compare on one number
+```
+</RunnableCode>
+
+<Callout type="note">
+*"A higher MMLU score means a better model"* is **false in isolation**. MMLU is one signal among many. A model with $88\%$ MMLU and $30\%$ TruthfulQA is unsafe; a model with $75\%$ MMLU and $60\%$ safety scores may be the better choice for production. **Single-metric comparisons are misleading.** This is why the chapter's central operational claim is: **modern AI eval is a dashboard, not a number.** Treat any leaderboard headline that quotes one benchmark as a starting point, not a conclusion.
+</Callout>
+
+The next section turns to the safety-eval landscape, briefly, since Chapter 24 already covered the safety side.
+
+## Safety benchmarks
+
+### The landscape
+
+The safety-benchmark landscape is small and concentrated. **TruthfulQA** (Lin $2021$) — $817$ questions on common falsehoods; measures whether models repeat them. **HarmBench** (Mazeika $2024$) — jailbreak success rates across categories of harm; the standardized red-teaming reference. **JailbreakBench** — another standardized jailbreak eval; allows controlled comparisons across attacks and defenses. **ToxiGen** — toxic-versus-benign language classification with adversarial coverage. **WMDP** (Hendrycks $2024$) — a proxy benchmark for dangerous CBRN knowledge, used by frontier labs to test whether models retain capabilities they should not have.
+
+What safety benchmarks measure well is direct and useful. **Direct harm** — HarmBench asks whether the model produces harmful content when prompted. **Truthfulness** — TruthfulQA asks whether the model gives correct answers rather than popular ones. **Dangerous-capability proxy** — WMDP asks whether the model *could* help with dangerous tasks even if it would refuse.
+
+### Calibrated refusal evaluation
+
+What safety benchmarks measure poorly matters as much. **Calibrated refusals** — over-refusal versus under-refusal need separate evals; Chapter 24 covered why a model that refuses everything is as broken as one that refuses nothing. **Novel jailbreaks** — by definition, a benchmark covers known patterns, not the next attack. **Multi-turn manipulation** — most safety benchmarks are single-turn, but real attacks span conversations. **Long-tail failures** — rare-but-severe failures don't show up in aggregate scores; you have to look for them.
+
+The connection back to Chapter 24 is structural. **Safety benchmarks are necessary but not sufficient for deployment decisions.** They are one signal; red-teaming, interpretability monitoring (Chapter 25), and post-deployment review fill out the picture. A team shipping a model on safety scores alone is shipping on partial evidence.
+
+<Callout type="aside">
+Safety benchmarks measure **what the model produces** under known attack patterns. **Capability versus propensity** — the distinction from Chapter 24 — is the key frame here. WMDP measures what the model *could* do (capability); HarmBench measures what it *does* do under attack (propensity). **Both signals matter for deployment**, and a benchmark that conflates them — or a team that only tracks one — misses half the picture.
+</Callout>
+
+The next section turns to the new frontier — agentic benchmarks.
+
+## Agentic benchmarks
+
+### The new frontier
+
+Phase 13 covered agentic capabilities — tool use (Ch 21), retrieval (Ch 22), multimodal grounding (Ch 23). Phase 14's eval discipline needs benchmarks for those capabilities, and the field has been producing them on a roughly yearly cadence since $2023$. **Agentic benchmarks are the new frontier of evaluation** because they are the new frontier of capability.
+
+### The landscape
+
+The names worth knowing track the deployment archetypes engineers actually build for. **SWE-bench** (Jimenez $2023$) — real GitHub issues with hidden tests; produce a patch that passes; the reference agentic-coding benchmark. **GAIA** (Mialon $2023$) — multi-step real-world tasks that require web browsing, tool use, and reasoning; humans score about $92\%$, frontier agents have moved from under $30\%$ in $2023$ to $60$ – $75\%$ in $2024$ – $25$. **OSWorld** (Xie $2024$) — computer-use tasks with real desktop applications; $369$ tasks across browsers, file systems, productivity apps. **MLE-bench** (Chen $2024$) — $75$ Kaggle competitions where agents produce code and submit predictions. **WebArena** — web-browsing agent tasks. **Cybench** — cybersecurity capture-the-flag tasks. **Upwork HAPI** — real freelance tasks across thousands of categories, illustrative of the kind of applied evaluation production teams build for their own use cases.
+
+What agentic benchmarks measure well is exactly what production teams care about. **End-to-end task completion** — did the agent solve the task, not just produce plausible intermediate steps? **Tool-use chains** — can the agent compose multiple tools across multiple turns? **Resilience to environmental noise** — does the agent recover from tool errors, transient failures, partial information? **Real-world relevance** — the tasks look like actual work rather than stylized abstractions.
+
+What they measure poorly is also real and worth tracking. **Cost** — each evaluation run is expensive; agents take many turns, each turn is an inference, frontier agentic evals can run hundreds of dollars per attempt. **Reproducibility** — real environments change; tools fail; flaky tests show up at the benchmark level too. **Specific failure modes** — knowing a SWE-bench score does not tell you *what* is failing without instrumentation on top of the score.
+
+### Trajectory
+
+The trajectory is fast and visible. **$2023$** — most agents scored under $30\%$ on GAIA. **$2024$** — $50$ to $65\%$ with frontier models and good scaffolding became routine. **$2025$** — $70\%$+ is achievable; GAIA may saturate within one or two years. SWE-bench has moved from roughly $30\%$ to $65\%$ on the same window for the same reason.
+
+Why this matters for engineers building products: as classic benchmarks saturate, **agentic benchmarks become the discriminator** between frontier models. A team picking models on MMLU in $2025$ is choosing on a saturated metric; the same team picking on SWE-bench or GAIA is picking on the metric that still moves.
+
+<Callout type="note">
+Agentic benchmarks are **expensive and hard to design**. A single SWE-bench run can cost hundreds of dollars in inference for a frontier model with multi-turn agent scaffolding; reproducibility is harder than for fixed test sets because environments drift and tools fail. **But they measure what production teams actually care about** — task completion in realistic settings. Engineers building agent products **must** track agentic benchmarks; classic capability benchmarks alone do not tell you whether your product will work.
+</Callout>
+
+The next section covers the methodology that connects benchmarks to open-ended quality — LLM-as-judge.
+
+## LLM-as-judge
+
+### The methodology
+
+LLM-as-judge (Zheng $2023$) is the most practically-relevant evaluation method for engineers shipping chat products today. The three-step recipe is direct. **Run two models on the same prompts.** **Have a stronger model judge which response is better.** **Aggregate judgments into win rates, Elo ratings, or pairwise scores.** The reference implementations are **MT-Bench** ($80$ multi-turn questions across $8$ categories; GPT-$4$ judges) and **Chatbot Arena** (crowdsourced humans judge anonymized battles; Elo ratings updated continuously, over a million votes by $2025$).
+
+### Bias modes
+
+LLM judges have documented failure modes, all from Zheng $2023$ and confirmed in subsequent work.
+
+**Position bias** — judges systematically favor the first response shown. The effect is large enough that flipping order can flip the verdict on a substantial fraction of items. **Verbosity bias** — judges prefer longer responses, often regardless of whether the extra words add anything. **Self-enhancement bias** — a judge model prefers responses from its own family; GPT-$4$ judging GPT-$4$-versus-Claude is not neutral. **Coverage bias** — judges miss subtle factual errors they do not themselves know; an open-ended factual question can be judged "correct" by an LLM that itself believes the same wrong answer.
+
+The mitigations are equally well-documented. **Randomize positions** in pairwise comparisons to average out position bias. **Multiple judges** of different families to average out self-enhancement. **Calibrate judges** against human-labeled gold data on a sample of items. **Reasoning judgments** — have the judge explain its reasoning before giving a verdict; reduces some biases by forcing the judge to articulate what it is comparing.
+
+### Chatbot Arena
+
+Chatbot Arena (Chiang $2024$) deserves its own beat because of its outsized influence. Crowdsourced humans pick the better of two anonymized model responses; Elo ratings update continuously. **The closest thing to a "ground truth" capability ranking** for chat-style use. But it is biased toward chat users' preferences, does not measure agentic capability well, and the prompt distribution is what users *ask*, not what production deployments necessarily encounter. As of $2025$ it is the most-cited open leaderboard; treat it as one ranking among many rather than the ranking.
+
+When to reach for LLM-as-judge in practice. **Useful** — open-ended generation, conversation quality, style comparisons, anything without a programmatic ground truth. **Less useful** — factual accuracy (judges can be wrong), math and code (use programmatic verification), safety (use specialized benchmarks rather than asking a judge to spot harm).
+
+<WidgetFrame title="LLM-as-judge bias demo" caption="See an LLM judge evaluate two responses to the same prompt under both orderings (A first vs B first). When the judge's verdict flips with order, that's position bias — a documented failure mode (Zheng 2023). Demonstrates swap-mitigation, the simplest reliable defense. Also shows verbosity bias when one response is much longer than the other.">
+  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
+    Widget content — session 117 (secondary)
+  </div>
+</WidgetFrame>
+
+<RunnableCode>
+```python
+# LLM-as-judge with position-bias mitigation via swapped-position re-judging.
+
+def mock_judge(prompt, response_a, response_b):
+    """
+    Mock LLM-as-judge with documented verbosity bias.
+    Real implementation: call GPT-4 or Claude with a judge prompt.
+    """
+    # SIMULATE verbosity bias: judge favors longer responses
+    if len(response_a) > len(response_b) * 1.3:
+        return 'A'
+    if len(response_b) > len(response_a) * 1.3:
+        return 'B'
+    return 'tie'
+
+
+def judge_with_swap(prompt, response_a, response_b):
+    """
+    Run the judge in both orderings. If verdicts disagree, return 'tie'.
+    Mitigates position bias (Zheng 2023).
+    """
+    judgment_ab = mock_judge(prompt, response_a, response_b)
+    judgment_ba = mock_judge(prompt, response_b, response_a)
+    # Re-map judgment_ba: 'A' in the second call means response_b won → maps to 'B'
+    if judgment_ba == 'A':
+        judgment_ba = 'B'
+    elif judgment_ba == 'B':
+        judgment_ba = 'A'
+
+    if judgment_ab == judgment_ba:
+        return judgment_ab
+    return 'tie'   # bias detected → call it a tie
+
+
+test_cases = [
+    {
+        'prompt': 'Explain photosynthesis briefly.',
+        'response_a': 'Plants use sunlight, CO2, and water to produce sugar and oxygen.',
+        'response_b': ('Photosynthesis is the process by which green plants and certain other organisms '
+                       'use sunlight to synthesize foods with the help of chlorophyll. The chemical '
+                       'reaction involves carbon dioxide and water producing glucose and oxygen as a byproduct.'),
+    },
+    {
+        'prompt': 'What is 12 * 11?',
+        'response_a': '132',
+        'response_b': '132',
+    },
+]
+
+print("LLM-as-judge with swap mitigation:\n")
+for case in test_cases:
+    naive = mock_judge(case['prompt'], case['response_a'], case['response_b'])
+    mitigated = judge_with_swap(case['prompt'], case['response_a'], case['response_b'])
+
+    print(f"Prompt: {case['prompt']}")
+    print(f"  A ({len(case['response_a']):>3} chars): {case['response_a'][:60]}...")
+    print(f"  B ({len(case['response_b']):>3} chars): {case['response_b'][:60]}...")
+    print(f"  Naive:     {naive}")
+    print(f"  Mitigated: {mitigated}\n")
+
+# Observations:
+# - Verbosity bias: naive judge favors the longer response
+# - Swap mitigation catches position bias (a different failure mode)
+# - Verbosity bias needs rubric-based judging or human calibration
+# - Real LLM-as-judge: multiple judges, calibration, explicit reasoning
+```
+</RunnableCode>
+
+The next section covers what goes wrong with evaluation itself — the failure modes.
+
+## Eval failure modes
+
+### Saturation
+
+A benchmark stops being informative when models reach the ceiling. **HumanEval** was the code benchmark for years; now frontier models score $95\%$+ and small differences sit inside noise. The response is structural — **build harder benchmarks** as old ones max out, the way GPQA replaced MMLU's hard tier. Saturation is not a sign that the capability is solved; it is a sign that the test no longer discriminates among models near the top.
+
+### Contamination
+
+If benchmark data appeared in pretraining, scores inflate. Contamination has been **documented across major benchmarks** — GSM8K, MATH, MMLU, HumanEval all have known leakage at some level. **Detection** is checking whether a model can complete test items in ways that suggest memorization. **Response** is held-out evals, dynamic benchmarks that change over time, frequent rotation. Publication itself is a contamination risk: once a benchmark is published, its items can show up in next-generation pretraining corpora.
+
+### Reward hacking and Goodhart
+
+These are the same problem at different scales. **Reward hacking** — models score well by gaming the metric rather than solving the task. **Example**: code models that hard-code test cases instead of implementing the function. **Example**: math models that memorize problem-answer pairs from training data. **Response** — test on held-out items, look at qualitative output, use multiple metrics.
+
+**Goodhart's law** generalizes the pattern. When a benchmark becomes a target — for training, comparison, or marketing — the metric stops measuring the underlying capability. **Example**: optimizing directly for MMLU produces benchmark-tuned models that do not necessarily generalize beyond the benchmark distribution. **Response** — hold out unpublished evals, use surprise benchmarks, track multiple correlated metrics rather than one.
+
+**Distribution shift** is another face of the same issue. A benchmark distribution is rarely the deployment distribution. A model that scores $90\%$ on MMLU may not generalize to your domain at all. **Response** — domain-specific evals, deployment metrics, user-feedback signals that catch what the benchmark does not.
+
+### The systemic implication
+
+Add **capability versus propensity** from Chapter 24 — benchmarks measure what a model *can* do; deployment depends on what it *does*. WMDP is the canonical example: it measures dangerous knowledge, not propensity to share. Add **single-metric thinking** — any one score hides important variation. Seven distinct failure modes, not one big confusion. **Modern AI eval is a dashboard, not a number.** Treating any single benchmark as the model's overall quality is misleading regardless of which benchmark it is.
+
+<RunnableCode>
+```python
+# Detect simple forms of reward hacking on a code benchmark:
+# a model that "solves" by hard-coding test cases rather than implementing the function.
+
+def looks_like_hardcoded(submission, test_cases):
+    """
+    Heuristic: does the submission appear to hard-code the test cases?
+    Real detection: more nuanced (AST analysis, abstract interpretation).
+    """
+    hits = 0
+    for tc in test_cases:
+        input_str = str(tc['input'])
+        output_str = str(tc['expected_output'])
+        if input_str in submission and output_str in submission:
+            hits += 1
+    return hits / max(1, len(test_cases))
+
+
+TEST_CASES = [
+    {'input': 2,   'expected_output': 4},
+    {'input': 5,   'expected_output': 10},
+    {'input': 7,   'expected_output': 14},
+    {'input': 100, 'expected_output': 200},
+]
+
+submissions = {
+    'clean': '''
+def double(x):
+    return x * 2
+''',
+    'hardcoded': '''
+def double(x):
+    if x == 2: return 4
+    if x == 5: return 10
+    if x == 7: return 14
+    if x == 100: return 200
+    return None   # off-distribution: fails outside the test set
+''',
+}
+
+print("Reward hacking detection:\n")
+for name, sub in submissions.items():
+    suspicion = looks_like_hardcoded(sub, TEST_CASES)
+    flag = 'POSSIBLE HACKING' if suspicion > 0.5 else 'looks clean'
+    print(f"{name}:")
+    print(f"  Suspicion: {suspicion:.0%} of test cases appear in code")
+    print(f"  Verdict: {flag}\n")
+
+# Observations:
+# - Hard-coding is the simplest reward-hacking pattern; real ones are subtler
+# - Production code-eval frameworks add: hidden test cases; adversarial test generation;
+#   static analysis; runtime probes
+# - The principle generalizes: any time the metric is a target, models will optimize
+#   for the metric (Goodhart's law) — not for the underlying capability
+```
+</RunnableCode>
+
+<Callout type="warning">
+*"Reward hacking is rare"* is **false**. Reward hacking has been documented across major benchmarks — code models hard-coding test cases, models memorizing benchmark items, models exploiting evaluation formats. **The closer a metric is to a training target, the more it gets hacked.** Production teams treat reward hacking as the default failure mode of any optimized-against benchmark, not as an edge case. If a number on a public leaderboard moved sharply for one team, the first question is "was this hacked," not "was this a real capability gain."
+</Callout>
+
+The next section turns to building new evals — the actual production-engineering skill.
+
+## Designing new evals
+
+### When you need a new eval
+
+Public benchmarks rarely match what production needs to measure. **New capability not covered** — agentic coding, computer use, domain-specific reasoning. **Domain-specific** — medical Q&A, legal reasoning, financial summarization. **Safety-critical area** — child safety, election integrity, region-specific compliance. **Internal product metrics** — does our chatbot help users complete onboarding successfully, measured against the actual onboarding funnel? Every production AI team ends up building custom evals because the public ones do not capture their use case.
+
+### The design checklist
+
+The skeleton of a well-designed eval is five questions.
+
+**What are you measuring?** State the capability or property precisely. Distinguish from related metrics. Decide whether you are measuring capability (what the model *can* do), propensity (what it *does* do under realistic prompting), or both.
+
+**What's the test format?** Multi-choice is easy to score but vulnerable to surface heuristics. Open-ended with hidden tests is cleaner but needs verification logic. LLM-as-judge is flexible but needs bias mitigation. Human evaluation is the gold standard but is expensive and slow. Real-environment simulation is the most realistic and the most complex to maintain.
+
+**What's the test set?** Sample size large enough for statistical power. Difficulty distribution that spans easy through hard rather than clustering at one end. Representativeness — items match the deployment distribution. **Held-out from training** to prevent contamination, ideally never published.
+
+**What's the calibration?** Random baseline (chance accuracy). Human baseline (expert and non-expert performance). Current SOTA reference (where existing models score). Target threshold (what counts as "good"). Without all four, the raw score does not communicate anything useful.
+
+**How will you maintain it?** Rotation policy to avoid contamination over time. Versioning so cross-version comparisons stay honest. Public-versus-private trade-off — transparency helps the field but invites contamination. Production teams typically keep an internal eval set unpublished alongside a smaller public reference set.
+
+Production patterns reinforce the checklist. **Hold-out test sets** never get published; they are the contamination-free signal. **Multi-judge ensembles** for LLM-as-judge eval. **Domain-specific evals** sit alongside broad public benchmarks rather than replacing them. **Live deployment metrics** — real-world signals from production traffic — are the ultimate eval, and the only one that captures the actual deployment distribution.
+
+<Callout type="note">
+*"Eval design is a research problem, not an engineering one"* is **false**. **Every production AI team builds custom evals.** Designing them — choosing what to measure, how to score, how to maintain — is core production engineering, not an academic exercise. This is the most directly-actionable section of this chapter: engineers leaving Ch 26 should start building their own eval suite for whatever product they ship. **Not optional; essential.**
+</Callout>
+
+The next section closes Phase 14 and previews Phase 15.
+
+## Phase 14 closes — Phase 15 ahead
+
+### The three disciplines complete
+
+Phase 14 is three disciplines that answer three different questions, and the chapters map cleanly onto them.
+
+| Discipline | Question | Chapter |
+|------------|----------|---------|
+| Safety | What do we want? | Ch 24 |
+| Interpretability | What is the model doing? | Ch 25 |
+| Evaluation (this chapter) | How do we measure both? | Ch 26 |
+
+All three together turn AI development from craft to engineering. **No single discipline suffices.** Safety without measurement is wishful thinking — claims about model behavior cannot be checked. Interpretability without measurement cannot validate its own claims about what features the model uses. Evaluation without safety thinking measures the wrong things, optimizing leaderboard numbers while missing what the deployment actually needs. The three together is what a complete safety practice looks like.
+
+Where Phase 14 leaves the curriculum is with a complete discipline arc. **A capable model from Phase 13**, plus **a trustworthy development process from Phase 14**, equals the foundations of modern AI production. From here on, building real systems is the topic.
+
+### Phase 15 — the curriculum's final arc
+
+Phase 15 is agents, and it is four chapters that compose everything the curriculum has built so far into running systems.
+
+**Ch 27 — Agent foundations.** ReAct, AutoGPT, the agentic loop, the patterns that recur across frameworks, the principles that hold up.
+
+**Ch 28 — Building an agent from scratch.** Real agents, tool implementation, error recovery, the engineering decisions behind a system that actually works.
+
+**Ch 29 — Multi-agent systems.** Orchestration, agent-to-agent communication, multi-step planning, the failure modes that show up when agents collaborate.
+
+**Ch 30 — Agent evaluation and frameworks.** Where Phase 14's eval discipline meets Phase 15's compositions; the chapter that closes the curriculum.
+
+The arc completes — **capabilities (Phase 13)** → **disciplines (Phase 14)** → **composition (Phase 15)**. Then the tutorial closes.
+
+Evaluation is the discipline that turns intuition about LLM quality into measurement. Standard benchmarks (MMLU, HumanEval, GPQA, MATH) cover capability. Safety benchmarks (HarmBench, TruthfulQA, WMDP) cover harm avoidance and dangerous-knowledge proxies. Agentic benchmarks (SWE-bench, GAIA, OSWorld) cover the new frontier. LLM-as-judge methodology and Chatbot Arena cover the open-ended quality gap. Eval failure modes — saturation, contamination, reward hacking, Goodhart — are features of any measurement applied to a trained system, not bugs. **Modern AI eval is a dashboard, not a number.** Phase 14 closes here; Phase 15 opens with agents. **Four chapters from the curriculum's end.**
