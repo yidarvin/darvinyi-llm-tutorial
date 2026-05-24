@@ -6,7 +6,7 @@ description: Quantization — how to deploy large models cheaply by reducing the
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { QuantizationExplorer } from '@components/widgets';
+import { QuantizationExplorer, GranularityVisualizer } from '@components/widgets';
 
 Chapter 17 reduced *wasted computation*: KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. This chapter takes the complementary route — reduce the *bits per parameter*. A $70$B model in BF16 takes $140$ GB of weights; in INT4, the same model fits comfortably on a single A100 80GB with headroom left over for KV cache and batching. **Quantization is the optimization that decides whether a model can be deployed at all** — not just whether it is cheap.
 
@@ -173,10 +173,8 @@ print("\\nINT4 + per-group is the standard configuration for modern LLM quantiza
 ```
 </RunnableCode>
 
-<WidgetFrame title="Granularity visualizer" caption="Watch the same weight matrix get quantized at INT4 with three granularities: per-tensor, per-channel, per-group. The matrix has one outlier row (10× larger weights); see how per-tensor is destroyed by the outlier while per-group preserves quality. Slider for group size shows the quality/storage tradeoff. The widget makes 'why per-group matters' visceral.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 84 (secondary)
-  </div>
+<WidgetFrame title="Granularity visualizer" caption="An 8 × 64 weight matrix with one outlier row (10× larger). Quantize at INT4 with three granularities: per-tensor (one scale; outlier destroys quality), per-channel (one per row; outlier handled), per-group (G=16/32/64; even within-row variation handled). Toggle to see how per-row MSE changes. The widget makes 'why per-group matters' visceral.">
+  <GranularityVisualizer client:visible />
 </WidgetFrame>
 
 <Callout type="note">
@@ -320,6 +318,282 @@ For decode workloads (Ch 17 §2), **W4A16 — four-bit weights, sixteen-bit acti
 </Callout>
 
 The final section pulls Ch 17 and Ch 18 together — the combined effect of inference optimization and quantization on what it actually costs to serve a $70$B model.
+
+## Exercises
+
+Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Symmetric quantization
+
+Implement the basic symmetric quantization mapping. Compute scale, quantize, dequantize, and verify the per-weight error is bounded by $s/2$.
+
+<details>
+<summary>Hint</summary>
+
+Symmetric quantization:
+$$x_{\text{int}} = \text{clip}\!\left(\text{round}(x/s), \;-q_{\max}-1, \; q_{\max}\right)$$
+
+with $s = \max(|x|) / q_{\max}$ and $q_{\max} = 2^{n-1} - 1$.
+
+Dequantization: $\hat x = s \cdot x_{\text{int}}$.
+
+The rounding error per weight is bounded by $|x - \hat x| \leq s/2$ (worst case: a weight exactly halfway between two grid points).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def quantize_symmetric(x, n_bits=8):
+    """
+    Symmetric quantization.
+    Returns: (x_int, scale).
+    """
+    # TODO:
+    # 1. Compute qmax = 2**(n_bits - 1) - 1
+    # 2. Compute scale = max(|x|) / qmax
+    # 3. Quantize: round(x / scale), clip to [-qmax-1, qmax]
+    # 4. Return (x_int as int32, scale as float)
+    pass
+
+def dequantize_symmetric(x_int, scale):
+    """Inverse: ~ x ≈ scale * x_int."""
+    return scale * x_int.astype(np.float32)
+
+# Test
+np.random.seed(0)
+W = np.random.normal(0, 0.1, 100)
+
+print(f"{'Bits':>5} | {'MSE':>12} | {'Max err':>10} | {'Bound s/2':>12}")
+print("-" * 50)
+for n_bits in [8, 4, 2]:
+    # W_int, scale = quantize_symmetric(W, n_bits=n_bits)
+    # W_dq = dequantize_symmetric(W_int, scale)
+    # mse = ((W - W_dq) ** 2).mean()
+    # max_err = np.abs(W - W_dq).max()
+    # bound = scale / 2
+    # print(f"{n_bits:>5} | {mse:>12.7f} | {max_err:>10.6f} | {bound:>12.6f}")
+    pass
+
+# Verify:
+# - Max error should be ≤ scale/2 for every weight
+# - MSE shrinks as n_bits grows
+# - At 2 bits, error is huge; at 8 bits, error is tiny
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Per-channel quantization
+
+Implement per-channel symmetric quantization for a weight matrix. Each row gets its own scale.
+
+<details>
+<summary>Hint</summary>
+
+For a weight matrix $W \in \mathbb{R}^{R \times C}$:
+- Compute the per-row absmax: a vector of $R$ values
+- Scale per row: $s_r = \text{absmax}_r / q_{\max}$
+- Quantize each row using its own scale
+
+Setup: create a matrix where one row has 10× larger weights than others (an outlier row). Compare per-tensor (single scale; destroyed by outlier) to per-channel (each row independent).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def quantize_per_tensor(W, n_bits=4):
+    qmax = 2**(n_bits - 1) - 1
+    scale = np.abs(W).max() / qmax
+    return np.round(W / scale).clip(-qmax-1, qmax) * scale
+
+def quantize_per_channel(W, n_bits=4):
+    """
+    Per-channel quantization. One scale per row (output dimension).
+    """
+    # TODO:
+    # 1. Compute qmax
+    # 2. Compute per-row absmax: shape (R, 1)
+    # 3. Scales: shape (R, 1)
+    # 4. Quantize each row independently
+    # 5. Dequantize and return
+    pass
+
+# Setup
+np.random.seed(0)
+W = np.random.normal(0, 0.1, (8, 64))
+W[0] *= 10   # outlier row
+
+# Compare
+# W_pt = quantize_per_tensor(W, n_bits=4)
+# W_pc = quantize_per_channel(W, n_bits=4)
+
+# print(f"Per-tensor MSE: {((W - W_pt) ** 2).mean():.6f}")
+# print(f"Per-channel MSE: {((W - W_pc) ** 2).mean():.6f}")
+#
+# # Compare per-row MSE
+# print(f"\\nPer-row MSE comparison:")
+# print(f"{'Row':>3} | {'Per-tensor':>12} | {'Per-channel':>12}")
+# print("-" * 35)
+# for r in range(W.shape[0]):
+#     pt_mse = ((W[r] - W_pt[r]) ** 2).mean()
+#     pc_mse = ((W[r] - W_pc[r]) ** 2).mean()
+#     marker = ' ← outlier' if r == 0 else ''
+#     print(f"{r:>3} | {pt_mse:>12.6f} | {pc_mse:>12.6f}{marker}")
+#
+# # Observation:
+# # - Per-tensor: the outlier row sets scale; non-outlier rows have huge error
+# # - Per-channel: each row has its own scale; all rows preserved
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Per-group quantization
+
+Implement per-group symmetric quantization with adjustable group size. Compare to per-channel.
+
+<details>
+<summary>Hint</summary>
+
+Per-group: within each row, split into groups of $G$ consecutive weights and quantize each group with its own scale.
+
+For row $r$ and group $g$ (spanning columns $g \cdot G$ to $(g+1) \cdot G - 1$):
+- $s_{r,g} = \max(|W_{r, g \cdot G : (g+1) \cdot G}|) / q_{\max}$
+- Quantize this slice with $s_{r,g}$
+
+Group size choices: $G = 16, 32, 64, 128$. Smaller = better quality but more scale overhead. Standard for production: $G = 64$ or $G = 128$.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def quantize_per_group(W, n_bits=4, group_size=32):
+    """
+    Per-group quantization. One scale per group of group_size consecutive weights within a row.
+    """
+    # TODO:
+    # 1. Compute qmax
+    # 2. For each row:
+    #    For each group g:
+    #      Compute scale from absmax of W[r, g*G : (g+1)*G]
+    #      Quantize that group with its own scale
+    # 3. Return dequantized matrix
+    pass
+
+# Setup: matrix with outlier row + within-row variation
+np.random.seed(0)
+W = np.random.normal(0, 0.1, (8, 64))
+W[0] *= 10                                         # outlier row
+W[1:, 20:40] *= 3                                  # within-row "hot region" in non-outlier rows
+
+# Compare group sizes
+# print(f"{'Group size':<15} | {'Overall MSE':>15} | {'Scales':>8}")
+# print("-" * 50)
+# for G in [16, 32, 64]:
+#     W_q = quantize_per_group(W, n_bits=4, group_size=G)
+#     mse = ((W - W_q) ** 2).mean()
+#     num_scales = W.shape[0] * (W.shape[1] // G)
+#     print(f"G = {G:<11} | {mse:>15.6f} | {num_scales:>8}")
+#
+# # Compare to per-channel
+# # from above: per-channel uses 8 scales (one per row)
+#
+# # Observation:
+# # - Smaller G = better MSE (per-group handles within-row variation)
+# # - More scales = more storage overhead
+# # - G = 32 or 64 is the sweet spot in practice
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — NF4 quantization
+
+Implement NF4 quantization: 16 levels at equiprobable normal quantiles, with per-group scaling. Compare to INT4 per-group on normally-distributed weights.
+
+<details>
+<summary>Hint</summary>
+
+NF4 levels are placed at the equiprobable quantiles of a standard normal distribution. Compute via `scipy.stats.norm.ppf`:
+
+For 16 levels (symmetric construction):
+- Place 8 levels in the positive half at quantile midpoints
+- Mirror to get the negative half
+- Normalize so the absolute max is 1.0
+
+For per-group NF4:
+- For each group, compute scale = max(|chunk|)
+- Normalize chunk by scale
+- For each value, find the nearest NF4 level
+- Dequantize: nearest level × scale
+
+Compare to INT4 per-group on the same normally-distributed weights. Expectation: NF4 has lower MSE because levels are denser where weights are dense.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+from scipy.stats import norm
+
+def compute_nf4_levels():
+    """16 NF4 levels via equiprobable normal quantiles."""
+    # TODO:
+    # 1. For i in 0..7: place a level at the midpoint of the i-th equiprobable bin
+    #    (use norm.ppf to get the quantile)
+    # 2. Mirror to get 16 total levels (negative + positive)
+    # 3. Normalize so abs max is 1.0
+    pass
+
+NF4_LEVELS = compute_nf4_levels()
+# print(f"NF4 levels: {NF4_LEVELS}")
+
+def quantize_nf4_per_group(W, group_size=32):
+    """Per-group NF4 quantization."""
+    # TODO:
+    # 1. For each row, for each group of group_size weights:
+    #    a. Compute scale = max(|chunk|)
+    #    b. Normalize: chunk / scale
+    #    c. For each value, find argmin distance to NF4_LEVELS
+    #    d. Dequantize: NF4_LEVELS[idx] * scale
+    pass
+
+def quantize_int4_per_group(W, group_size=32):
+    """Per-group INT4 quantization for comparison."""
+    qmax = 7
+    R, C = W.shape
+    out = np.zeros_like(W)
+    for g in range(C // group_size):
+        start, end = g * group_size, (g + 1) * group_size
+        for r in range(R):
+            chunk = W[r, start:end]
+            scale = np.abs(chunk).max() / qmax
+            if scale > 0:
+                out[r, start:end] = np.round(chunk / scale).clip(-qmax-1, qmax) * scale
+    return out
+
+# Compare on normally-distributed weights
+# np.random.seed(0)
+# W = np.random.normal(0, 0.1, (64, 256))
+#
+# W_int4 = quantize_int4_per_group(W, group_size=32)
+# W_nf4 = quantize_nf4_per_group(W, group_size=32)
+#
+# print(f"\\nMSE on N(0, 0.1) weights:")
+# print(f"  INT4 per-group: {((W - W_int4) ** 2).mean():.7f}")
+# print(f"  NF4  per-group: {((W - W_nf4) ** 2).mean():.7f}")
+#
+# # Observation:
+# # - NF4 places more levels near zero (where weights live)
+# # - Fewer levels in the tails (where weights are sparse)
+# # - Result: lower MSE on normally-distributed weights
+# # - This is the format behind QLoRA (Ch 15)
+`}
+  packages={["numpy", "scipy"]}
+/>
 
 ## The full picture — combining with Ch 17
 
