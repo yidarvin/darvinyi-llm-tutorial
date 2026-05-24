@@ -6,7 +6,7 @@ description: Multimodal — how LLMs perceive images, audio, and video. From the
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { CLIPEmbeddingSpace } from '@components/widgets';
+import { CLIPEmbeddingSpace, ViTPatchTokenizer } from '@components/widgets';
 
 Most of the world is not text. Images, audio, video, screenshots, charts, faces, voices — these carry vast information that text alone cannot represent. A text-only LLM can describe a chart it has been told about, but it cannot directly *see* one. **Multimodal models extend the language-model framework to non-text inputs and outputs.** The core technical question is mechanically simple and conceptually deep: how do you turn a non-text modality into something a transformer can process? The answer for vision is to chop the image into patches and treat each patch as a "visual token." The answer for audio is to compute a mel-spectrogram, split it into patches, and do the same thing. **The recipe generalizes. Once a modality is tokenized, the transformer doesn't know the difference between a text token, a visual token, or an audio token — they're all just vectors.**
 
@@ -60,10 +60,8 @@ The token-count math is unavoidable and dominates the cost of any production VLM
 
 The reason the ViT recipe matters beyond image classification is what it enables downstream. **Any architecture that operates on token sequences now operates on images.** Cross-attention from a text decoder over visual tokens (the Flamingo pattern). Concatenating visual tokens with text tokens (the LLaVA pattern). Joint training on mixed-modality sequences (the Gemini pattern). All of these are downstream of the ViT decision to treat an image as a sequence.
 
-<WidgetFrame title="ViT patch tokenizer" caption="See how an image becomes tokens. A small image is split into a grid of patches; each patch becomes one visual token. Reader picks a patch; sees its position, dimensions, and a sketch of what the projection layer does. Makes the 'image → tokens' transformation concrete — the foundational mechanism for every modern vision-language model.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 133 (secondary)
-  </div>
+<WidgetFrame title="ViT patch tokenizer" caption="A 128×128 stylized landscape image is split into an 8×8 grid of 16×16-pixel patches. Click any patch to inspect what becomes one visual token: position in the grid, mean RGB color, the flatten arithmetic (16×16×3 = 768 raw values), and a sparkline sketch of the 768-dim projected embedding. After patch embedding, the transformer doesn't know it's processing an image — it sees a token sequence, just like text.">
+  <ViTPatchTokenizer client:visible />
 </WidgetFrame>
 
 <RunnableCode>
@@ -347,6 +345,328 @@ The limitations matter as much as the promise. **Latency** is real — each step
 </Callout>
 
 The next section closes Phase 13 and sets up the disciplines that come after.
+
+## Exercises
+
+Four exercises that lock in the multimodal stack. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+The exercises trace the chapter's arc: tokenize an image (Ex 1) → align with text via CLIP (Ex 2) → use the shared space for retrieval (Ex 3) → evaluate multimodal faithfulness (Ex 4).
+
+### Exercise 1 (easy) — Patch embedding implementation
+
+Implement ViT-style patch embedding from scratch: take an image array, split into patches, flatten each, project to a fixed embedding dim, add positional encoding.
+
+<details>
+<summary>Hint</summary>
+
+The full ViT patch-embed pipeline:
+1. Take an image of shape `(H, W, C)`. Standard: `(224, 224, 3)`.
+2. Split into `(H/P) × (W/P)` patches, each of shape `(P, P, C)`. For `P = 16`: 196 patches.
+3. Flatten each patch to a 1D vector of length `P × P × C` (= 768 for 16×16 RGB).
+4. Apply a linear projection (a learned matrix `W ∈ ℝ^{(P²C) × D}`) to get an embedding of dim `D` (e.g., 768).
+5. Add positional encoding (learned or sinusoidal) — each patch position gets a unique vector.
+6. (Optional) Prepend a `[CLS]` token.
+
+The full output shape: `(N + 1, D)` where N = number of patches, D = embedding dim, +1 for `[CLS]`.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def patch_embed(image, patch_size=16, embed_dim=768):
+    """
+    Apply ViT-style patch embedding to a single image.
+
+    image: shape (H, W, C), e.g., (224, 224, 3)
+    Returns: shape (N + 1, embed_dim), where N = (H/patch_size) * (W/patch_size)
+    """
+    H, W, C = image.shape
+    n_patches_h = H // patch_size
+    n_patches_w = W // patch_size
+    n_patches = n_patches_h * n_patches_w
+
+    # TODO:
+    # 1. Slice the image into patches.
+    # 2. Flatten each patch to a 1D vector of length patch_size * patch_size * C.
+    # 3. Stack patches into shape (n_patches, patch_flat_dim).
+    # 4. Apply a linear projection (use np.random.seed(0); shape (patch_flat_dim, embed_dim)).
+    # 5. Add a positional encoding (use np.random.seed(1); shape (n_patches, embed_dim)).
+    # 6. Prepend a [CLS] token (a single learnable vector; use np.random.seed(2)).
+    # 7. Return shape (n_patches + 1, embed_dim).
+    pass
+
+
+# Test
+np.random.seed(42)
+image = np.random.rand(224, 224, 3) * 255
+
+# tokens = patch_embed(image)
+# print(f"Image shape:          {image.shape}")
+# print(f"Token sequence shape: {tokens.shape}    (should be (197, 768) — 196 patches + 1 CLS)")
+# print(f"Each token is a {tokens.shape[1]}-dim vector")
+#
+# # Observations:
+# # - The transformer that processes this output doesn't know the input was an image
+# # - The token sequence shape (197, 768) is what BERT-Base would produce for a 196-token sentence
+# # - This is the architectural unification that enables multimodal models
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — CLIP cosine similarity matrix
+
+Compute the CLIP-style cosine similarity matrix for a small batch of (image, caption) pairs. Verify the diagonal-vs-off-diagonal structure that the contrastive loss produces.
+
+<details>
+<summary>Hint</summary>
+
+Given:
+- Image embeddings $E^I \in \mathbb{R}^{N \times D}$ (L2-normalized rows)
+- Text embeddings $E^T \in \mathbb{R}^{N \times D}$ (L2-normalized rows)
+
+The similarity matrix is the dot product:
+
+$$S = E^I (E^T)^\top \in \mathbb{R}^{N \times N}$$
+
+with $s_{ij} = \cos(\mathbf{e}^I_i, \mathbf{e}^T_j)$.
+
+After CLIP training:
+- **Diagonal** $s_{ii}$ should be HIGH (paired image-text)
+- **Off-diagonal** $s_{ij}$ for $i \neq j$ should be LOW (unpaired)
+
+For this exercise, generate mock embeddings with injected "paired" structure, then verify the property.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def cosine_similarity_matrix(image_embs, text_embs):
+    """
+    Compute the N x N cosine similarity matrix between image and text embeddings.
+
+    image_embs: shape (N, D)
+    text_embs:  shape (N, D)
+    Returns:    shape (N, N), where entry (i, j) = cos(img_i, text_j)
+    """
+    # TODO:
+    # 1. L2-normalize each row of image_embs and text_embs.
+    # 2. Return image_embs @ text_embs.T
+    pass
+
+
+# Generate mock embeddings with paired structure
+np.random.seed(0)
+N = 5    # batch of 5 (image, caption) pairs
+D = 256
+
+image_embs = np.random.randn(N, D)
+text_embs = np.random.randn(N, D)
+
+# Inject paired structure: each text embedding is biased toward its image
+for i in range(N):
+    text_embs[i] += 0.7 * image_embs[i]
+
+# Test
+# sim_matrix = cosine_similarity_matrix(image_embs, text_embs)
+#
+# print(f"Cosine similarity matrix (should have high diagonal, low off-diagonal):\\n")
+# print(f"{'':>10}", " ".join(f"text_{j}" for j in range(N)))
+# for i in range(N):
+#     print(f"image_{i}:  ", " ".join(f"{v:>6.2f}" for v in sim_matrix[i]))
+#
+# # Verify diagonal vs off-diagonal
+# diag_mean = np.mean(np.diag(sim_matrix))
+# off_diag_mean = (sim_matrix.sum() - sim_matrix.trace()) / (N * N - N)
+# print(f"\\nDiagonal mean (paired):       {diag_mean:>5.3f}")
+# print(f"Off-diagonal mean (unpaired): {off_diag_mean:>5.3f}")
+# print(f"Gap (should be positive):     {diag_mean - off_diag_mean:>5.3f}")
+#
+# # Observations:
+# # - Diagonal entries should be noticeably higher than off-diagonal
+# # - The bigger the gap, the better the model is at distinguishing pairs
+# # - CLIP's training objective directly optimizes this gap
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Multimodal RAG with CLIP embeddings
+
+Build a tiny multimodal RAG system. Index a small corpus of items (images and texts) using mock CLIP embeddings; answer a text query by retrieving top-K nearest items across both modalities.
+
+<details>
+<summary>Hint</summary>
+
+The pattern:
+1. **Pre-compute**: for each corpus item (image or text), compute a CLIP-style embedding. Both modalities map to the same D-dim space.
+2. **At query time**: embed the query (text); compute cosine similarity to each corpus embedding; sort descending; return top-K.
+3. **Results are mixed**: top-K can include both images and texts — they live in the same space.
+
+For the exercise: use a mock embedding function. Real CLIP would use the trained encoders.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+# Mock corpus: a mix of image and text items
+corpus = [
+    {'kind': 'image', 'id': 'img_cat',     'content': 'a fluffy orange cat'},
+    {'kind': 'image', 'id': 'img_dog',     'content': 'a black labrador puppy'},
+    {'kind': 'image', 'id': 'img_car',     'content': 'a red sports car'},
+    {'kind': 'image', 'id': 'img_boat',    'content': 'a small sailboat'},
+    {'kind': 'text',  'id': 'txt_cat',     'content': 'How to care for an orange tabby cat'},
+    {'kind': 'text',  'id': 'txt_dog',     'content': 'Training tips for labrador retrievers'},
+    {'kind': 'text',  'id': 'txt_car',     'content': 'Review of red sports cars'},
+    {'kind': 'text',  'id': 'txt_sailing', 'content': 'Beginner sailing technique'},
+]
+
+def mock_clip_embed(text, dim=512):
+    """
+    Mock CLIP embedding. In production: use a real CLIP forward pass.
+    Returns an L2-normalized vector with structure biased by keyword presence.
+    """
+    seed = sum(ord(c) for c in text)
+    rng = np.random.RandomState(seed)
+    v = rng.randn(dim)
+    # Bias by keyword presence (mimicking what CLIP learns)
+    for keyword, axis_start in [('cat', 0), ('dog', 10), ('labrador', 10), ('car', 20), ('sailboat', 30), ('sailing', 30)]:
+        if keyword in text.lower():
+            v[axis_start:axis_start + 5] += 2.0
+    return v / np.linalg.norm(v)
+
+
+def multimodal_rag_retrieve(query_text, corpus, top_k=3):
+    """
+    Embed the query; rank corpus items by cosine similarity; return top-K.
+    Each item's embedding is computed from its 'content' field.
+    Returns list of (item, similarity).
+    """
+    # TODO:
+    # 1. Embed the query.
+    # 2. For each corpus item, embed its content and compute cosine similarity to query.
+    # 3. Sort descending by similarity; return top_k.
+    pass
+
+
+# Test
+queries = [
+    "tips for caring for a cat",     # should retrieve cat items (image + text)
+    "fast vehicles",                  # should retrieve car (and maybe boat)
+    "sailing for beginners",          # should retrieve sailing items
+]
+
+# for q in queries:
+#     results = multimodal_rag_retrieve(q, corpus, top_k=3)
+#     print(f"\\nQuery: '{q}'")
+#     for item, sim in results:
+#         print(f"  sim={sim:>5.2f}  [{item['kind']:>5}]  {item['content']}")
+#
+# # Observations:
+# # - Top-K mixes images and texts — both are searched in the same embedding space
+# # - "tips for caring for a cat" finds BOTH the cat image AND the cat-care text
+# # - Cross-modal retrieval is what CLIP enables; no separate image and text indexes needed
+# # - This is multimodal RAG in 30 lines of code.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 4 (hard) — Multimodal hallucination detection
+
+Implement a faithfulness check for VLM outputs: given a model's caption of an image and the image's ground-truth tags, identify hallucinated entities (objects mentioned in the caption that aren't actually in the image).
+
+<details>
+<summary>Hint</summary>
+
+VLM hallucinations are real: models can describe objects that aren't in the image. Detecting them is a key part of multimodal evaluation (e.g., the POPE benchmark).
+
+The check:
+1. Tokenize the caption; extract candidate object words (nouns: "cat", "table", "book").
+2. For each candidate, check if it's in the image's ground-truth tag set.
+3. Candidates not in the ground-truth tags are **potential hallucinations**.
+
+Simplification for this exercise:
+- Skip POS tagging — use a simple object-name vocabulary.
+- Tag sets are pre-provided (no real object detection).
+
+Real implementations use better NLP and detection models, but the core idea is the same: **compare what the model says to what's actually there.**
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`# A tiny object vocabulary (in production: WordNet, NLTK POS tags, or detection-model labels)
+OBJECT_VOCAB = {
+    'cat', 'dog', 'puppy', 'kitten', 'car', 'boat', 'sailboat',
+    'tree', 'house', 'person', 'mountain', 'sun', 'cloud',
+    'book', 'table', 'chair', 'window', 'sky', 'grass',
+    'ball', 'guitar', 'flower', 'bird', 'fish',
+}
+
+def extract_objects(caption, vocab):
+    """Return the set of vocab objects mentioned in the caption."""
+    words = set(caption.lower().replace('.', '').replace(',', '').split())
+    return words & vocab
+
+
+def detect_hallucinations(caption, ground_truth_tags, vocab=OBJECT_VOCAB):
+    """
+    Compare the caption's mentioned objects to the ground-truth tags.
+    Returns (mentioned, hallucinated, missed).
+
+    mentioned:    objects the caption refers to (from vocab)
+    hallucinated: objects in mentioned but NOT in ground_truth_tags
+    missed:       objects in ground_truth_tags but NOT mentioned
+    """
+    # TODO:
+    # 1. mentioned = extract_objects(caption, vocab)
+    # 2. hallucinated = mentioned - ground_truth_tags
+    # 3. missed = ground_truth_tags - mentioned
+    # 4. Return all three sets
+    pass
+
+
+# Test cases
+test_cases = [
+    {
+        'image_id': 'img_001',
+        'ground_truth': {'cat', 'window', 'sun'},
+        'model_caption': 'A fluffy orange cat sitting on a sunny windowsill.',
+    },
+    {
+        'image_id': 'img_002',
+        'ground_truth': {'dog', 'grass', 'tree'},
+        'model_caption': 'A puppy playing in the grass with a ball, near a tree.',
+    },
+    {
+        'image_id': 'img_003',
+        'ground_truth': {'car', 'mountain'},
+        'model_caption': 'A red sports car on a mountain road, with a person waving.',
+    },
+]
+
+# for case in test_cases:
+#     mentioned, hallucinated, missed = detect_hallucinations(case['model_caption'], case['ground_truth'])
+#     print(f"\\nImage: {case['image_id']}")
+#     print(f"  Caption: {case['model_caption']}")
+#     print(f"  Ground truth:   {sorted(case['ground_truth'])}")
+#     print(f"  Mentioned:      {sorted(mentioned)}")
+#     print(f"  Hallucinated:   {sorted(hallucinated)}")
+#     print(f"  Missed:         {sorted(missed)}")
+#
+# # Observations:
+# # - Case 1: clean — all mentioned objects are in ground truth, none missing
+# # - Case 2: 'puppy' and 'ball' are hallucinations
+# # - Case 3: 'person' is hallucinated; the image actually only has car + mountain
+# # - This is the kernel of multimodal hallucination evaluation
+# # - Real systems use better object recognition + nuanced scoring (POPE, etc.)
+`}
+  packages={[]}
+/>
 
 ## Closing Phase 13 / opening Phase 14
 

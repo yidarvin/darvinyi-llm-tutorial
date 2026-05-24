@@ -44,3 +44,4 @@ export { default as ToolSchemaValidator } from './ch21/ToolSchemaValidator';
 export { default as RetrievalComparator } from './ch22/RetrievalComparator';
 export { default as ChunkingVisualizer } from './ch22/ChunkingVisualizer';
 export { default as CLIPEmbeddingSpace } from './ch23/CLIPEmbeddingSpace';
+export { default as ViTPatchTokenizer } from './ch23/ViTPatchTokenizer';
