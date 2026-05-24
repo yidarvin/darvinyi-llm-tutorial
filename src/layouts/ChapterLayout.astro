@@ -5,13 +5,17 @@ import MobileNav from '@components/nav/MobileNav.astro';
 import TableOfContents from '@components/nav/TableOfContents.astro';
 import ChapterNav from '@components/nav/ChapterNav.astro';
 import Footer from '@components/nav/Footer.astro';
+import RelatedChapters from '@components/content/RelatedChapters';
 import { getChapter } from '@lib/chapters';
 
 export interface Props {
-  slug: string;
+  slug?: string;
   description?: string;
+  frontmatter?: { slug?: string; description?: string };
 }
-const { slug, description } = Astro.props;
+const props = Astro.props as Props;
+const slug = props.slug ?? props.frontmatter?.slug ?? '';
+const description = props.description ?? props.frontmatter?.description;
 const chapter = getChapter(slug);
 const pageTitle = chapter ? `${chapter.num}. ${chapter.title}` : 'Chapter';
 ---
@@ -31,6 +35,8 @@ const pageTitle = chapter ? `${chapter.num}. ${chapter.title}` : 'Chapter';
         )}
 
         <slot />
+
+        <RelatedChapters slug={slug} />
 
         <ChapterNav currentSlug={slug} />
       </main>

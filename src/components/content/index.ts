@@ -3,3 +3,4 @@ export { default as Equation } from './Equation.astro';
 export { default as EqRef } from './EqRef.astro';
 export { default as Figure } from './Figure.astro';
 export { default as WidgetFrame } from './WidgetFrame.astro';
+export { default as CrossRef } from './CrossRef';
