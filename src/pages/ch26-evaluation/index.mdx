@@ -6,6 +6,7 @@ description: Evaluation — the discipline that turns intuition about LLM qualit
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { BenchmarkHeatmap } from '@components/widgets';
 
 Chapter 24 covered safety from the outside — alignment training, red-teaming, what we want the model to do. Chapter 25 covered interpretability from the inside — probes, sparse autoencoders, circuits, what the model is *actually* computing. **This chapter covers the third discipline of Phase 14: how do we measure both?** Evaluation turns *"this model is better"* into a measurable claim. Without it, AI development is opinion and marketing. With it, claims become comparable — across models, across techniques, across releases. **It is the bridge from craft to engineering.**
 
@@ -69,10 +70,8 @@ Three formats carry most capability benchmarks. **Multi-choice format** (MMLU, G
 
 A bare score is almost never enough. **Random baseline** for a four-choice multiple-choice question is $25\%$. **Frontier model expectation** as of $2025$ is $60$ to $90\%$ on active hard benchmarks, $90\%$+ on saturated ones. **Human expert ceiling** is $80$ to $95\%$ on most benchmarks, with humans rarely scoring $100\%$ even on tasks they designed. Quoting a single number without these reference points gives no information about how to compare.
 
-<WidgetFrame title="Benchmark heatmap" caption="A heatmap of ~10 frontier models × ~10 benchmarks (capability + safety + agentic). Each cell shows the model's score with color coding. Sort by any column to see the ranking on that benchmark. Visualizes the eval landscape at a glance — and which benchmarks have saturated (whole columns near 95%+). Demonstrates the chapter's central operational claim: modern AI eval is a dashboard, not a number.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 116 (marquee)
-  </div>
+<WidgetFrame title="Benchmark heatmap" caption="Eight frontier models × ten benchmarks (capability + safety + agentic) in a sortable color-coded grid. Click any column header to re-rank models by that benchmark. Saturated columns (SAT badge) cluster scores near the top — they no longer discriminate. Sorting by capability vs agentic gives very different rankings. Scores are illustrative 2024-2025 ballparks; the widget displays an explicit disclaimer. The chapter's central claim made visceral: modern AI eval is a dashboard, not a number.">
+  <BenchmarkHeatmap client:visible />
 </WidgetFrame>
 
 <RunnableCode>

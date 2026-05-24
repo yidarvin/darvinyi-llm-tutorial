@@ -1,0 +1,237 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel, .disclaimerPanel, .controlsPanel, .tableWrapper, .hoverPanel, .caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+.titlePanel { padding: 0.7rem 1rem; }
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Disclaimer */
+.disclaimerPanel {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  background: color-mix(in srgb, var(--amber-400) 5%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--amber-400) 30%, var(--border-default));
+}
+.disclaimerLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--amber-400);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.disclaimerPanel strong { color: var(--amber-400); font-weight: 500; }
+
+/* Controls */
+.controlsPanel {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+.controlsLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.sortButtons { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.sortButton {
+  padding: 0.4rem 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.sortButton:hover { border-color: var(--cyan-500); color: var(--cyan-300); }
+.sortButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+/* Table */
+.tableWrapper {
+  padding: 0.7rem;
+  overflow-x: auto;
+}
+.heatmapTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+.categoryRow .categoryHeader,
+.categoryRow .cornerCell {
+  padding: 0.45rem 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  border-bottom: 1px solid;
+}
+.cornerCell {
+  background: transparent;
+  border: none;
+}
+.modelLabelHeader {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  font-weight: 500;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.benchmarkHeader {
+  padding: 0.5rem 0.35rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  border-top: 3px solid transparent;
+  transition: all 200ms;
+  text-align: center;
+}
+.benchmarkHeader:hover {
+  background: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-primary));
+}
+.benchmarkHeaderActive {
+  border-top-color: var(--cyan-400);
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  color: var(--cyan-300);
+}
+.benchmarkLabelStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.18rem;
+}
+.benchmarkLabel { font-weight: 600; }
+.saturationBadge {
+  display: inline-block;
+  font-size: 0.6rem;
+  padding: 0.05rem 0.3rem;
+  background: color-mix(in srgb, var(--cyan-400) 20%, transparent);
+  color: var(--cyan-300);
+  border: 1px solid color-mix(in srgb, var(--cyan-400) 45%, transparent);
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.modelLabel {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.78rem;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.scoreCell {
+  padding: 0.45rem 0.35rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 30%, transparent);
+  transition: filter 200ms;
+}
+.scoreCell:hover { filter: brightness(1.15); }
+.scoreCellHovered {
+  outline: 2px solid var(--cyan-300);
+  outline-offset: -2px;
+}
+.topRow .scoreCell {
+  /* No special treatment by default — top row earned its position */
+}
+
+/* Hover detail panel */
+.hoverPanel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  min-height: 56px;
+}
+.hoverHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.3rem;
+}
+.hoverModel {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.hoverArrow {
+  color: var(--text-tertiary);
+}
+.hoverBenchmark {
+  color: var(--text-secondary);
+}
+.hoverScore {
+  margin-left: auto;
+  color: var(--cyan-300);
+  font-weight: 600;
+  font-size: 1rem;
+}
+.hoverDescription {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  line-height: 1.5;
+}
+.hoverPlaceholder {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Caption */
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .heatmapTable { font-size: 0.7rem; }
+  .scoreCell { padding: 0.35rem 0.2rem; font-size: 0.75rem; }
+  .modelLabel { font-size: 0.7rem; padding: 0.3rem 0.4rem; }
+  .benchmarkHeader { padding: 0.35rem 0.2rem; }
+  .benchmarkLabel { font-size: 0.65rem; }
+  .saturationBadge { font-size: 0.5rem; padding: 0 0.2rem; }
+  .hoverPanel { font-size: 0.75rem; }
+  .hoverScore { font-size: 0.88rem; }
+}

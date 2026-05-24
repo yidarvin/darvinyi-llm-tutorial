@@ -49,3 +49,4 @@ export { default as JailbreakTaxonomy } from './ch24/JailbreakTaxonomy';
 export { default as PromptInjectionClassifier } from './ch24/PromptInjectionClassifier';
 export { default as SAEFeatureExplorer } from './ch25/SAEFeatureExplorer';
 export { default as LinearProbingVisualizer } from './ch25/LinearProbingVisualizer';
+export { default as BenchmarkHeatmap } from './ch26/BenchmarkHeatmap';
