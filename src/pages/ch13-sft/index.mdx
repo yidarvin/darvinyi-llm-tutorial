@@ -6,7 +6,7 @@ description: Supervised Fine-Tuning (SFT) — the first and most universal post-
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SFTLossMasking } from '@components/widgets';
+import { SFTLossMasking, ChatTemplateComparison } from '@components/widgets';
 
 Chapters 1–10 taught how to train a pre-trained language model. Chapters 11 and 12 covered architectural alternatives — Mixture of Experts and state-space models — for when the standard dense transformer does not fit the constraints of the deployment. What you have at the end of either path is the same kind of object: a model that *completes text*. Type "The capital of France is" and it produces "Paris." Type a question and it may or may not answer.
 
@@ -181,10 +181,8 @@ The templates differ in three dimensions — the special tokens themselves, the 
 
 The modern API is HuggingFace's `tokenizer.apply_chat_template()`. Pass a list of messages in the canonical form `[{"role": "user", "content": "..."}, ...]`; the tokenizer applies the template baked into its config and returns the flattened token sequence. **This is the function everyone uses.** Writing templates by hand is error-prone — the four templates above are a small sample, the special-token IDs are easy to typo, and a model's correct template is whatever shipped in its tokenizer. The function gets it right; you do not have to think about it.
 
-<WidgetFrame title="Chat template comparison" caption="The same conversation rendered in four chat templates: ChatML, Llama-3, Mistral, and Gemma. Each uses different special tokens, role markers, and handles system prompts differently. Switching templates between models causes broken output — always match the template to the model.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 61 (secondary)
-  </div>
+<WidgetFrame title="Chat template comparison" caption="The same 3-turn conversation rendered in ChatML, Llama-3, Mistral, and Gemma templates. Switch tabs to see each format. Note: ChatML and Llama-3 have native system roles; Mistral and Gemma don't (system messages get prepended to the first user turn). Each model is trained with its specific tokens; mismatched templates produce broken output. Always use tokenizer.apply_chat_template() in practice.">
+  <ChatTemplateComparison client:visible />
 </WidgetFrame>
 
 The runnable cell implements three of the templates by hand on the same conversation. The output is the same logical content rendered three different ways — and a Llama-3 model fed the ChatML output (or vice versa) produces garbage, because the special tokens it was trained to recognize are not there.
@@ -389,5 +387,317 @@ The deepest limitation of SFT is that it teaches *format*, not *quality*. A mode
 <Callout type="warning">
 **Misconception.** "SFT preserves all pre-training capabilities." False — **SFT causes some capability degradation (catastrophic forgetting).** Capabilities not represented in the SFT data tend to degrade; the InstructGPT paper documented exactly this trade-off. Mix in diverse data, do not over-train, use the lower learning rate, and the tax is manageable. Eliminating it entirely is not on the table.
 </Callout>
+
+## Exercises
+
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — Response-only loss masking
+
+Implement SFT loss with response-only masking. Verify it produces a different value than the unmasked loss.
+
+<details>
+<summary>Hint</summary>
+
+The masked loss is:
+
+$$\mathcal{L}_{\text{SFT}} = \frac{\sum_t m_t \cdot \mathcal{L}_{\text{CE}}(y_t, p_t)}{\sum_t m_t}$$
+
+Implementation:
+1. Compute per-position cross-entropy (no reduction)
+2. Multiply by the mask
+3. Sum and divide by mask sum (avoid divide-by-zero by clamping)
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+def cross_entropy(logits, labels):
+    """Per-position cross-entropy."""
+    max_logit = logits.max(axis=-1, keepdims=True)
+    log_z = np.log(np.exp(logits - max_logit).sum(axis=-1, keepdims=True)) + max_logit
+    label_logits = np.take_along_axis(logits, labels[..., None], axis=-1).squeeze(-1)
+    return log_z.squeeze(-1) - label_logits
+
+def sft_loss(logits, labels, response_mask):
+    """
+    Response-only masked loss.
+
+    logits:        (T, V) — model output
+    labels:        (T,)   — target tokens
+    response_mask: (T,)   — 1 where token is assistant response, 0 elsewhere
+    """
+    # TODO: compute per-position cross-entropy
+    # TODO: multiply by response_mask and average over masked positions
+    pass
+
+# Demo
+np.random.seed(0)
+T, V = 12, 100
+logits = np.random.normal(0, 1, (T, V))
+labels = np.random.randint(0, V, T)
+
+# Pretend first 6 tokens are user prompt; last 6 are assistant response
+response_mask = np.zeros(T)
+response_mask[6:] = 1.0
+
+# Unmasked loss
+unmasked = cross_entropy(logits, labels).mean()
+
+# Masked loss
+# masked = sft_loss(logits, labels, response_mask)
+
+# print(f"Unmasked loss: {unmasked:.3f}")
+# print(f"Masked loss:   {masked:.3f}")
+# print(f"\\nThe masked loss is computed over only the response tokens.")
+# print(f"In training, this means gradient only flows through assistant tokens.")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 2 (medium) — Chat template formatter
+
+Implement a chat template formatter for ChatML. Given a list of messages, produce the formatted prompt string. Then write a helper that identifies which character ranges in the output correspond to assistant content (for downstream loss masking).
+
+<details>
+<summary>Hint</summary>
+
+For each message:
+1. Append the opening special token `<|im_start|>` followed by the role
+2. Append a newline + the content
+3. Append the closing special token `<|im_end|>`
+4. Append another newline for readability
+
+To track assistant ranges, record the start index *before* writing the content and the end index *after*. The result is a list of `(start, end)` tuples — these would be used to build the loss mask after tokenization.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def format_chatml(messages):
+    """
+    Format a multi-turn conversation in ChatML.
+
+    messages: list of {"role": str, "content": str}
+
+    Returns: (formatted_string, assistant_ranges)
+    where assistant_ranges is [(start_char, end_char), ...] for each assistant content.
+    """
+    # TODO: build the output string and record assistant content character ranges
+    # output = ""
+    # ranges = []
+    # for m in messages:
+    #     output += f"<|im_start|>{m['role']}\\n"
+    #     if m["role"] == "assistant":
+    #         start = len(output)
+    #         output += m["content"]
+    #         end = len(output)
+    #         ranges.append((start, end))
+    #     else:
+    #         output += m["content"]
+    #     output += "<|im_end|>\\n"
+    # return output, ranges
+    pass
+
+# Test
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is 2+2?"},
+    {"role": "assistant", "content": "2+2 equals 4."},
+    {"role": "user", "content": "And 3+3?"},
+    {"role": "assistant", "content": "3+3 equals 6."},
+]
+
+# formatted, ranges = format_chatml(messages)
+# print("=== Formatted conversation ===")
+# print(formatted)
+# print(f"\\n=== Assistant content ranges ({len(ranges)} responses) ===")
+# for start, end in ranges:
+#     print(f"  chars [{start}:{end}] = {repr(formatted[start:end])}")
+# print(f"\\nThese ranges become the response mask after tokenization.")
+`}
+  packages={[]}
+/>
+
+### Exercise 3 (medium) — Multi-turn loss mask construction
+
+Given a tokenized multi-turn conversation, construct the response mask such that all assistant tokens (including end-of-turn markers) are 1 and everything else is 0.
+
+<details>
+<summary>Hint</summary>
+
+In a real implementation, you'd use the tokenizer's special-token IDs to find role boundaries. For this exercise, work with role labels per token (provided in the starter code).
+
+Walk through the tokens. Track the "current role." Mark all tokens between the assistant's `<|im_start|>` and the assistant's `<|im_end|>` (inclusive of the `<|im_end|>` — model must learn to stop). User and system tokens get 0.
+
+Note: the `<|im_start|>` and `assistant` role marker tokens at the *start* of the assistant turn are NOT in loss — those are context telling the model "now respond." Content + final `<|im_end|>` are in loss.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`# Simulated tokenized conversation. Each entry: (text, role)
+# Role can be 'system', 'user', 'assistant', or 'special'
+tokens = [
+    ('<|im_start|>', 'special'),
+    ('system',       'special'),
+    ('You',          'system'),
+    ('are',          'system'),
+    ('helpful.',     'system'),
+    ('<|im_end|>',   'special'),
+    ('<|im_start|>', 'special'),
+    ('user',         'special'),
+    ('What',         'user'),
+    ('is',           'user'),
+    ('2+2?',         'user'),
+    ('<|im_end|>',   'special'),
+    ('<|im_start|>', 'special'),
+    ('assistant',    'special'),
+    ('2+2',          'assistant'),
+    ('equals',       'assistant'),
+    ('4.',           'assistant'),
+    ('<|im_end|>',   'special'),    # assistant end-of-turn — MUST be in loss
+    ('<|im_start|>', 'special'),
+    ('user',         'special'),
+    ('And',          'user'),
+    ('3+3?',         'user'),
+    ('<|im_end|>',   'special'),
+    ('<|im_start|>', 'special'),
+    ('assistant',    'special'),
+    ('3+3',          'assistant'),
+    ('equals',       'assistant'),
+    ('6.',           'assistant'),
+    ('<|im_end|>',   'special'),    # assistant end-of-turn — MUST be in loss
+]
+
+def build_response_mask(tokens):
+    """
+    Build response mask. Returns list of 0/1 same length as tokens.
+    1 = contributes to loss; 0 = doesn't.
+
+    Rules:
+    - All system / user tokens: 0
+    - All special tokens that introduce a NON-assistant turn: 0
+    - Special tokens that introduce an assistant turn (<|im_start|>, role marker): 0
+    - Assistant content tokens: 1
+    - Final <|im_end|> of an assistant turn: 1 (model learns to stop)
+    """
+    # TODO: walk through tokens, track state, build mask
+    pass
+
+# mask = build_response_mask(tokens)
+# print(f"{'idx':>4} {'role':>10} {'text':>15} mask")
+# for i, ((text, role), m) in enumerate(zip(tokens, mask)):
+#     marker = "█" if m == 1 else "░"
+#     print(f"{i:>4} {role:>10} {text:>15}   {marker} {m}")
+#
+# # Verify
+# in_loss = sum(mask)
+# print(f"\\nTotal tokens: {len(mask)}, in loss: {in_loss} ({in_loss / len(mask) * 100:.0f}%)")
+# print(f"Both assistant turns + their <|im_end|> markers contribute.")
+# print(f"User, system, and assistant-turn opening markers do not.")
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Synthetic data quality filter
+
+Build a multi-stage quality filter for synthetic SFT data. Apply it to a small dataset and report what fraction is retained. Real systems combine length checks, AI-self-reference detection, reward-model scoring, deduplication, and more.
+
+<details>
+<summary>Hint</summary>
+
+A practical filter stacks multiple checks. Examples:
+- **Length**: too-short responses (< 20 chars) or too-long (> 2000 chars) are suspect
+- **AI self-reference**: "As an AI language model" is a red flag
+- **Repetition**: highly repetitive responses (padded) are bad
+- **Empty / placeholder**: "I don't know.", "N/A" are bad
+- **Instruction echo**: response that contains the instruction verbatim is suspect
+- **Length ratio**: response much shorter or much longer than expected is suspect
+
+Each check returns a 0/1 (or weight). Combine multiplicatively (any check fails → 0) or additively. Tune thresholds empirically.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import re
+
+# Synthetic dataset — some good, some bad
+dataset = [
+    {"instruction": "What is the capital of France?",
+     "response": "The capital of France is Paris."},
+    {"instruction": "Explain quantum entanglement.",
+     "response": "OK"},
+    {"instruction": "Write a poem about clouds.",
+     "response": "As an AI language model, I cannot truly experience clouds, but here is a poem..."},
+    {"instruction": "What's 2 + 2?",
+     "response": "2 + 2 equals 4."},
+    {"instruction": "Tell me about photosynthesis.",
+     "response": "Photosynthesis is the process by which plants convert light energy into chemical energy, producing glucose and oxygen."},
+    {"instruction": "Describe the moon.",
+     "response": " ".join(["The moon is large."] * 50)},   # padded/repetitive
+    {"instruction": "What is the capital of Spain?",
+     "response": "What is the capital of Spain? The capital of Spain is Madrid."},   # echoes instruction
+    {"instruction": "Hi!",
+     "response": "Hello! How can I help you today?"},
+    {"instruction": "Define entropy.",
+     "response": "I don't know."},
+    {"instruction": "What's the chemical formula for water?",
+     "response": "H2O is the chemical formula for water. It consists of two hydrogen atoms and one oxygen atom."},
+]
+
+def filter_length(ex):
+    """Reject too-short or too-long responses."""
+    n = len(ex["response"])
+    # TODO: return True if length is in acceptable range
+    pass
+
+def filter_ai_reference(ex):
+    """Reject responses with 'as an AI' phrasing."""
+    # TODO: return True if no AI self-reference
+    pass
+
+def filter_repetition(ex):
+    """Reject responses where one short phrase repeats many times."""
+    # TODO: split into words; check if any 3-word sequence appears too often
+    pass
+
+def filter_placeholder(ex):
+    """Reject empty / placeholder responses."""
+    # TODO: reject "I don't know.", "N/A", "OK", etc.
+    pass
+
+def filter_echo(ex):
+    """Reject responses that echo the instruction verbatim."""
+    # TODO: reject if instruction is a prefix of the response
+    pass
+
+def passes_all_filters(ex):
+    """Apply all filters. Return True iff ex passes every check."""
+    # return all(f(ex) for f in [filter_length, filter_ai_reference, filter_repetition, filter_placeholder, filter_echo])
+    pass
+
+# Apply filters
+# results = []
+# for ex in dataset:
+#     keeps = passes_all_filters(ex)
+#     results.append((ex["instruction"][:40], keeps))
+#
+# print(f"{'instruction':>42} | keep?")
+# print("-" * 55)
+# for inst, keep in results:
+#     marker = "✓" if keep else "✗"
+#     print(f"{inst:>42} | {marker}")
+#
+# kept = sum(1 for _, k in results if k)
+# print(f"\\nKept: {kept}/{len(dataset)} ({kept / len(dataset) * 100:.0f}%)")
+# print(f"\\nReal systems combine many filters + reward-model scoring + dedup.")
+# print(f"A 50-80% retention rate is common for raw synthetic data.")
+`}
+  packages={[]}
+/>
 
 **Chapter 14 covers what comes next: preference optimization.** RLHF (the original three-stage InstructGPT recipe), DPO (the simpler offline variant from Rafailov et al. 2023), RLVR (verifiable-reward reinforcement learning, the recipe behind DeepSeek-R1's reasoning training), CAI (Constitutional AI, Anthropic's approach using AI feedback). These methods compare alternatives — pairs of responses, one preferred over the other — and train the model to prefer the better one. SFT teaches the model to *respond*; preference optimization teaches it to respond *well*. The modern open-source post-training stack is **SFT plus DPO**, and Zephyr-7B (Tunstall et al. 2023) is the canonical demonstration that the combination produces ChatGPT-3.5-class quality on a $7$B model. The next chapter walks through DPO and its variants in detail.

@@ -24,3 +24,4 @@ export { default as ActiveVsTotalParams } from './ch11/ActiveVsTotalParams';
 export { default as SSMvsAttentionScaling } from './ch12/SSMvsAttentionScaling';
 export { default as SelectiveScanAnimation } from './ch12/SelectiveScanAnimation';
 export { default as SFTLossMasking } from './ch13/SFTLossMasking';
+export { default as ChatTemplateComparison } from './ch13/ChatTemplateComparison';
