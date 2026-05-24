@@ -1,0 +1,257 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.controlsPanel, .roundPanel, .expectedPanel, .landscapePanel {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+  font-family: 'JetBrains Mono', monospace;
+  flex-wrap: wrap;
+}
+.controlRow:last-child { margin-bottom: 0; }
+.controlLabel {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 130px;
+}
+.controlValue {
+  font-size: 0.82rem;
+  color: var(--cyan-300);
+  font-weight: 500;
+  min-width: 65px;
+}
+.slider { flex: 1; min-width: 180px; }
+.controlHint {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.resampleButton {
+  padding: 0.3rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--cyan-300);
+  border: 1px solid var(--cyan-500);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.resampleButton:hover { background: color-mix(in srgb, var(--cyan-500) 8%, var(--bg-primary)); }
+
+.roundTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.7rem;
+  font-weight: 500;
+}
+.roundContent { display: flex; flex-direction: column; gap: 0.85rem; }
+
+.stepRow {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+}
+.stepNumber {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--cyan-300);
+  font-weight: 600;
+  min-width: 20px;
+}
+.stepContent { flex: 1; }
+.stepLabel {
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  margin-bottom: 0.45rem;
+}
+.tokenRow {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tokenBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-default);
+  background: var(--bg-primary);
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 200ms;
+}
+.tokenLabel { font-size: 0.78rem; font-weight: 500; }
+.tokenMark { font-size: 0.95rem; line-height: 1; margin-top: 0.15rem; font-weight: 600; }
+
+.tokenBox_pending {
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+.tokenBox_accepted {
+  background: color-mix(in srgb, var(--emerald-400) 10%, var(--bg-primary));
+  border-color: var(--emerald-400);
+  color: var(--emerald-400);
+}
+.tokenBox_rejected {
+  background: color-mix(in srgb, var(--rose-400) 10%, var(--bg-primary));
+  border-color: var(--rose-400);
+  color: var(--rose-400);
+}
+.tokenBox_discarded {
+  background: var(--bg-primary);
+  border-color: var(--border-subtle);
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+.tokenBox_corrected {
+  background: color-mix(in srgb, var(--cyan-500) 12%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+}
+
+.verifyAnnotations {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+.anno {
+  min-width: 50px;
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+}
+.anno_accepted  { color: var(--emerald-400); }
+.anno_rejected  { color: var(--rose-400); font-weight: 600; }
+.anno_discarded { color: var(--text-tertiary); font-style: italic; }
+
+.netSummary {
+  margin-top: 0.6rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.netSummaryRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.summaryDot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.summaryText { color: var(--text-primary); }
+.summaryText strong { color: var(--cyan-300); }
+
+.expectedTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.expectedBody { display: flex; flex-direction: column; gap: 0.3rem; }
+.expectedRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.expectedLabel { color: var(--text-secondary); }
+.expectedValue { color: var(--text-primary); font-weight: 500; }
+.expectedDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 0.35rem 0;
+}
+.expectedHighlight .expectedValue { color: var(--cyan-300); font-weight: 600; }
+.expectedHighlight .expectedValue strong { color: var(--cyan-300); font-size: 1rem; }
+
+.landscapeTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.landscapeTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+}
+.landscapeTable th, .landscapeTable td {
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.landscapeTable th {
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+.rowLabel {
+  color: var(--text-tertiary);
+  text-align: right;
+  font-weight: 500;
+}
+.cell { color: var(--text-secondary); }
+.cellCurrent {
+  background: color-mix(in srgb, var(--cyan-500) 12%, transparent);
+  color: var(--cyan-300);
+  font-weight: 600;
+}
+.currentMarker {
+  font-size: 0.7rem;
+  font-style: italic;
+  font-weight: normal;
+  color: var(--cyan-300);
+}
+
+.caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .controlRow { flex-direction: column; align-items: stretch; }
+  .controlLabel { min-width: 0; }
+  .tokenBox { min-width: 40px; padding: 0.3rem 0.4rem; }
+  .anno { min-width: 40px; font-size: 0.6rem; }
+  .landscapeTable { font-size: 0.7rem; }
+}

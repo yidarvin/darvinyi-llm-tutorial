@@ -6,7 +6,7 @@ description: Inference optimization — how to serve trained LLMs efficiently at
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { KVCacheAnimation } from '@components/widgets';
+import { KVCacheAnimation, SpeculativeDecoding } from '@components/widgets';
 
 Phase 11 left you with a trained model — pre-trained, supervised-fine-tuned, preference-aligned, optionally PEFT-adapted, optionally distilled. The mathematical object exists. Phase 12 asks the engineering question that follows: **how do you actually serve it?** A transformer forward pass is conceptually simple; serving one at production scale is an entire discipline. Naive implementations are shockingly inefficient. They rerun every layer for every generated token, pad short sequences to match long ones in the batch, and materialize huge intermediate attention matrices that the GPU spends most of its time reading and writing rather than computing. **A production stack does none of this.**
 
@@ -257,10 +257,8 @@ print("- Too-high k can hurt: draft cost accumulates, acceptance drops over hori
 ```
 </RunnableCode>
 
-<WidgetFrame title="Speculative decoding" caption="The draft model proposes k candidate tokens. The big model verifies them in one parallel forward pass — accepting matching tokens, rejecting mismatches. Slider for k (draft length) and acceptance rate α. The widget shows the per-round token flow and computes the resulting speedup, making the 'draft + verify' pattern visceral.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 79 (secondary)
-  </div>
+<WidgetFrame title="Speculative decoding" caption="The draft model proposes k tokens; the big model verifies them in one parallel forward pass. Accepted tokens (emerald) are kept; first rejection (rose) triggers a correction (cyan). Sliders for k and α. Speedup landscape table shows how the speedup varies. At k=5, α=0.7: ~2.9× speedup per round.">
+  <SpeculativeDecoding client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
@@ -297,6 +295,308 @@ For most teams the answer is vLLM unless there is a specific reason to reach els
 </Callout>
 
 The final section ties the optimizations together and sets up the next two chapters.
+
+## Exercises
+
+Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+### Exercise 1 (easy) — KV cache memory calculator
+
+Implement the KV cache memory formula and compute the cache size for various model sizes and context lengths.
+
+<details>
+<summary>Hint</summary>
+
+The KV cache memory formula:
+$$\text{KV cache size} = 2 \times L \times H \times d_{\text{head}} \times N \times \text{batch} \times \text{dtype bytes}$$
+
+- $L$ = number of layers
+- $H$ = number of heads
+- $d_{\text{head}}$ = head dimension
+- $N$ = current sequence length
+- batch = batch size
+- dtype bytes = 2 for BF16, 4 for FP32
+
+The factor of 2 is for K and V (two stored tensors per position).
+
+Compute for Llama-7B (32 layers, 32 heads, head_dim=128), Llama-13B (40, 40, 128), Llama-70B (80, 64, 128).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def kv_cache_size_gb(seq_len, n_layers, n_heads, head_dim, batch=1, dtype_bytes=2):
+    """
+    Compute KV cache memory in GB.
+    Formula: 2 * layers * heads * head_dim * seq_len * batch * dtype_bytes
+    """
+    # TODO: implement
+    pass
+
+MODELS = {
+    "Llama-7B":  {"layers": 32, "heads": 32, "head_dim": 128},
+    "Llama-13B": {"layers": 40, "heads": 40, "head_dim": 128},
+    "Llama-70B": {"layers": 80, "heads": 64, "head_dim": 128},
+}
+
+contexts = [1024, 4096, 32768, 131072]
+
+# print(f"{'Model':<12} | {'1K':>10} {'4K':>10} {'32K':>10} {'128K':>10}")
+# print("-" * 60)
+# for name, spec in MODELS.items():
+#     sizes = [kv_cache_size_gb(c, spec["layers"], spec["heads"], spec["head_dim"]) for c in contexts]
+#     row = ' '.join(f'{s:>7.2f} GB' for s in sizes)
+#     print(f"{name:<12} | {row}")
+
+# At 128K context:
+# - Llama-7B:  ~4 GB
+# - Llama-13B: ~7 GB
+# - Llama-70B: ~22 GB
+#
+# This is per sequence. Batch 16: multiply by 16.
+# This is why long-context serving is expensive — memory dominates.
+`}
+  packages={[]}
+/>
+
+### Exercise 2 (medium) — Naive vs cached decoding
+
+Implement naive decoding (recompute everything per token) and cached decoding (reuse stored K, V). Compare timing.
+
+<details>
+<summary>Hint</summary>
+
+**Naive**: at each decode step, run the *entire sequence* through the model. Cost per step: $O(N^2)$ for attention.
+
+**Cached**: at each decode step, run only the *new token* through the model. Append its K, V to the cache. Cost per step: $O(N)$ for attention.
+
+For mock model: each "layer" is a single matmul. Run for both modes on a sequence of length 100 + 50 generated tokens. Time both.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+import time
+
+np.random.seed(0)
+d_model = 256
+n_layers = 4
+W = [np.random.normal(0, 0.02, (d_model, d_model)) for _ in range(n_layers)]
+
+def naive_decode_step(all_tokens, weights):
+    """Process ALL tokens through all layers — no cache."""
+    # TODO: simulate naive forward; cost O(seq^2)
+    pass
+
+def cached_decode_step(new_token, kv_cache, weights):
+    """Process ONLY the new token; append to cache."""
+    # TODO: simulate cached forward; cost O(seq) per layer
+    pass
+
+# Setup: 100-token prompt, decode 50 tokens
+prompt = np.random.normal(0, 1, (100, d_model))
+
+# Naive timing
+naive_start = time.time()
+running = prompt
+for _ in range(50):
+    new = np.random.normal(0, 1, (1, d_model))
+    running = np.concatenate([running, new], axis=0)
+    # naive_decode_step(running, W)
+naive_time = time.time() - naive_start
+
+# Cached timing
+kv_cache = [[] for _ in range(n_layers)]
+# Prefill
+# for tok in prompt:
+#     cached_decode_step(tok, kv_cache, W)
+cached_start = time.time()
+for _ in range(50):
+    new_token = np.random.normal(0, 1, (d_model,))
+    # cached_decode_step(new_token, kv_cache, W)
+cached_time = time.time() - cached_start
+
+# Compare
+# print(f"Naive decoding:  {naive_time*1000:.0f} ms")
+# print(f"Cached decoding: {cached_time*1000:.0f} ms")
+# print(f"Speedup: {naive_time/cached_time:.1f}×")
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Speculative speedup formula
+
+Implement the speculative decoding speedup formula and verify it matches the widget's behavior.
+
+<details>
+<summary>Hint</summary>
+
+Expected accepted tokens per round (geometric-like): if each token has probability $\alpha$ of being accepted and a rejection truncates the round, the expected number of consecutive acceptances before the first failure is:
+$$E[\text{accepted}] = \sum_{i=1}^{k} \alpha^i = \frac{\alpha(1 - \alpha^k)}{1 - \alpha}$$
+
+Or equivalently: $\frac{1 - \alpha^{k+1}}{1 - \alpha} - 1$.
+
+**Each round always emits one "corrected" token from the big model** (either the corrected mismatch, or the next-token continuation if all $k$ are accepted). So expected emitted = expected accepted + 1.
+
+**Cost per round** = 1 big-model pass + $k$ draft passes + framework overhead.
+
+Speedup = expected emitted / cost per round.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def speculative_speedup(k, alpha, draft_cost=0.02, overhead=0.05):
+    """
+    Compute speculative decoding speedup.
+
+    k: draft length
+    alpha: acceptance rate
+    draft_cost: draft inference cost / big inference cost
+    overhead: framework overhead per round
+
+    Returns: (expected_accepted, expected_emitted, cost_per_round, speedup)
+    """
+    # TODO: implement
+    pass
+
+# Verify behavior across k and alpha
+K_VALUES = [1, 3, 5, 7, 10]
+ALPHA_VALUES = [0.3, 0.5, 0.7, 0.9]
+
+# print(f"{'k':>3} | " + ' '.join(f'α={a:.1f}' for a in ALPHA_VALUES))
+# print("-" * 50)
+# for k in K_VALUES:
+#     speedups = []
+#     for alpha in ALPHA_VALUES:
+#         _, _, _, sp = speculative_speedup(k, alpha)
+#         speedups.append(f'{sp:.2f}x')
+#     print(f"k={k:>3} | " + ' '.join(s.rjust(6) for s in speedups))
+
+# Observations:
+# - At low acceptance (α=0.3), speedup is marginal at any k
+# - At high acceptance (α=0.7-0.9), k=5-7 gives 2-3x speedup
+# - Speedup plateaus past k=10 because of:
+#   1. Accumulated draft cost (linear in k)
+#   2. Diminishing acceptance over long horizons (geometric-like)
+# - Choose draft model and k jointly: high acceptance + moderate k is the sweet spot
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Continuous batching simulator
+
+Simulate continuous batching: a fixed-size batch of decode requests where each request finishes at a different time. Track GPU utilization vs naive batching (wait for the longest request to finish before starting a new batch).
+
+<details>
+<summary>Hint</summary>
+
+Setup:
+- Batch size B = 16 (slots)
+- Each decode step processes one token for each active slot
+- Sequences have varying remaining lengths; when a sequence finishes (length 0), its slot becomes free
+- New requests arrive at random times with random lengths
+- Track: throughput (tokens/step) and slot utilization (% of slots active)
+
+Continuous batching: when a slot frees, fill it immediately with a waiting request.
+
+Naive batching: wait for all current sequences to finish; then start a new batch of 16.
+
+Compare throughput over time.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+import random
+
+random.seed(42)
+np.random.seed(42)
+
+BATCH_SIZE = 16
+SIMULATION_STEPS = 200
+ARRIVAL_RATE = 0.4   # probability of new request per step
+LENGTH_RANGE = (20, 80)   # request lengths
+
+class Request:
+    def __init__(self, req_id, length):
+        self.id = req_id
+        self.remaining = length
+        self.total = length
+
+def generate_requests(n=100):
+    """Pre-generate requests with random lengths."""
+    return [Request(i, random.randint(*LENGTH_RANGE)) for i in range(n)]
+
+def continuous_batching(requests):
+    """
+    Continuous batching: when a slot frees, fill it immediately.
+    Returns: throughput per step, utilization per step
+    """
+    pending = list(requests)
+    active = []      # currently in batch (max BATCH_SIZE)
+    completed = 0
+
+    throughputs = []
+    utilizations = []
+
+    for step in range(SIMULATION_STEPS):
+        # Fill empty slots from pending queue
+        # TODO: while there's room and pending requests, move them to active
+
+        # Decode one token for each active sequence
+        tokens_this_step = len(active)
+        # TODO: decrement each active sequence's remaining by 1
+        # TODO: remove finished sequences (remaining == 0)
+
+        throughputs.append(tokens_this_step)
+        utilizations.append(len(active) / BATCH_SIZE)
+
+    return throughputs, utilizations
+
+def naive_batching(requests):
+    """
+    Naive batching: wait for entire batch to finish; then start next batch.
+    """
+    pending = list(requests)
+    active = []
+    throughputs = []
+    utilizations = []
+
+    for step in range(SIMULATION_STEPS):
+        # If batch is empty, fill it with next BATCH_SIZE requests from pending
+        if not active and pending:
+            # TODO: move BATCH_SIZE requests from pending to active
+            pass
+
+        # Decode tokens for active
+        tokens_this_step = len(active)
+        # TODO: decrement and remove finished
+
+        throughputs.append(tokens_this_step)
+        utilizations.append(len(active) / BATCH_SIZE)
+
+    return throughputs, utilizations
+
+# Run both
+# requests = generate_requests(200)
+# cont_throughput, cont_util = continuous_batching(requests)
+# naive_throughput, naive_util = naive_batching(generate_requests(200))   # fresh requests
+#
+# print(f"Continuous batching:")
+# print(f"  Avg throughput: {np.mean(cont_throughput):.1f} tokens/step")
+# print(f"  Avg utilization: {np.mean(cont_util)*100:.0f}%")
+# print(f"\\nNaive batching:")
+# print(f"  Avg throughput: {np.mean(naive_throughput):.1f} tokens/step")
+# print(f"  Avg utilization: {np.mean(naive_util)*100:.0f}%")
+#
+# print(f"\\nContinuous batching wins on both throughput and utilization.")
+# print(f"This is why vLLM, TGI, and SGLang all use continuous batching.")
+`}
+  packages={["numpy"]}
+/>
 
 ## The full inference picture
 

@@ -32,3 +32,4 @@ export { default as ParameterBudgetCalculator } from './ch15/ParameterBudgetCalc
 export { default as TemperatureScaling } from './ch16/TemperatureScaling';
 export { default as DistillationPipeline } from './ch16/DistillationPipeline';
 export { default as KVCacheAnimation } from './ch17/KVCacheAnimation';
+export { default as SpeculativeDecoding } from './ch17/SpeculativeDecoding';

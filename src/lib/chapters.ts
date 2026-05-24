@@ -65,7 +65,7 @@ export const PARTS: Part[] = [
     num: 6,
     title: 'Inference',
     chapters: [
-      { num: 17, slug: 'ch17-inference-optimization', title: 'Inference optimization',  partNum: 6, status: 'draft' },
+      { num: 17, slug: 'ch17-inference-optimization', title: 'Inference optimization',  partNum: 6, status: 'published' },
       { num: 18, slug: 'ch18-quantization',           title: 'Quantization & compression', partNum: 6, status: 'planned' },
       { num: 19, slug: 'ch19-sampling',               title: 'Sampling & decoding',      partNum: 6, status: 'planned' },
     ],
