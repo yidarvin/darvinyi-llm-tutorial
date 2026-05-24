@@ -77,7 +77,7 @@ Cross-entropy is the right loss because language modeling is, at the bottom, a c
 The implementation in numpy is short. The computation is exactly the formula: softmax the logits, pick out the probability of the true token at each position, take negative log, average.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def softmax(x, axis=-1):
@@ -208,7 +208,7 @@ Empirically AdamW produces measurably better-trained models than Adam + L2 at th
 The numpy AdamW is fifteen lines. Two state buffers per parameter, the EMAs, the bias correction, the decoupled decay step.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 class AdamW:
@@ -279,7 +279,7 @@ $$\alpha(t) = \begin{cases} \alpha_{\max} \cdot \dfrac{t}{W} & \text{if } t < W 
 **Typical values.** Warmup of $W = 2000$ steps for medium-scale models is standard; very large models use up to $10{,}000$. The floor $\alpha_{\min}$ is conventionally about $10\%$ of $\alpha_{\max}$ — small enough to fine-tune, large enough to keep making progress. The total steps $T$ is the training budget, chosen to consume the available training tokens at the chosen batch size. For a $50$M model trained on $1$B tokens with $32$k tokens per step, $T = 1$B$/32$k $\approx 31{,}000$ steps; for the chapter's demo configuration ($T = 100{,}000$) that would be a $3.2$B-token budget.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def lr_schedule(step, max_lr=6e-4, min_lr=6e-5,
@@ -360,7 +360,7 @@ Dividing the loss by `accum_steps` is the part that occasionally trips people up
 Gradient accumulation has no downsides at the loss level — the trained model is identical to one trained at the same effective batch size on bigger hardware — but it has compute downsides: $8$ micro-batches take more wall-clock time than one batch of equivalent size on hardware that can hold it. The technique exists because memory is the binding constraint more often than compute.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def clip_gradients(grads, max_norm=1.0):
@@ -423,7 +423,7 @@ A trained reader has, after reading the prose so far, an architecture from Chapt
 </WidgetFrame>
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# A simplified nanoGPT-style training loop.
 # Assumes:  model        — any GPT-style decoder-only transformer
 #           train_data   — provides .get_batch() -> (x, y) of shape (B, T)
@@ -544,7 +544,7 @@ Temperature alone is not enough — even at temperature $1$, sampling from the f
 **Top-p (nucleus) sampling** keeps the smallest set of tokens whose cumulative probability exceeds $p$, masks the rest, renormalizes, and samples from the nucleus. The hyperparameter $p$ is typically $0.9$ or $0.95$. Top-p is more *adaptive* than top-k: when the distribution is sharply peaked (the model is confident), the nucleus is small and sampling is nearly deterministic; when the distribution is flat (many plausible continuations), the nucleus is large and sampling explores more. The adaptivity matches what people usually want from a sampler, and top-p has largely replaced top-k as the default in modern decoding stacks.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def softmax(x, axis=-1):

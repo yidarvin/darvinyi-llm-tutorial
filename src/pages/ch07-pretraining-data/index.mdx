@@ -47,7 +47,7 @@ The picture is shifting at the high end. GPT-4 and similarly recent frontier mod
 Before the curation can begin, the data needs to be inspected — counted, summarized, sanity-checked. Even at the toy scale of a few documents, basic statistics surface the kinds of problems the rest of the pipeline will address.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# A toy "corpus" of 5 simulated documents — for demonstration only.
 # Real CommonCrawl pipelines run this kind of summary on billions of documents.
 corpus = [
@@ -92,7 +92,7 @@ What exact dedup does *not* catch is the much larger near-duplicate problem. Any
 Two finer points about exact dedup itself. **Document-level versus line-level.** Document-level dedup removes whole copies of documents. Line-level dedup, applied after document-level, removes recurring lines that appear across many otherwise-different documents — navigation menus, copyright notices, "click here to subscribe" banners. Both are useful; they catch different problems. Production pipelines usually do both passes. **Hash choice matters.** Use a fast non-cryptographic hash. SHA-256 is overkill: the security guarantees are irrelevant for set-membership, and the speed cost on terabytes of input is substantial. xxhash, in particular, is roughly 10× faster and produces collisions at rates that are still well below the practical noise floor.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import hashlib
 from collections import defaultdict
 
@@ -189,7 +189,7 @@ The curve is sigmoid-shaped. Below the threshold it stays near zero; above the t
 The numpy implementation is short. The MinHash signature is computed by hashing each shingle once, computing $k$ linear hash functions $(a_i \cdot x + b_i) \bmod p$ in a vectorized step, and tracking the per-function minimum across shingles. Estimating Jaccard is a vectorized equality check across two signatures.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import hashlib
 import numpy as np
 
@@ -275,7 +275,7 @@ The most expensive filters use an LLM directly to score document quality. The LL
 A handful of heuristic rules already does meaningful work. The implementation below — length, ASCII-letter ratio as a crude English proxy, and unique-word ratio — catches the obvious noise across a small handful of sample documents. Production pipelines layer dozens of such rules plus classifiers on top, but the heuristic pass alone removes a noticeable fraction of CommonCrawl noise at almost no compute cost.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`def quality_score(text):
     """Heuristic quality features for a document."""
     if not text:
@@ -340,7 +340,7 @@ The implementation is short — a hash join between two sets of n-grams. Whether
 The honest summary is that decontamination is *approximate*. Modern public datasets (FineWeb, DCLM) publish their decontamination procedures and the benchmarks they filter against, which lets independent researchers audit. The audits consistently find residual contamination at low single-digit percentages. The reported benchmark scores in 2024+ should be read with that in mind — they include a small but real contribution from leaked content, even in carefully curated datasets. This is partly why the field is increasingly moving toward "private" benchmarks (held-out by the benchmark maintainers) and "human-judged" evaluations rather than pure score-on-public-benchmark reporting.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`def ngrams(text, n=13):
     """Word-level n-grams as a set of tuples."""
     words = text.split()

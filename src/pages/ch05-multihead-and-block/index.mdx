@@ -68,7 +68,7 @@ The widget below shows what specialization looks like in practice — four heads
 The numpy implementation is a few dozen lines. The trick is the reshape-and-transpose that splits the single $d_{\text{model}}$ projection into per-head views without doing $h$ separate matmuls.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def softmax(x, axis=-1):
@@ -194,7 +194,7 @@ The chapter implements GELU because it is the simpler of the two modern options 
 The FFN is mechanically simple — fewer than fifteen lines of numpy.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def gelu(x):
@@ -303,7 +303,7 @@ The argument for the simplification is that the mean subtraction in standard lay
 ### Implementation
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 class LayerNorm:
@@ -387,7 +387,7 @@ The Pre-LN block in code is what every modern transformer's stacked layers look 
 </WidgetFrame>
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def softmax(x, axis=-1):

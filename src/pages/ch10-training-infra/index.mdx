@@ -107,7 +107,7 @@ Practical NCCL tuning is a real engineering activity at scale. Environment varia
 The runnable code below simulates the *result* of a ring all-reduce — not the round-by-round communication, but the final accumulation that every rank ends up with — and computes the communication-cost saving relative to the naive all-to-all approach.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def simulate_ring_all_reduce(rank_data):
@@ -227,7 +227,7 @@ FlashAttention processes attention in **tiles**. Each query block is loaded into
 The result is $2$ to $4\times$ speedup at standard context lengths ($2$K to $8$K) and $10\times$ or more at long contexts ($32$K to $128$K). Crucially, the output is *identical* to standard attention — no approximation, same math, just a different implementation. **FlashAttention-2** (Dao 2023, [arxiv.org/abs/2307.08691](https://arxiv.org/abs/2307.08691)) refined the work-partitioning across GPU threads and is the current default in PyTorch's `scaled_dot_product_attention` when running on supported hardware.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# A Triton "hello world" kernel — vector addition.
 # Illustrative only: actually running Triton requires a CUDA GPU and the
 # Triton package, neither of which is available in the in-browser Pyodide
@@ -321,7 +321,7 @@ The difference between $25\%$ MFU and $50\%$ MFU is mostly the difference betwee
 The runnable below makes the activation-checkpointing trade concrete — three regimes (none, selective, full) for a $70$B-class layer stack — and prints the per-strategy memory footprint.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`def activation_memory_gb(num_layers, seq_len, batch_size, d_model, checkpointing):
     """Rough activation memory per micro-batch, in GB, for BF16 training."""
     BYTES_PER_ELEMENT = 2  # BF16
@@ -377,7 +377,7 @@ Public and rumored estimates: **LLaMA-2 70B** consumed roughly $1.7$M GPU-hours,
 The pragmatic implication is that **MFU matters more than $\$/$GPU-hour**. A cluster running at $30\%$ MFU on $\$5$/hr GPUs delivers fewer useful FLOPs per dollar than the same cluster running at $50\%$ MFU on $\$8$/hr GPUs. The arithmetic of a $\$50$M training run says that improving MFU from $25\%$ to $50\%$ is worth $\$25$M — far more than the salaries of the engineers who would do that work. This is why every major lab now has a dedicated training-infrastructure team whose explicit job is MFU optimization.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`def mfu(tokens_per_sec, model_params, num_gpus, peak_flops_per_gpu):
     """Model FLOPs Utilization.
 

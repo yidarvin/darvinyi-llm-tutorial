@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build:search-index": "node scripts/build-search-index.mjs",
+    "subset:fonts": "node scripts/subset-fonts.mjs",
     "predev": "npm run build:search-index",
     "prebuild": "npm run build:search-index",
     "dev": "astro dev",

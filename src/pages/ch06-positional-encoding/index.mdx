@@ -80,7 +80,7 @@ with PE sliced down to the current sequence length. The block stack then runs on
 The numpy implementation is a few lines. The matrix is built by broadcasting a column of positions against a row of inverse frequencies, then filling the even columns with sine and the odd columns with cosine.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def sinusoidal_pe(max_len, d_model):
@@ -150,7 +150,7 @@ Two things stand out about the design. First, it adds parameters: $M \cdot d_{\t
 The structural inductive bias is also weak. Sinusoidal PE has continuity built in — neighboring positions have similar encodings because the underlying functions are continuous. Learned PE has no such guarantee. Two adjacent positions get two adjacent rows in the table, but those rows are initialized independently and updated independently. Whether the trained embeddings end up smooth in position space is a function of what gradients happened to do during training, not of the architecture.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 class LearnedPE:
@@ -248,7 +248,7 @@ The implementation is short and mostly about getting the dimension pairing right
 The same demo serves a second purpose. The numerical check at the end verifies the relative-position property directly — for several $(m, n)$ pairs with the same offset, the dot product after rotation comes out to the same value.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def rope(x, position_ids, base=10000.0):
@@ -327,7 +327,7 @@ The head-specific slopes are chosen so different heads decay at different rates.
 The key property of ALiBi is the one its paper title advertises: "train short, test long." The bias is a function of *distance*, computed at inference time, with no learned per-position parameters. At evaluation time, even if you are processing sequences longer than anything seen during training, the bias formula keeps working. Position $3000$ at offset $5$ from the query gets a bias of $-5 m_h$, exactly the same bias position $3$ at offset $5$ would have gotten. ALiBi-trained models can be evaluated at context lengths several times longer than their training length with minimal quality loss — a property neither learned PE nor (untreated) sinusoidal PE shares.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def alibi_bias(seq_len, n_heads):

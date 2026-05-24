@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -145,12 +146,17 @@ async function buildIndex() {
   );
 
   await fs.mkdir(path.dirname(OUTPUT), { recursive: true });
-  await fs.writeFile(OUTPUT, JSON.stringify(documents, null, 0), 'utf8');
+  const json = JSON.stringify(documents, null, 0);
+  await fs.writeFile(OUTPUT, json, 'utf8');
 
-  const sizeKb = ((await fs.stat(OUTPUT)).size / 1024).toFixed(1);
+  const gz = gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
+  await fs.writeFile(OUTPUT + '.gz', gz);
+
+  const rawKb = (json.length / 1024).toFixed(1);
+  const gzKb = (gz.length / 1024).toFixed(1);
   const chapterCount = seenChapters.size;
   console.log(
-    `Built search index: ${documents.length} sections across ${chapterCount} chapters (${sizeKb} KB)`
+    `Built search index: ${documents.length} sections across ${chapterCount} chapters (${rawKb} KB raw, ${gzKb} KB gzip)`
   );
 
   if (chapterCount < EXPECTED_MIN_CHAPTERS) {

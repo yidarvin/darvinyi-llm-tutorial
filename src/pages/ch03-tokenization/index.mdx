@@ -63,7 +63,7 @@ The cons are several, all serious. *Vocabulary explosion*: every new corpus has 
 The OOV problem is the killer. A model whose prompt contains an `<UNK>` has lost the relevant content; whatever ability it had to model that word at that position is gone.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# A toy word-level tokenizer with the OOV failure mode visible.
 vocab = {'the': 0, 'cat': 1, 'sat': 2, 'on': 3, 'mat': 4, '<UNK>': 5}
 
@@ -138,7 +138,7 @@ Train BPE on a tiny corpus and watch the first few merges emerge. The corpus is 
 The runnable block below implements the training loop on a longer toy corpus. It runs in Pyodide in roughly 100 ms; the first few merges show common bigrams collapsing into single tokens.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`from collections import Counter, defaultdict
 
 def train_bpe(words, vocab_size=270):
@@ -219,7 +219,7 @@ BPE on bytes is otherwise the same algorithm as BPE on characters. The training 
 The trade-off is the asymmetry between languages. UTF-8 represents ASCII characters in one byte each, so English text averages roughly one byte per character before merges. Korean characters take three bytes each in UTF-8; Hindi characters take three; emoji take four. Before any merges learn to combine them, the same number of "characters" produces three or four times as many tokens in those languages.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# UTF-8 byte length varies enormously by language.
 samples = {
     'English': "the cat sat on the mat",
@@ -310,7 +310,7 @@ The most consequential design choice is the optional leading space in the word, 
 This is the structural reason GPT-style tokenizers list `the` and ` the` as different tokens. The space-prefix-token convention encodes word position information directly in the token ID: a token starting mid-sentence carries its leading space; a token at the start of a line does not. Models trained on this convention learn the distinction; it carries a small amount of positional information the model can use, without requiring any separate machinery to represent it.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# Run the GPT-2 pre-tokenization regex on sample inputs.
 # Stdlib 're' does not support \\p{L} / \\p{N}; use the third-party 'regex'.
 import regex
@@ -404,7 +404,7 @@ The widget below shows the same input text tokenized under different tokenizers,
 The runnable block below uses a fresh BPE training on a number-heavy corpus to demonstrate the number-tokenization pattern. The exact split depends on the training corpus and the vocabulary size; the point is that BPE has no notion of numbers as a special category. They are just byte sequences whose tokenization is governed by frequency.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`from collections import Counter, defaultdict
 
 def train_bpe(words, vocab_size=300):

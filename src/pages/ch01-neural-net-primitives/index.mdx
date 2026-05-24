@@ -81,7 +81,7 @@ This is the loss every LLM training loop is minimizing. Next-token prediction is
 The runnable block below shows the numerically stable softmax (max-subtraction inside the exponent) and cross-entropy on a small logit vector. Different target classes produce wildly different losses — confident-and-right is near zero, confident-and-wrong is large.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def softmax(z, axis=-1):
@@ -123,7 +123,7 @@ $$
 The scalar $\alpha$ is the learning rate — the size of the step. Take the toy loss $L(\theta) = (\theta - 3)^2$, with the gradient $\partial L / \partial \theta = 2(\theta - 3)$. Starting from $\theta = 0$ with $\alpha = 0.1$, every step pulls $\theta$ toward 3. The learning rate is small enough that the steps shrink as $\theta$ approaches the minimum.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# Minimize L(theta) = (theta - 3)^2 starting from theta = 0
 theta = 0.0
 lr = 0.1
@@ -303,7 +303,7 @@ The reduction convention matters: we divide $\delta_2$ by the batch size $B$, wh
 What this script does *not* do is anything fancy. There is no momentum, no learning rate schedule, no gradient clipping, no validation split, no early stopping. The numbers in the loss are noisy because the gradient is estimated on small mini-batches. The accuracy is computed on the same batch we just trained on, which overstates how well the model generalizes. All of those omissions are deliberate: we want the minimum viable training loop visible in one screen of code. Production training stacks add the missing pieces one at a time, and Chapter 8 walks through them when the scale demands it.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def softmax(z, axis=-1):
@@ -465,7 +465,7 @@ A subtle consequence of AdamW's decay being scaled by $\alpha$: weight decay aut
 The runnable block below puts an Adam implementation on a different problem — a simple elongated quadratic, $f(x, y) = x^2 + 10 y^2$ — to make the per-parameter scaling visible. Plain SGD on this loss takes large $x$-steps and small $y$-steps. Adam normalizes them.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 class Adam:
@@ -511,7 +511,7 @@ Autograd automates the derivation. As the forward pass runs, the autograd engine
 Each node stores four things: its data (the forward value), its grad (the accumulated gradient, initially zero), a closure called `_backward` that knows how to propagate the gradient through this operation's local rule, and a set of parent nodes it depends on. Karpathy's micrograd repository is the canonical reference, in about 150 lines of Python. The block below implements a minimal version — addition, multiplication, ReLU, and the topological-sort backward pass — in under fifty lines.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`class Value:
     """A single scalar value with autograd support — micrograd-style."""
 

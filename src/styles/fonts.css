@@ -1,3 +1,17 @@
+/* Webfont declarations. Session 136 perf pass:
+ *  - `font-display: swap` so text stays visible while fonts load (FOUT not FOIT)
+ *  - `unicode-range` constrains coverage to Latin glyphs the curriculum uses,
+ *    so browsers can skip downloads for pages with no out-of-range characters
+ *    and prioritize the in-range font sooner.
+ *
+ * Range chosen: Basic Latin + Latin-1 Supplement + Latin Extended-A/B +
+ *   common punctuation (general punctuation U+2010-2029 covers em/en dashes,
+ *   curly quotes, ellipsis used in chapter prose).
+ *
+ * The variable woff2/ttf files in public/fonts/ already ship the curriculum's
+ * glyph needs; a further subset pass via scripts/subset-fonts.mjs is optional.
+ */
+
 /* Inter — variable, weights 100-900 */
 @font-face {
   font-family: 'Inter';
@@ -6,6 +20,7 @@
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-024F, U+2010-2029, U+2030-205E;
 }
 @font-face {
   font-family: 'Inter';
@@ -14,6 +29,7 @@
   font-weight: 100 900;
   font-style: italic;
   font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-024F, U+2010-2029, U+2030-205E;
 }
 
 /* JetBrains Mono — variable, weights 100-800 (TTF; no WOFF2 in upstream release) */
@@ -24,6 +40,7 @@
   font-weight: 100 800;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-024F, U+2010-2029, U+2030-205E;
 }
 @font-face {
   font-family: 'JetBrains Mono';
@@ -32,4 +49,5 @@
   font-weight: 100 800;
   font-style: italic;
   font-display: swap;
+  unicode-range: U+0020-007E, U+00A0-024F, U+2010-2029, U+2030-205E;
 }

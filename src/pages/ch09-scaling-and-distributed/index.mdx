@@ -83,7 +83,7 @@ Practical use: given a compute budget $C$, plug into the compute-optimal formula
 The numerical version is short — the Chinchilla loss function and the compute-optimal allocation are each a few lines of numpy. Running it across a range of compute budgets makes the "$\sim 20$ tokens per parameter" pattern visible across orders of magnitude.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 # Chinchilla fitted constants (approximate, from Hoffmann et al. 2022)
@@ -159,7 +159,7 @@ The first scaling limit of DP is **memory**: DP does not help with the memory pr
 The second scaling limit is **communication**. The "constant per-GPU cost" assumption holds when the cluster's network can keep up. At a few hundred GPUs in a single rack with NVLink and high-bandwidth InfiniBand between nodes, the all-reduce overlaps cleanly with compute and the run scales linearly. Past roughly $1000$ GPUs, the all-reduce time per step starts to dominate compute time, and adding more GPUs delivers diminishing returns. The exact crossover depends on model size, batch size, and network topology, but the qualitative pattern is robust — DP alone is not enough for frontier-scale training.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def simulate_data_parallel_step(model_grads_per_rank):
@@ -276,7 +276,7 @@ The parallelism strategy depends on model size and cluster scale.
 - **Frontier scale ($100$B+)**: full 3D parallelism — DP $\times$ TP $\times$ PP, often with FSDP on the DP axis. Megatron-Turing $530$B's $8 \times 35 \times 64 = 17{,}920$ GPUs is the canonical example.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`# Illustrative FSDP setup (the actual run requires a multi-GPU environment).
 # The point: the *training loop* is the same as Chapter 8. FSDP wraps the model;
 # the rest of the code is identical. The all-gather / reduce-scatter happens

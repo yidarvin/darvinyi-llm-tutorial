@@ -11,6 +11,9 @@ import rehypeAutolinkHeadings from 'rehype-autolink-headings';
 
 export default defineConfig({
   site: 'https://llm-tutorial.darvinyi.com',
+  image: {
+    service: { entrypoint: 'astro/assets/services/sharp' },
+  },
   integrations: [
     mdx({
       remarkPlugins: [remarkGfm, remarkMath],

@@ -99,7 +99,7 @@ For a batch of $B$ tokens, the gradient is the same row-by-row scatter, accumula
 The runnable block below implements forward and backward for a tiny embedding layer and shows the gradient sparsity directly: of five vocabulary rows, only the two whose IDs appeared in the batch end up non-zero.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 class EmbeddingLayer:
@@ -206,7 +206,7 @@ Hyperparameter sketch: $k = 5$ negatives per positive at large scale, $k = 15$ t
 The runnable block below trains SGNS on a 22-word toy corpus for 100 epochs. Pyodide handles the whole loop in about a second. After training, the cosine similarities between word pairs should reflect their distributional similarity in the corpus: *cat* and *dog* should be more similar than *cat* and *rug*, because *cat* and *dog* appear in overlapping contexts (*sat on*, *the*) while *rug* appears with a narrower set.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 def sigmoid(x):
@@ -339,7 +339,7 @@ The embedding table that emerges from end-to-end training does not optimize for 
 Karpathy's `makemore` series ([github.com/karpathy/makemore](https://github.com/karpathy/makemore)) is the cleanest pedagogical reference for embedding-as-byproduct. Across the series, a character-level embedding table is trained end-to-end with progressively more elaborate downstream networks — bigram MLP, larger MLP, transformer. The embedding lookup is the same in all of them; what changes is what the downstream network does. The block below is the bigram-MLP version: an embedding table plus a single output projection, trained on next-character prediction. The embedding emerges as whatever vectors make that one downstream operation work.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 # Embedding-as-lookup, just like section 3 — but now wired into a tiny next-char predictor.
@@ -392,7 +392,7 @@ The savings are concrete. For GPT-2 small ($|V| = 50{,}257$, $d = 768$), one of 
 The output bias is a separate matter and is usually *not* tied. Implementations typically still include a learnable bias $b \in \R^{|V|}$ on the output projection: logits at position $t$ are $h_t \cdot E^\top + b$, with the bias applied per vocabulary entry. The bias absorbs the unigram statistics of the corpus — frequent tokens (*the*, *of*, *and*) get a positive bias because they are *a priori* probable; rare tokens get a negative bias. Without the bias, the model has to bake unigram statistics into the directions of the hidden state, wasting representational capacity on something a single per-token scalar can handle.
 
 <RunnableCode
-  client:load
+  client:visible
   defaultCode={`import numpy as np
 
 class TiedEmbedding:
