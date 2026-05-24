@@ -6,7 +6,7 @@ description: Multi-agent systems — the composition chapter. When one agent isn
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { MultiAgentTopologyExplorer } from '@components/widgets';
+import { MultiAgentTopologyExplorer, InterAgentConversationViewer } from '@components/widgets';
 
 Chapter 27 covered the agent loop. Chapter 28 covered the engineering $80\%$ — tools, schemas, error handling, observability, scaffolding. By the end of Ch 28 you could build a production-grade single-agent system out of real code that survives real traffic. **This chapter asks the next question.** What if one agent isn't enough? **Multi-agent systems** — manager-worker decompositions, peer-to-peer collaborations, hierarchical teams, adversarial debates — are the natural next step. The $2023$ hype around AutoGPT and BabyAGI promised AGI through agent multiplicity; the $2024$–$2025$ reality has been more sober. **Production systems are still mostly single-agent.**
 
@@ -185,10 +185,8 @@ Section 4 covers the most useful multi-agent pattern in practice: structured rol
 
 **Divider-finder-explainer.** A **divider** breaks the user's question into sub-questions. A **finder** searches for information answering each sub-question. An **explainer** synthesizes the findings into a coherent answer. Each role has a single, narrow task; the LLM is good at each in isolation but worse when trying to do all three at once in one prompt.
 
-<WidgetFrame title="Inter-agent conversation viewer" caption="Step through multi-agent collaborations turn by turn. Four scenarios — proposer-critic-judge solving a reasoning task, manager-worker decomposing a research task, plan-execute-verify on a coding task, and a degenerate scenario showing multi-agent failure modes. Reader sees how messages flow between agents, how role specialization improves quality (and how badly designed roles do nothing). The chapter's central operational claim made concrete — 'agent' isn't one architecture but a family of them; multi-agent done well separates concerns.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 164 (marquee 2)
-  </div>
+<WidgetFrame title="Inter-agent conversation viewer" caption="Four multi-agent scenarios visualized as step-by-step message flows: proposer-critic-judge solving a reasoning task (catches Sydney → Canberra), manager-worker decomposing Bhutan population density, plan-execute-verify on a coding task, and a degenerate scenario with 3 redundant reviewers — the chapter's central anti-pattern. Reader advances message-by-message with prev/next/play controls. The degenerate scenario teaches what well-designed multi-agent isn't: 3× cost for 1× quality when roles overlap without genuine differentiation.">
+  <InterAgentConversationViewer client:visible />
 </WidgetFrame>
 
 ### Done well vs done badly

@@ -1,0 +1,418 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel, .controlsPanel, .detailPanel, .caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+.titlePanel { padding: 0.7rem 1rem; }
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.controlRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 110px;
+  padding-top: 0.45rem;
+}
+.scenarioButtons { display: flex; gap: 0.35rem; flex-wrap: wrap; flex: 1; }
+.scenarioButton {
+  padding: 0.4rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.scenarioButton:hover { border-color: var(--cyan-500); color: var(--cyan-300); }
+.scenarioButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+.detailHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.7rem;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.detailTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.06em;
+}
+.categoryBadge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  font-weight: 500;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid;
+  text-transform: lowercase;
+}
+
+.taskBox {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.84rem;
+  padding: 0.55rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  margin-bottom: 0.85rem;
+  font-style: italic;
+}
+
+.section { margin-bottom: 0.85rem; }
+.sectionLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+
+.agentBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.agentBadgeSmall {
+  width: 24px;
+  height: 24px;
+  font-size: 0.7rem;
+  border-radius: 5px;
+}
+
+.agentList {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.agentCard {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.agentInfo {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.agentName {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.agentRole {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+}
+
+.stepBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.stepCounter {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+.stepCounter strong { color: var(--cyan-300); }
+.stepButtons {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.stepButton {
+  padding: 0.35rem 0.65rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+}
+.stepButton:hover:not(:disabled) {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+}
+.stepButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.stepButtonPlaying {
+  background: color-mix(in srgb, var(--cyan-500) 14%, var(--bg-elevated));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+}
+
+.emptyState {
+  padding: 1.1rem 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.84rem;
+  background: var(--bg-primary);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.emptyState strong { color: var(--cyan-300); }
+
+.messageTimeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.messageCard {
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  transition: all 200ms;
+}
+.messageCardCurrent {
+  border-left-color: var(--cyan-400);
+  background: color-mix(in srgb, var(--cyan-500) 5%, var(--bg-primary));
+}
+.messageCardProblematic {
+  border-left-color: var(--rose-400);
+  background: color-mix(in srgb, var(--rose-400) 4%, var(--bg-primary));
+}
+.messageHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+.messageStep {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.messageRoute {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.messageArrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.currentBadge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  padding: 0.05rem 0.4rem;
+  background: color-mix(in srgb, var(--cyan-400) 20%, transparent);
+  color: var(--cyan-300);
+  border: 1px solid color-mix(in srgb, var(--cyan-400) 50%, transparent);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+.problematicBadge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  padding: 0.05rem 0.4rem;
+  background: color-mix(in srgb, var(--rose-400) 18%, transparent);
+  color: var(--rose-400);
+  border: 1px solid color-mix(in srgb, var(--rose-400) 50%, transparent);
+  border-radius: 2px;
+  font-weight: 500;
+}
+.messageContent {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.messageContent code, .messageContent pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg-elevated);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
+.messageNote {
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  background: color-mix(in srgb, var(--amber-400) 6%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--amber-400) 50%, transparent);
+  border-radius: 3px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  font-style: italic;
+}
+.messageNoteArrow {
+  color: var(--amber-400);
+  font-weight: 700;
+  margin-right: 0.2rem;
+}
+
+.statusPanel {
+  padding: 0.55rem 0.8rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.statusRunning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--text-secondary);
+}
+.statusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan-400);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .statusDot { animation: none; }
+}
+.statusCompleted { color: var(--emerald-400); font-weight: 600; }
+.statusWarning { color: var(--amber-400); font-weight: 600; }
+.statusFailed { color: var(--rose-400); font-weight: 600; }
+
+.insightList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.insightList li {
+  font-size: 0.83rem;
+  color: var(--text-primary);
+  padding: 0.35rem 0.6rem 0.35rem 1.2rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  position: relative;
+  line-height: 1.45;
+}
+.insightList li::before {
+  content: '•';
+  position: absolute;
+  left: 0.55rem;
+  color: var(--cyan-400);
+  font-weight: 700;
+}
+
+.notePanel {
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.noteLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.noteText {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong { color: var(--cyan-300); font-weight: 500; }
+
+@media (max-width: 720px) {
+  .controlLabel { min-width: 0; padding-top: 0; }
+  .controlRow { flex-direction: column; }
+  .stepBar { flex-direction: column; align-items: flex-start; }
+  .agentList { gap: 0.35rem; }
+  .agentCard { padding: 0.3rem 0.5rem; }
+  .agentName { font-size: 0.74rem; }
+  .agentRole { font-size: 0.62rem; }
+  .messageContent { font-size: 0.78rem; }
+}
