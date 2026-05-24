@@ -6,7 +6,7 @@ description: Preference optimization — the algorithmic centerpiece of post-tra
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { PreferenceLearningPipeline } from '@components/widgets';
+import { PreferenceLearningPipeline, DPOLossLandscape } from '@components/widgets';
 
 Chapter 13 left you with an SFT'd model. It follows the chat template, knows it is the assistant side of a conversation, and produces grammatical responses to instructions. What it does *not* know is how to produce *good* responses. Ask it a hard question and it may confidently invent an answer. Ask it for help on something edgy and it may refuse harmlessly or comply harmfully. The format is there; the quality and the alignment are not.
 
@@ -178,10 +178,8 @@ Equation <EqRef id="14.dpo" /> is the DPO loss. To compute it, take a preference
 
 The quantity $\beta \log(\pi_\theta(y \mid x) / \pi_{\text{ref}}(y \mid x))$ that appears inside the sigmoid is the **implicit reward** — the reward function the policy is implicitly optimizing. The training policy *is* the reward model. The paper's subtitle — "Your Language Model is Secretly a Reward Model" — is the central observation: in the DPO formulation, the policy parameterizes its own implicit reward, and the two objects you held separately in RLHF (policy and RM) collapse into one.
 
-<WidgetFrame title="DPO loss landscape" caption="The DPO loss surface as a function of two variables: the implicit reward for the chosen response (β · log π_θ(y_w)/π_ref(y_w)) on one axis, and the implicit reward for the rejected response on the other. Slider for β. The loss is low when the chosen reward is high and the rejected reward is low — a clear diagonal valley shows the direction DPO drives the policy.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 65 (secondary)
-  </div>
+<WidgetFrame title="DPO loss landscape" caption="The DPO loss surface as a function of the implicit rewards for chosen and rejected responses. Below the diagonal (chosen reward > rejected): low loss; policy is correct. Above the diagonal: high loss; policy has it backwards. The arrow shows the gradient descent direction — always pointing toward 'increase chosen, decrease rejected.' Slide the implicit rewards or β to explore.">
+  <DPOLossLandscape client:visible />
 </WidgetFrame>
 
 <RunnableCode>
