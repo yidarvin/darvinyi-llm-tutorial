@@ -6,6 +6,7 @@ description: Interpretability — the discipline of opening up trained LLMs and 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { SAEFeatureExplorer } from '@components/widgets';
 
 Chapter 24 covered safety from the outside in: alignment training, refusal calibration, red-teaming, the helpful-versus-harmless trade-off. **All of those techniques operate on model behavior.** Behavior is one signal; the model's internals are another. **Interpretability is the discipline of reading those internals.** Probes that decode concepts from hidden states. Sparse autoencoders that pull apart superposition into monosemantic features. Circuits — small weight subgraphs that implement specific algorithms. Causal interventions that test whether a component actually matters. **The goal is two-fold**: understand what the model is computing, and verify that it is computing what we want.
 
@@ -180,10 +181,8 @@ Sanitized examples from Templeton $2024$ on Claude $3$ Sonnet give a sense of wh
 
 Three properties make SAEs the interpretability community's current flagship for safety. **Surfaces concepts the model uses internally** — including potentially-dangerous ones (manipulation, dishonesty), which a behavioral test would miss if you do not think to probe for them. **Enables targeted intervention** — clamp a feature's activation high or low, and observe how behavior changes. **Validates alignment claims** — confirm that "deception" features do not activate during honest behavior, or that "refusal" features fire on requests the model declines.
 
-<WidgetFrame title="SAE feature explorer" caption="Browse a curated set of SAE features — each labeled with its interpretable concept (Golden Gate Bridge, code vulnerabilities, deceptive framings, etc.). Pick a feature; see the top-K inputs that activate it. The shared embedding space (decoder weights) shows related features clustering together. The widget makes the SAE → monosemantic features pipeline concrete — Anthropic's flagship interpretability direction.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 142 (marquee)
-  </div>
+<WidgetFrame title="SAE feature explorer" caption="Ten curated SAE features — each a learned direction that activates on a specific interpretable concept (Golden Gate Bridge, Python loops, code vulnerabilities, deception, scientific reasoning, French language, sycophancy, math equations, hedging, refusal). Inspired by Templeton 2024. Each feature shows its top-5 activating inputs with relative activation strengths. The 2D feature-space map shows family-based clustering and the top-3 nearest neighbors for the selected feature. Demonstrates what monosemantic features look like — Anthropic's recent interpretability breakthrough in interactive form.">
+  <SAEFeatureExplorer client:visible />
 </WidgetFrame>
 
 <RunnableCode>

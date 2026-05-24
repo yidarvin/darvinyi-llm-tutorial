@@ -47,3 +47,4 @@ export { default as CLIPEmbeddingSpace } from './ch23/CLIPEmbeddingSpace';
 export { default as ViTPatchTokenizer } from './ch23/ViTPatchTokenizer';
 export { default as JailbreakTaxonomy } from './ch24/JailbreakTaxonomy';
 export { default as PromptInjectionClassifier } from './ch24/PromptInjectionClassifier';
+export { default as SAEFeatureExplorer } from './ch25/SAEFeatureExplorer';
