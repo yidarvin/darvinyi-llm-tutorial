@@ -6,7 +6,7 @@ description: Retrieval-augmented generation — how production LLMs ground their
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { RetrievalComparator } from '@components/widgets';
+import { RetrievalComparator, ChunkingVisualizer } from '@components/widgets';
 
 A trained LLM's knowledge lives in its weights — call this **parametric memory**. It is fast, always available, and learned from pretraining. It also has three fundamental limits: the training cutoff hides recent events, your company's private docs were never in pretraining, and specific records (a customer's order history, a database row) are too numerous to memorize. **Retrieval-augmented generation (RAG)** addresses all three. Index a corpus; given a query, fetch the most relevant documents; concatenate them into the model's context; generate a grounded answer. The model knows what is in its weights *and* what it can find.
 
@@ -256,10 +256,8 @@ The space of practical chunking strategies has settled into six recognizable pat
 
 Chunk size has a predictable trade-off curve. **Small chunks ($100$ – $300$ tokens)** give precise retrieval but lose surrounding context. **Medium chunks ($500$ – $1{,}000$ tokens)** are the production sweet spot for most corpora. **Large chunks ($1{,}500+$ tokens)** are rarely chunked at all — the embeddings get noisier as the unit grows, because a single vector cannot summarize too many topics simultaneously.
 
-<WidgetFrame title="Chunking visualizer" caption="A medium-length document split using different chunking strategies: fixed-size, sentence-based, paragraph-based, parent-document. Toggle between strategies; see the resulting chunks color-coded by boundary type. Visualizes overlap, semantic-unit preservation, and chunk-size variance. The widget makes 'how chunking affects what gets retrieved' tangible.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 127 (secondary)
-  </div>
+<WidgetFrame title="Chunking visualizer" caption="The same document re-chunked under four strategies. Fixed-size with overlap (the tutorial default; predictable but can split mid-sentence). Sentence-based (preserves semantic units; variable size). Paragraph-based (larger units; works for prose). Parent-document (embed small chunks; retrieve large parents — modern default). Watch how chunk count, size variance, and coverage change. The chunking choice often affects retrieval more than the embedding model.">
+  <ChunkingVisualizer client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
@@ -311,6 +309,351 @@ The decision guide is short. **FAQ or docs search**: vanilla RAG. **Multi-step r
 </Callout>
 
 The next section covers what turns a working RAG prototype into a reliable production system — caching, freshness, isolation, security, and the eval discipline that makes "is it working?" answerable.
+
+## Exercises
+
+Four exercises that lock in the production RAG stack. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+The exercises trace the chapter's arc: implement BM25 from scratch (Ex 1) → build a vector store (Ex 2) → combine them via RRF (Ex 3) → evaluate retrieval quality (Ex 4).
+
+### Exercise 1 (easy) — BM25 from scratch
+
+Implement BM25 scoring against a small corpus. Compute IDF and TF for each query term; apply length normalization and TF saturation.
+
+<details>
+<summary>Hint</summary>
+
+BM25 score for query $Q$ against document $D$:
+
+$$\text{score}(D, Q) = \sum_{q \in Q} \text{IDF}(q) \cdot \frac{f(q, D) \cdot (k_1 + 1)}{f(q, D) + k_1 \cdot (1 - b + b \cdot \frac{|D|}{\text{avgdl}})}$$
+
+where:
+- $f(q, D)$ = how many times $q$ appears in $D$
+- $|D|$ = length of $D$ in tokens
+- $\text{avgdl}$ = average document length in the corpus
+- $k_1 = 1.2$, $b = 0.75$ are standard
+- $\text{IDF}(q) = \log(\frac{N - df + 0.5}{df + 0.5} + 1)$ with $df$ = number of docs containing $q$
+
+Implementation steps:
+1. Tokenize all docs (lowercase + whitespace split)
+2. Build a term-frequency dictionary per doc
+3. Build a document-frequency dictionary across the corpus
+4. For each query token, compute IDF and add the per-doc contribution
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import math
+from collections import Counter
+
+# Tiny corpus
+docs = [
+    "the cat sat on the mat",
+    "machine learning models are trained on data",
+    "deep learning is a subset of machine learning",
+    "cats are great pets that love affection",
+    "dogs are loyal companions",
+]
+
+def tokenize(text):
+    return text.lower().split()
+
+def bm25_scores(query, docs, k1=1.2, b=0.75):
+    """
+    Return a list of BM25 scores, one per doc.
+    """
+    # TODO:
+    # 1. Tokenize each doc and the query.
+    # 2. Compute document lengths and average length.
+    # 3. Build doc-frequency dictionary (how many docs contain each term).
+    # 4. For each doc, compute the BM25 score by summing over query terms.
+    pass
+
+# Test
+queries = [
+    "machine learning",
+    "cats",
+    "deep learning data",
+]
+
+# for q in queries:
+#     scores = bm25_scores(q, docs)
+#     ranked = sorted(zip(scores, docs), key=lambda x: -x[0])
+#     print(f"\\nQuery: '{q}'")
+#     for score, doc in ranked[:3]:
+#         print(f"  {score:>6.2f}  {doc}")
+
+# Expected behavior:
+# - "machine learning" → docs 2 and 3 score highest (both terms present)
+# - "cats" → doc 4 (literal match) scores higher than doc 1 ("cat" singular)
+# - "deep learning data" → doc 3 (deep+learning) and doc 2 (learning+data)
+`}
+  packages={[]}
+/>
+
+### Exercise 2 (medium) — Vector store with cosine retrieval
+
+Build a tiny in-memory vector store. Embed documents using a mock embedding function; at query time, embed the query and return the top-K most similar documents by cosine similarity.
+
+<details>
+<summary>Hint</summary>
+
+The pattern:
+1. **Pre-compute**: embed every doc; store (id, vector) pairs.
+2. **At query time**: embed the query; compute cosine similarity to each stored vector; sort descending.
+
+Cosine similarity:
+
+$$\cos(a, b) = \frac{a \cdot b}{\|a\| \, \|b\|}$$
+
+For the exercise: use a mock embedding function — random-but-seeded so the same text always produces the same vector. (In production: use a real embedding model.)
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+class VectorStore:
+    def __init__(self, dim=8):
+        self.dim = dim
+        self.docs = []         # list of (id, text, vector) tuples
+    
+    def embed(self, text):
+        """Mock embedding: deterministic random vector based on text hash."""
+        seed = sum(ord(c) for c in text)
+        rng = np.random.RandomState(seed)
+        v = rng.randn(self.dim)
+        # Add some structure: bias the vector based on a few keywords
+        for keyword, axis_idx in [("machine", 0), ("learning", 1), ("cat", 2), ("dog", 3)]:
+            if keyword in text.lower():
+                v[axis_idx] += 2.0
+        return v
+    
+    def add(self, doc_id, text):
+        vector = self.embed(text)
+        self.docs.append((doc_id, text, vector))
+    
+    def search(self, query, top_k=3):
+        """Return [(score, doc_id, text), ...] sorted descending."""
+        # TODO:
+        # 1. Embed the query.
+        # 2. Compute cosine similarity to each stored doc.
+        # 3. Sort by similarity descending.
+        # 4. Return the top_k.
+        pass
+
+
+# Build the store
+docs = [
+    "The cat sat on the mat.",
+    "Machine learning models are trained on labeled data.",
+    "Deep learning is a subset of machine learning.",
+    "Cats are great pets that love affection.",
+    "Dogs are loyal companions and playful.",
+]
+
+store = VectorStore()
+for i, doc in enumerate(docs):
+    store.add(i, doc)
+
+# Test
+queries = [
+    "machine learning",
+    "cat affection",
+    "dog companions",
+]
+# for q in queries:
+#     results = store.search(q, top_k=3)
+#     print(f"\\nQuery: '{q}'")
+#     for score, doc_id, text in results:
+#         print(f"  sim={score:>5.2f}  id={doc_id}  {text}")
+
+# Observations:
+# - The mock embedding biases vectors by keyword presence, so cosine similarity
+#   correlates with keyword overlap (approximating what real embeddings do).
+# - In production: replace embed() with a real model (e.g., sentence-transformers).
+# - The store structure (id, text, vector) is the production pattern.
+`}
+  packages={["numpy"]}
+/>
+
+### Exercise 3 (medium) — Hybrid retrieval with RRF
+
+Combine BM25 and dense rankings via Reciprocal Rank Fusion. Verify that the combined ranking is robust across query types — never losing badly to either method.
+
+<details>
+<summary>Hint</summary>
+
+Reciprocal Rank Fusion:
+
+$$\text{RRF}(d) = \sum_{i} \frac{1}{k + \text{rank}_i(d)}$$
+
+where the sum is over retrievers, $\text{rank}_i(d)$ is the doc's rank in retriever $i$ (starting at 1), and $k$ is a constant (typically 60).
+
+Why $k = 60$? It limits the influence of any single top-ranked doc. Without it, a doc ranked 1 would dominate ($1/1$ vs $1/2$ is a 2× gap; $1/61$ vs $1/62$ is much smaller).
+
+Steps:
+1. Get rankings from each retriever as `[(doc_id, rank), ...]` lists.
+2. Iterate over all rankings; accumulate RRF score per doc.
+3. Sort descending.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def reciprocal_rank_fusion(rankings, k=60):
+    """
+    Combine multiple rankings via RRF.
+    
+    rankings: list of [(doc_id, rank), ...] from each retriever (rank starts at 1).
+    Returns combined ranking sorted by RRF score descending.
+    """
+    # TODO:
+    # 1. Initialize a dict: {doc_id: cumulative_rrf_score}
+    # 2. For each ranking, for each (doc_id, rank), add 1.0 / (k + rank) to the doc's score.
+    # 3. Sort by score descending and return.
+    pass
+
+# Mock rankings: BM25 and dense found different docs
+bm25_ranking = [
+    (0, 1),    # doc 0 ranked first by BM25
+    (3, 2),
+    (1, 3),
+    (5, 4),
+    (2, 5),
+]
+
+dense_ranking = [
+    (1, 1),    # doc 1 ranked first by dense
+    (0, 2),    # doc 0 ranked second by dense
+    (4, 3),
+    (3, 4),
+    (7, 5),
+]
+
+# combined = reciprocal_rank_fusion([bm25_ranking, dense_ranking])
+# print(f"{'Doc ID':>7} | {'RRF Score':>10}")
+# print("-" * 25)
+# for doc_id, score in combined:
+#     print(f"{doc_id:>7} | {score:>10.4f}")
+# 
+# # Observations:
+# # - Doc 0 (top in BM25, 2nd in dense) wins: scored by both
+# # - Doc 1 (3rd in BM25, top in dense) also high: scored by both
+# # - Doc 5 / 4 / 7 (in only one ranking) score lower
+# # - RRF needs no score normalization — uses ranks only
+# # - Robust to score-scale differences between retrievers
+
+# Bonus: try a query where BM25 and dense find completely disjoint docs.
+# RRF still produces a sensible combined ranking.
+`}
+  packages={[]}
+/>
+
+### Exercise 4 (hard) — Retrieval evaluation with recall@K
+
+Build a small evaluation harness. Given a labeled test set (query → list of relevant doc IDs), compute recall@K for a retrieval method. Compare BM25 vs dense vs hybrid; verify the chapter's central claim — that hybrid is robust across query types.
+
+<details>
+<summary>Hint</summary>
+
+Recall@K = fraction of relevant docs that appear in the top-K of the retriever's ranking.
+
+$$\text{recall@K} = \frac{|\text{relevant} \cap \text{top-K retrieved}|}{|\text{relevant}|}$$
+
+For each query in the test set:
+1. Run the retriever; get top-K results.
+2. Count how many of the K results are in the labeled relevant set.
+3. Divide by the total number of relevant docs.
+
+Average across queries for the overall recall@K.
+
+In production, this is the basic IR evaluation. RAGAS extends it with faithfulness (does the answer match retrieved content?) and attribution (can each claim be traced?).
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`def recall_at_k(retrieved_ids, relevant_ids, k):
+    """
+    Compute recall@K for a single query.
+    
+    retrieved_ids: ordered list of retrieved doc IDs (top-K of retriever's ranking).
+    relevant_ids:  set of doc IDs known to be relevant for this query.
+    """
+    # TODO:
+    # 1. Take the top k of retrieved_ids.
+    # 2. Count intersection with relevant_ids.
+    # 3. Divide by len(relevant_ids).
+    pass
+
+
+def evaluate(retriever_fn, test_set, k=5):
+    """
+    Run a retriever over a test set; return average recall@K.
+    
+    test_set: list of (query, [relevant_doc_ids])
+    retriever_fn: callable(query) -> ordered list of doc_ids
+    """
+    # TODO:
+    # 1. For each (query, relevant_ids) in test_set:
+    #    a. Call retriever_fn(query) to get a ranked list of doc_ids.
+    #    b. Compute recall@K.
+    # 2. Average recall@K across queries.
+    pass
+
+
+# Mock retrievers for the demo
+def bm25_retriever(query):
+    # Mocked: pretend BM25 returns these doc_ids in order for each query
+    mock = {
+        "machine learning": [2, 1, 4, 0, 3],
+        "cat affection": [3, 0, 1, 2, 4],
+        "prices rising": [4, 1, 0, 2, 3],   # BM25 misses inflation docs (no overlap)
+    }
+    return mock.get(query, [])
+
+def dense_retriever(query):
+    mock = {
+        "machine learning": [1, 2, 4, 0, 3],
+        "cat affection": [0, 3, 4, 1, 2],
+        "prices rising": [1, 4, 0, 3, 2],   # dense finds doc 1 (inflation paraphrase)
+    }
+    return mock.get(query, [])
+
+def hybrid_retriever(query):
+    # Pretend this is the RRF combination of bm25 and dense
+    mock = {
+        "machine learning": [2, 1, 4, 0, 3],
+        "cat affection": [3, 0, 1, 4, 2],
+        "prices rising": [1, 4, 0, 3, 2],
+    }
+    return mock.get(query, [])
+
+# Test set: query → relevant doc IDs
+test_set = [
+    ("machine learning", [1, 2]),       # ML & deep-learning docs
+    ("cat affection", [0, 3]),          # cat docs
+    ("prices rising", [1, 4]),          # inflation docs (paraphrased query)
+]
+
+# Evaluate each retriever
+# print(f"{'Retriever':<10} | {'Recall@5':>9}")
+# print("-" * 24)
+# for name, fn in [("BM25", bm25_retriever), ("Dense", dense_retriever), ("Hybrid", hybrid_retriever)]:
+#     avg = evaluate(fn, test_set, k=5)
+#     print(f"{name:<10} | {avg:>9.2%}")
+# 
+# # Observation:
+# # - BM25 misses on "prices rising" (no exact-term overlap with inflation docs)
+# # - Dense catches it (paraphrase generalization)
+# # - Hybrid catches it (gets best of both)
+# # - This is the chapter's central claim, made measurable.
+`}
+  packages={[]}
+/>
 
 ## Production patterns and evaluation
 

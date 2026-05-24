@@ -42,3 +42,4 @@ export { default as SelfConsistencyAggregator } from './ch20/SelfConsistencyAggr
 export { default as ToolCallTrace } from './ch21/ToolCallTrace';
 export { default as ToolSchemaValidator } from './ch21/ToolSchemaValidator';
 export { default as RetrievalComparator } from './ch22/RetrievalComparator';
+export { default as ChunkingVisualizer } from './ch22/ChunkingVisualizer';
