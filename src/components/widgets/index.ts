@@ -29,3 +29,4 @@ export { default as PreferenceLearningPipeline } from './ch14/PreferenceLearning
 export { default as DPOLossLandscape } from './ch14/DPOLossLandscape';
 export { default as LoRAArchitecture } from './ch15/LoRAArchitecture';
 export { default as ParameterBudgetCalculator } from './ch15/ParameterBudgetCalculator';
+export { default as TemperatureScaling } from './ch16/TemperatureScaling';

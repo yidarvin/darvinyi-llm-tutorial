@@ -6,6 +6,7 @@ description: Distillation — the compression technique that turns a frontier-ca
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { TemperatureScaling } from '@components/widgets';
 
 Chapters 13 through 15 left you with the techniques to train and align large language models. *Large* is the operative word. A $70$B-parameter model is too expensive to deploy at scale for most use cases — even with the quantization and inference optimizations of Phase 12, serving it cheaply at high throughput is hard. Most production teams want models in the $7$B–$14$B range. The capability gap, though, is significant: a $7$B base model is typically $10$ to $30$ MMLU points behind a $70$B base. Without help, the smaller model is not a viable substitute.
 
@@ -59,10 +60,8 @@ $$
 
 At $T = 1$ this is the standard softmax. At $T > 1$ the distribution softens — probability mass spreads away from the peak and the non-target tails inflate. As $T \to \infty$ the distribution flattens toward uniform. Both the teacher and the student are softened with the same $T$ during the distillation loss: the teacher's softened distribution becomes the target; the student's softened distribution is what we train to match it. Typical values land at $T = 2$ to $T = 10$. The widget below makes the reshaping visceral.
 
-<WidgetFrame title="Temperature scaling" caption="A teacher's logit distribution at varying temperatures. At T=1 (standard softmax): peaked distribution; one class dominates. At T=4-8: dark knowledge revealed — non-target classes show their relative similarity. At T=32+: distribution flattens toward uniform; signal lost. Slider for T; bar chart updates live. The widget makes 'temperature reveals dark knowledge' visceral.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 74 (marquee)
-  </div>
+<WidgetFrame title="Temperature scaling" caption="The teacher's softmax distribution for 'Paris is the capital of ___' across 15 candidate completions. At T=1: France dominates (0.87); dark knowledge is hidden. Raise T to see the next tier — Spain, Italy, Germany — emerge as the European-capital cluster. At T=32+: distribution flattens; signal lost. The sweet spot for distillation is T=4-8.">
+  <TemperatureScaling client:visible />
 </WidgetFrame>
 
 The runnable cell below sweeps $T$ over a fixed logit vector and prints how the top-3 probabilities reshape. At $T = 1$ the top class dominates; at $T = 4$ the tail comes into view; at $T = 32$ the distribution starts to flatten toward uniform.
