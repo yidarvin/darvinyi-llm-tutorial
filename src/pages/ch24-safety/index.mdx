@@ -6,6 +6,7 @@ description: AI safety — the operational discipline of making capable models t
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { JailbreakTaxonomy } from '@components/widgets';
 
 Phase 13 ended with a stack of capabilities — reasoning, tool use, retrieval, multimodal. A model that can reason, act, retrieve, and perceive is close to being a generally-capable digital assistant. **Capability without trust is incomplete.** Can the model be relied on to refuse harmful requests? Can it resist adversarial manipulation? Can it tell whose instructions to follow when retrieved content carries hidden commands? **Phase 14 covers the three disciplines that answer those questions.** This is the first of them.
 
@@ -174,10 +175,8 @@ The model defers to a claimed legitimate use case. The training distribution inc
 
 A direct attack on the surface form of the refusal. The model's safety-trained behavior often begins with a recognizable refusal opening; suppress that opening and the rest of the response can drift into compliance.
 
-<WidgetFrame title="Jailbreak taxonomy" caption="Pick a jailbreak category — roleplay, suffix, encoding, multi-turn, multi-modal, refusal-suppression. See a sanitized example, the mechanism behind why it works (which alignment property it exploits), and rough success rates against frontier models as of 2024. The widget makes the attack surface visible without enabling actual attacks — the form of each technique, not the payload.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 108 (marquee)
-  </div>
+<WidgetFrame title="Jailbreak taxonomy" caption="Six attack patterns — roleplay, authority, suffix (GCG), encoding, multi-turn, multi-modal — each shown with a sanitized example, the alignment property it exploits, an approximate frontier-model success rate, and 2-3 mitigations. Color-coded by Wei (2023)'s two root causes: competing objectives (amber) and mismatched generalization (violet). The 2-axis chart shows all six categories at once; suffix and multi-modal attacks sit at the high-success-rate end. The widget makes the attack surface visible — pedagogically, without enabling actual attacks.">
+  <JailbreakTaxonomy client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
