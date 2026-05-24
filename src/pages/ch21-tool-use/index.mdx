@@ -6,6 +6,7 @@ description: Tool use — how production agents call functions, query databases,
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { ToolCallTrace } from '@components/widgets';
 
 Chapter 20 ended with reasoning models that can think for minutes before answering — but they can only *describe* what they would do, not *do* it. A reasoning model that cannot act on the world is limited. **Tool use** removes that limit. Modern LLMs are trained to emit structured calls to external functions; the surrounding system executes those calls; the results flow back into the model's context. The model decides when to invoke a tool and which tool to invoke. This is the bridge from chat to agency.
 
@@ -192,10 +193,8 @@ Anthropic and OpenAI both support emitting **multiple tool calls in a single res
 $$\text{loop until terminal: } \text{model} \to \text{action(s)} \to \text{execute} \to \text{observation(s)} \to \text{model} \to \ldots$$
 </Equation>
 
-<WidgetFrame title="Agent loop trace" caption="Step through a realistic multi-step agent loop. The model invokes 2-3 tools to answer a complex question; each step shows the thought, the tool call (with structured arguments), and the resulting observation. The widget makes 'how an agent thinks and acts' visible step-by-step — the production version of Ch 20's ReAct pattern.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 121 (marquee)
-  </div>
+<WidgetFrame title="Agent loop trace" caption="Step through a real multi-step agent loop. User asks for Tokyo's weather in Celsius; the model emits a Thought, calls get_weather, receives an Observation, emits another Thought, calls calculator, receives another Observation, then produces a Final answer. The conversation builds up step by step. Each Action is a structured JSON tool call; each Observation grounds the next Thought. This is Ch 20's ReAct pattern in production form — the loop every modern agent runs on.">
+  <ToolCallTrace client:visible />
 </WidgetFrame>
 
 The agent loop with a mock model and two mock tools is short enough to read end-to-end:
