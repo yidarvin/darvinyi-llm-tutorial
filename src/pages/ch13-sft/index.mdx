@@ -6,6 +6,7 @@ description: Supervised Fine-Tuning (SFT) — the first and most universal post-
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { SFTLossMasking } from '@components/widgets';
 
 Chapters 1–10 taught how to train a pre-trained language model. Chapters 11 and 12 covered architectural alternatives — Mixture of Experts and state-space models — for when the standard dense transformer does not fit the constraints of the deployment. What you have at the end of either path is the same kind of object: a model that *completes text*. Type "The capital of France is" and it produces "Paris." Type a question and it may or may not answer.
 
@@ -77,10 +78,8 @@ $$\mathcal{L}_{\text{SFT}} = \frac{1}{\sum_t m_t} \sum_t m_t \cdot \mathcal{L}_{
 
 where $m_t \in \{0, 1\}$ is the response mask, $\mathcal{L}_{\text{CE}}(y_t, p_t) = -\log p_t[y_t]$ is the standard per-position cross-entropy from <EqRef id="8.loss" />, and the sum runs over all positions in the sequence. Equation <EqRef id="13.sft" /> is the entire SFT loss. The only difference from Chapter 8's training loss is the $m_t$ factor and the matching denominator.
 
-<WidgetFrame title="SFT loss masking" caption="A multi-turn conversation tokenized and visualized. Each token is shown with its role (system / user / assistant). Toggle 'response mask' on/off to see which tokens contribute to the loss. Hover any token for details. The mask determines what the model learns to generate vs what's just context.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 60 (marquee)
-  </div>
+<WidgetFrame title="SFT loss masking" caption="A 5-turn conversation tokenized in ChatML format. Each token is colored by role (violet = system, amber = user, cyan = assistant, gray = special tokens). Toggle 'Response mask' to see which tokens contribute to the loss. Standard SFT (mask ON) trains only on assistant tokens; the rest of the conversation is context. Stats panel shows that only ~34% of tokens contribute — the rest are seen but not learned from.">
+  <SFTLossMasking client:visible />
 </WidgetFrame>
 
 The runnable cell below builds the mask by hand on an eight-token toy sequence — four tokens of user prompt, four tokens of assistant response — and compares the unmasked loss against the masked one. The numbers differ because the masked version averages over four positions, not eight, and discards whatever signal the user-prompt positions happened to contribute.
