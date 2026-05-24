@@ -6,6 +6,7 @@ description: Quantization — how to deploy large models cheaply by reducing the
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { QuantizationExplorer } from '@components/widgets';
 
 Chapter 17 reduced *wasted computation*: KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. This chapter takes the complementary route — reduce the *bits per parameter*. A $70$B model in BF16 takes $140$ GB of weights; in INT4, the same model fits comfortably on a single A100 80GB with headroom left over for KV cache and batching. **Quantization is the optimization that decides whether a model can be deployed at all** — not just whether it is cheap.
 
@@ -96,10 +97,8 @@ print("sub-INT4 requires special techniques and accepts some quality loss.")
 ```
 </RunnableCode>
 
-<WidgetFrame title="Quantization explorer" caption="Watch a weight distribution get quantized at different bit widths. Slider for bit width (16, 8, 4, 2); toggle between INT (uniform spacing) and NF (normal-spaced) levels. Histogram shows the original distribution, the quantization grid, and the resulting error. The widget makes the precision/storage tradeoff visceral — INT8 is nearly lossless, INT4 is visible but small, INT2 destroys quality.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 83 (marquee)
-  </div>
+<WidgetFrame title="Quantization explorer" caption="1000 weights from N(0, 0.1). Pick a bit width (16/8/4/3/2); at 4 bits, toggle between INT4 (uniform levels) and NF4 (normal-spaced). Histogram shows the original distribution; vertical lines mark quantization grid points; error histogram below shows resulting per-weight errors. INT8 is nearly lossless; INT4 has visible error; NF4 visibly reduces it for normal-shaped weights.">
+  <QuantizationExplorer client:visible />
 </WidgetFrame>
 
 <Callout type="aside">

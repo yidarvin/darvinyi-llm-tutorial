@@ -1,0 +1,252 @@
+.widget {
+  width: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+.titlePanel,
+.controlsPanel,
+.chartPanel,
+.metricsPanel,
+.insightPanel,
+.caption {
+  padding: 0.85rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: 0.85rem;
+}
+
+.titlePanel {
+  padding: 0.7rem 1rem;
+}
+.titleLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.titleSubLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+.titleSubLabel strong {
+  color: var(--cyan-300);
+}
+
+/* Controls */
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.controlRow:last-child {
+  margin-bottom: 0;
+}
+.controlLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 145px;
+}
+.bitButtons,
+.formatButtons {
+  display: flex;
+  gap: 0.3rem;
+}
+.bitButton,
+.formatButton {
+  padding: 0.35rem 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 200ms;
+  min-width: 50px;
+}
+.bitButton:hover:not(:disabled),
+.formatButton:hover:not(:disabled) {
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+}
+.bitButton:disabled,
+.formatButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.bitButtonActive,
+.formatButtonActive {
+  background: color-mix(in srgb, var(--cyan-500) 10%, var(--bg-primary));
+  border-color: var(--cyan-500);
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+/* Chart panels */
+.chartTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.chartSvg {
+  width: 100%;
+  height: auto;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+}
+.histBar {
+  fill: var(--text-tertiary);
+  opacity: 0.6;
+}
+.gridLine {
+  stroke: var(--amber-400);
+  stroke-width: 1;
+  opacity: 0.75;
+}
+.gridLineNF {
+  stroke: var(--emerald-400);
+}
+.errorBar {
+  fill: var(--cyan-400);
+  opacity: 0.85;
+}
+.zeroLine {
+  stroke: var(--text-tertiary);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+  opacity: 0.5;
+}
+.axis {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+.axisLabel {
+  fill: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+}
+
+.chartLegend {
+  display: flex;
+  gap: 1.2rem;
+  margin-top: 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  flex-wrap: wrap;
+}
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.legendBar {
+  display: inline-block;
+  width: 12px;
+  height: 8px;
+  background: var(--text-tertiary);
+  opacity: 0.6;
+  border-radius: 1px;
+}
+.legendLine {
+  display: inline-block;
+  width: 2px;
+  height: 12px;
+  background: var(--amber-400);
+  opacity: 0.85;
+}
+.legendLineNF {
+  background: var(--emerald-400);
+}
+
+/* Metrics */
+.metricsTitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+.metricsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.metricRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+.metricLabel {
+  color: var(--text-secondary);
+}
+.metricValue {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Insight */
+.insightPanel {
+  background: color-mix(in srgb, var(--cyan-500) 4%, var(--bg-elevated));
+  border: 1px solid var(--cyan-500);
+}
+.insightLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--cyan-300);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.insightText {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Caption */
+.caption {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.caption strong {
+  color: var(--cyan-300);
+  font-weight: 500;
+}
+
+@media (max-width: 720px) {
+  .controlRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .controlLabel {
+    min-width: 0;
+  }
+  .bitButton,
+  .formatButton {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.74rem;
+    min-width: 40px;
+  }
+  .chartLegend {
+    gap: 0.7rem;
+    font-size: 0.66rem;
+  }
+  .metricRow {
+    font-size: 0.74rem;
+  }
+}
