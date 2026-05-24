@@ -6,6 +6,7 @@ description: "Agent evaluation and production frameworks — the final chapter. 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
+import { AgentBenchmarkExplorer } from '@components/widgets';
 
 Chapter 26 made evaluation a discipline. Phase 14 closed by establishing that capable models without rigorous evaluation are research demos, not products. **Phase 15 then built the agent stack** — foundations (Ch 27), engineering (Ch 28), composition (Ch 29). **This chapter closes both arcs.** It brings Phase 14's evaluation discipline to bear on Phase 15's agent systems, and it closes the curriculum.
 
@@ -62,10 +63,8 @@ Five benchmarks dominate the $2025$ agent landscape. Each has a clear scope and 
 
 **BrowseComp — web research agents.** Complex web research questions requiring multiple sources. **Frontier agents hit $30$–$50\%$.** Designed to be hard for humans too — questions where the answer requires substantial research, not a single lookup.
 
-<WidgetFrame title="Agent benchmark explorer" caption="Five 2025 agent benchmarks visualized side-by-side: SWE-bench Verified (coding), GAIA (general assistants), OSWorld (computer use), τ-bench (tool reliability), BrowseComp (web research). Each shows state-of-the-art numbers, characteristics, example tasks, and what makes the benchmark useful. The 2025 agent evaluation landscape made visible — the discipline of Ch 26 extended to agent systems.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 169 (marquee 1)
-  </div>
+<WidgetFrame title="Agent benchmark explorer" caption="Five 2025 agent benchmarks visualized side-by-side: SWE-bench Verified (coding), GAIA (general assistants), OSWorld (computer use), τ-bench (tool reliability), BrowseComp (web research). Each shows state-of-the-art numbers, the frontier-vs-human gap, task structure, paraphrased example tasks, and characteristics. The discipline of Ch 26 extended to the agent layer — and a snapshot of where agent capability sits in early 2025.">
+  <AgentBenchmarkExplorer client:visible />
 </WidgetFrame>
 
 **Benchmark hygiene matters.** Test problems must not have leaked into training data. Environments need to be realistic — real repos, real OS, real web. Execution should be reproducible where possible. Multiple difficulty levels are useful for tracking progress across the capability range.

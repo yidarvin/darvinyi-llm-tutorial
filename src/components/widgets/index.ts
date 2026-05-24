@@ -57,3 +57,4 @@ export { default as ToolSchemaBuilder }     from './ch28-agent-from-scratch/Tool
 export { default as AgentTraceInspector }   from './ch28-agent-from-scratch/AgentTraceInspector';
 export { default as MultiAgentTopologyExplorer }   from './ch29-multi-agent/MultiAgentTopologyExplorer';
 export { default as InterAgentConversationViewer } from './ch29-multi-agent/InterAgentConversationViewer';
+export { default as AgentBenchmarkExplorer }       from './ch30-agent-eval-and-frameworks/AgentBenchmarkExplorer';
