@@ -6,7 +6,7 @@ description: Agents from scratch — the engineering chapter of Phase 15. From t
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { ToolSchemaBuilder } from '@components/widgets';
+import { ToolSchemaBuilder, AgentTraceInspector } from '@components/widgets';
 
 Chapter 27 covered what an agent *is*: an LLM acting as a controller in a loop with an environment. ReAct as the foundational pattern, AutoGPT as the cautionary tale, memory and patterns and the $2025$ stack. **All conceptual.** This chapter is engineering — how to take those concepts and assemble a working agent out of real code that survives real traffic. **Production agents are $80\%$ engineering, $20\%$ LLM.** The $20\%$ is the model and the basic loop. The $80\%$ is everything in this chapter: tools, schemas, error handling, observability, scaffolding.
 
@@ -334,10 +334,8 @@ The standard pattern, borrowed from distributed systems: **trace IDs** unique pe
 
 **Structured logging** as a baseline. Every event is JSON, not free-text — `{event: tool_call, task_id, iteration, tool, arguments, latency_ms, success}`. Structured logs are queryable; free-text isn't.
 
-<WidgetFrame title="Agent trace inspector" caption="A real-looking agent trace rendered as nested spans: LLM calls, tool calls, errors, retries — each with model name, token counts, latency, cost. Inspectable like a flame graph. Demonstrates that production observability isn't optional — it's the only way to debug failures. Mirrors what tools like LangSmith and Helicone provide.">
-  <div style={{ aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.875rem' }}>
-    Widget content — session 158 (secondary)
-  </div>
+<WidgetFrame title="Agent trace inspector" caption="Four agent traces visualized as flame-graph-style nested spans: clean success, transient-failure retries, hallucinated tool call, cost-blown runaway. Each span shows timing, attributes (model, tokens, cost), and status. Click any span for full detail. Mirrors what production tools (LangSmith, Helicone, Braintrust) render at scale. Demonstrates that observability isn't optional — it's the only way to debug production agent failures.">
+  <AgentTraceInspector client:visible />
 </WidgetFrame>
 
 <RunnableCode>
@@ -469,6 +467,472 @@ The anti-patterns are mirror images. **Massive system prompts** (>$2{,}000$ toke
 </Callout>
 
 Section 8 takes stock of Phase 15's remaining trajectory.
+
+## Exercises
+
+Four exercises that lock in the engineering toolkit. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+
+The exercises trace the chapter's arc: build a tool registry (Ex 1) → implement a retry pattern (Ex 2) → add structured tracing (Ex 3) → tie everything together in a complete agent harness (Ex 4). After these, the reader has all the components of a production agent.
+
+### Exercise 1 (easy) — Tool registry with execute()
+
+Build a tool registry where tools are registered by name, schemas are generated from metadata, and execution is wrapped in structured error handling.
+
+<details>
+<summary>Hint</summary>
+
+The pattern:
+1. A `Tool` class holds: name, description, parameters schema, function
+2. A `register` decorator adds tools to a global registry
+3. Each tool's `execute(arguments)` method calls the function and wraps any exception in a structured `{'status': 'error', 'error_type': ..., 'message': ...}` response
+4. On success: `{'status': 'ok', 'result': ...}`
+
+The point is that the LLM never sees a Python exception — it sees a structured observation it can reason about.
+
+</details>
+
+<RunnableCode>
+```python
+from typing import Callable
+import math
+
+class Tool:
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        parameters_schema: dict,
+        function: Callable,
+    ):
+        self.name = name
+        self.description = description
+        self.parameters_schema = parameters_schema
+        self.function = function
+
+    def execute(self, arguments: dict) -> dict:
+        """
+        Execute the tool with given arguments.
+        Returns a structured response:
+          {'status': 'ok', 'result': ...}      on success
+          {'status': 'error', 'error_type': str, 'message': str}  on exception
+        """
+        # TODO:
+        # try:
+        #     result = self.function(**arguments)
+        #     return {'status': 'ok', 'result': result}
+        # except Exception as e:
+        #     return {
+        #         'status': 'error',
+        #         'error_type': type(e).__name__,
+        #         'message': str(e),
+        #     }
+        pass
+
+    def to_openai_schema(self) -> dict:
+        """Convert to OpenAI function-calling schema format."""
+        return {
+            'type': 'function',
+            'function': {
+                'name': self.name,
+                'description': self.description,
+                'parameters': self.parameters_schema,
+            },
+        }
+
+
+TOOLS: dict[str, Tool] = {}
+
+
+def register(name: str, description: str, parameters_schema: dict):
+    """Decorator: register a function as a Tool in the global registry."""
+    def wrapper(fn):
+        TOOLS[name] = Tool(name, description, parameters_schema, fn)
+        return fn
+    return wrapper
+
+
+@register(
+    name='get_weather',
+    description='Get current weather for a city.',
+    parameters_schema={
+        'type': 'object',
+        'properties': {
+            'city': {'type': 'string', 'description': 'City name'},
+        },
+        'required': ['city'],
+    },
+)
+def get_weather(city: str) -> dict:
+    return {'city': city, 'temp_c': 18, 'conditions': 'partly cloudy'}
+
+
+@register(
+    name='calculate',
+    description='Evaluate a mathematical expression.',
+    parameters_schema={
+        'type': 'object',
+        'properties': {
+            'expression': {'type': 'string', 'description': 'Math expression'},
+        },
+        'required': ['expression'],
+    },
+)
+def calculate(expression: str) -> float:
+    safe = {'__builtins__': {}}
+    locals_ = {'sqrt': math.sqrt, 'pi': math.pi}
+    return eval(expression, safe, locals_)
+
+
+# Test
+# print("Registered tools:", list(TOOLS.keys()))
+# print()
+#
+# # Successful call
+# result = TOOLS['get_weather'].execute({'city': 'Tokyo'})
+# print(f"get_weather(Tokyo): {result}")
+#
+# # Error: division by zero
+# result = TOOLS['calculate'].execute({'expression': '1/0'})
+# print(f"calculate(1/0):     {result}")
+#
+# # Error: wrong argument name
+# result = TOOLS['get_weather'].execute({'town': 'Tokyo'})
+# print(f"get_weather(town):  {result}")
+#
+# # Observations:
+# # - Successful calls return {status:'ok', result:...}
+# # - All exceptions become {status:'error', ...} — never raised to the agent
+# # - Schema generation uses metadata only (no inspection); explicit is better
+# # - Real production: also generate Anthropic schema; add OpenAPI conversion
+```
+</RunnableCode>
+
+### Exercise 2 (medium) — Retry with exponential backoff
+
+Implement a retry helper that re-executes a flaky function with exponential backoff, returning a structured `(result, error)` tuple after success or exhaustion.
+
+<details>
+<summary>Hint</summary>
+
+The pattern:
+1. Attempt up to `max_retries` times
+2. On exception, sleep for `base_wait * 2^attempt` (exponential backoff)
+3. Return `(result, None)` on success, `(None, "error message")` on exhaustion
+4. The structured tuple lets the caller decide what to do — no exceptions raised
+
+Real production also adds: error categorization (retryable vs not), circuit breakers, jitter (small random offset to avoid thundering-herd retries).
+
+</details>
+
+<RunnableCode>
+```python
+import time
+import random
+
+
+def with_retry(fn, *args, max_retries=3, base_wait=0.001, **kwargs):
+    """
+    Retry fn with exponential backoff.
+    Returns (result, error_message). Exactly one of these is None.
+    """
+    # TODO:
+    # For attempt in range(max_retries):
+    #   try:
+    #     result = fn(*args, **kwargs)
+    #     return (result, None)
+    #   except Exception as e:
+    #     wait = base_wait * (2 ** attempt)
+    #     print(f"  Attempt {attempt + 1} failed: {e}. Waiting {wait*1000:.0f}ms...")
+    #     time.sleep(wait)
+    # Return (None, f"Failed after {max_retries} attempts")
+    pass
+
+
+# Mock flaky tool
+def flaky_search(query):
+    """Fails 50% of the time."""
+    if random.random() < 0.5:
+        raise ConnectionError("Service temporarily unavailable")
+    return f"Search results for: {query}"
+
+
+# Test
+# random.seed(42)
+#
+# for i in range(4):
+#     print(f"\nCall {i + 1}: query='topic_{i}'")
+#     result, error = with_retry(flaky_search, f'topic_{i}', max_retries=3)
+#     if error:
+#         print(f"  Final: {error}")
+#     else:
+#         print(f"  Final: {result}")
+#
+# # Observations:
+# # - Exponential backoff: waits 1ms, 2ms, 4ms between retries (scaled down for demo)
+# # - Some calls succeed on retry; some exhaust their budget
+# # - The (result, error) tuple lets the caller decide what to do next
+# # - Real production: add jitter, circuit breakers, error categorization
+```
+</RunnableCode>
+
+### Exercise 3 (medium) — Structured tracing layer
+
+Add a `Tracer` class that records spans (timed operations) with attributes. Spans nest via Python's context-manager protocol. Use it to trace a mock agent loop.
+
+<details>
+<summary>Hint</summary>
+
+The pattern:
+1. `Tracer` keeps a list of span records and a stack of currently-open spans
+2. `tracer.span(name, **attrs)` returns a context manager that:
+   - on enter: pushes a new span onto the stack with start time + attrs
+   - on exit: pops, records end time and status
+3. Each span records: id, parent_id, name, start, duration, attributes, status
+4. `report()` prints the tree with indentation
+
+Real production uses OpenTelemetry, but the conceptual model is identical.
+
+</details>
+
+<RunnableCode>
+```python
+import time
+import uuid
+from contextlib import contextmanager
+
+
+class Tracer:
+    def __init__(self):
+        self.spans = []
+        self.span_stack = []
+        self.task_id = None
+
+    def start_task(self, name: str) -> str:
+        self.task_id = str(uuid.uuid4())
+        self.spans = []
+        self.span_stack = []
+        return self.task_id
+
+    @contextmanager
+    def span(self, name: str, **attrs):
+        """
+        Context manager. On enter: open a span. On exit: close it.
+        Spans nest naturally based on the call stack.
+        """
+        # TODO:
+        # 1. Generate span_id (uuid4 first 8 chars)
+        # 2. parent_id = span_stack[-1] if span_stack else None
+        # 3. record = {span_id, parent_id, task_id, name, start: time.time(), attributes: attrs}
+        # 4. Append record to self.spans
+        # 5. Push span_id onto self.span_stack
+        # 6. try: yield record; record['status'] = 'ok'
+        #    except: record['status'] = 'error'; record['error'] = str(e); raise
+        #    finally: record['end'] = time.time(); record['duration_ms'] = (end-start)*1000
+        #             self.span_stack.pop()
+        pass
+
+    def report(self):
+        print(f"=== Trace for task {self.task_id} ===")
+        for span in self.spans:
+            # Compute depth by walking parent chain
+            depth = 0
+            pid = span['parent_id']
+            while pid:
+                depth += 1
+                pid = next((s['parent_id'] for s in self.spans if s['span_id'] == pid), None)
+            indent = '  ' * depth
+            icon = 'OK' if span.get('status') == 'ok' else 'ER'
+            attrs_str = ' '.join(f'{k}={v}' for k, v in span['attributes'].items())
+            print(f"{indent}[{icon}] {span['name']:<20} ({span['duration_ms']:.1f}ms)  {attrs_str}")
+
+
+# Test
+# tracer = Tracer()
+# tracer.start_task("answer_user_query")
+#
+# with tracer.span("agent_turn", iteration=1):
+#     with tracer.span("llm_call", model="claude-sonnet-4", tokens_in=320, tokens_out=95):
+#         time.sleep(0.04)
+#     with tracer.span("tool_call", tool="get_weather", city="Tokyo"):
+#         time.sleep(0.02)
+#
+# with tracer.span("agent_turn", iteration=2):
+#     with tracer.span("llm_call", model="claude-sonnet-4", tokens_in=455, tokens_out=60):
+#         time.sleep(0.03)
+#     with tracer.span("tool_call", tool="get_date"):
+#         time.sleep(0.01)
+#
+# tracer.report()
+#
+# # Observations:
+# # - Spans nest via context managers (with statement)
+# # - Each span has start, end, duration, attributes
+# # - Trace structure mirrors the call structure of the agent
+# # - Real production: OpenTelemetry standardizes this; LangSmith renders it
+# # - Visualization turns hours of debugging into seconds of inspection
+```
+</RunnableCode>
+
+### Exercise 4 (hard) — Complete agent harness
+
+Tie everything together: build a complete agent harness that uses a tool registry (Ex 1), retry helper (Ex 2), and tracer (Ex 3) to execute a multi-turn ReAct task.
+
+<details>
+<summary>Hint</summary>
+
+The harness:
+1. `Agent(tools, tracer, max_iterations)` holds the components
+2. `run(task)` executes the ReAct loop with tracing
+3. Each iteration: traced agent_turn span; traced llm_call; parse; traced tool_call (with retry)
+4. Returns the final answer (or error) when the loop ends
+
+The point is that all the pieces compose: the tool registry executes safely; retry handles flakiness; the tracer records everything; the agent loop drives the iteration.
+
+For the LLM, you'll mock responses — focus on the orchestration, not the model.
+
+</details>
+
+<RunnableCode>
+```python
+import time
+import re
+from contextlib import contextmanager
+
+
+# Reuse: Tool, Tracer from previous exercises
+# (For brevity in this exercise, we'll define minimal versions inline.)
+
+class Tool:
+    def __init__(self, name, description, function):
+        self.name = name; self.description = description; self.function = function
+
+    def execute(self, arguments):
+        try:
+            return {'status': 'ok', 'result': self.function(**arguments)}
+        except Exception as e:
+            return {'status': 'error', 'error_type': type(e).__name__, 'message': str(e)}
+
+
+class Tracer:
+    def __init__(self):
+        self.spans = []; self.stack = []
+
+    @contextmanager
+    def span(self, name, **attrs):
+        span = {'name': name, 'start': time.time(), 'attributes': attrs, 'depth': len(self.stack)}
+        self.spans.append(span); self.stack.append(span)
+        try:
+            yield span
+            span['status'] = 'ok'
+        except Exception as e:
+            span['status'] = 'error'; span['error'] = str(e); raise
+        finally:
+            span['duration_ms'] = (time.time() - span['start']) * 1000
+            self.stack.pop()
+
+    def report(self):
+        for s in self.spans:
+            icon = 'OK' if s.get('status') == 'ok' else 'ER'
+            attrs = ' '.join(f'{k}={v}' for k, v in s['attributes'].items())
+            print(f"{'  ' * s['depth']}[{icon}] {s['name']:<20} ({s['duration_ms']:.1f}ms)  {attrs}")
+
+
+# Mock tools
+def tool_weather(city):
+    return f"18C, partly cloudy in {city}"
+
+def tool_date():
+    return "2025-05-22"
+
+TOOLS = {
+    'get_weather': Tool('get_weather', 'Weather', tool_weather),
+    'get_date':    Tool('get_date',    'Date',    tool_date),
+}
+
+
+def mock_llm(prompt):
+    """Mock LLM that drives a 3-turn task."""
+    if 'weather' in prompt and 'Tokyo' not in prompt:
+        return 'Thought: weather first\nAction: get_weather(city="Tokyo")'
+    if 'Tokyo' in prompt and '2025-05-22' not in prompt:
+        return 'Thought: date next\nAction: get_date()'
+    if '2025-05-22' in prompt:
+        return 'Thought: ready to answer\nAction: final_answer("Today in Tokyo: 18C, partly cloudy.")'
+    return 'Action: final_answer("Unable to answer.")'
+
+
+def parse_react(text):
+    t = re.search(r'Thought:\s*(.+?)(?=\n|$)', text)
+    a = re.search(r'Action:\s*(.+?)(?=\n|$)', text)
+    return (t.group(1) if t else '', a.group(1) if a else '')
+
+
+def parse_action(action_str):
+    m = re.match(r'(\w+)\((.*)\)', action_str)
+    if not m: return None, {}
+    name = m.group(1)
+    args_str = m.group(2)
+    # Naive: parse "key=value" pairs
+    args = {}
+    for pair in re.findall(r'(\w+)\s*=\s*"([^"]*)"', args_str):
+        args[pair[0]] = pair[1]
+    return name, args
+
+
+class Agent:
+    def __init__(self, tools, tracer, max_iterations=8):
+        self.tools = tools
+        self.tracer = tracer
+        self.max_iterations = max_iterations
+
+    def run(self, task):
+        """
+        Run the ReAct loop with tracing.
+        Returns the final answer string.
+        """
+        # TODO:
+        # 1. history = [f"Task: {task}"]
+        # 2. For iteration in range(self.max_iterations):
+        #      with self.tracer.span("agent_turn", iteration=iteration+1):
+        #        with self.tracer.span("llm_call", tokens=420):  # mock attributes
+        #          response = mock_llm("\n".join(history))
+        #        thought, action = parse_react(response)
+        #        history.extend([f"Thought: {thought}", f"Action: {action}"])
+        #        if action.startswith('final_answer'):
+        #          answer = re.search(r'final_answer\(["\'](.*)["\']\)', action)
+        #          return answer.group(1) if answer else "Done"
+        #        tool_name, tool_args = parse_action(action)
+        #        if tool_name not in self.tools:
+        #          history.append(f"Observation: Error - unknown tool {tool_name}")
+        #          continue
+        #        with self.tracer.span("tool_call", tool=tool_name):
+        #          result = self.tools[tool_name].execute(tool_args)
+        #        if result['status'] == 'error':
+        #          history.append(f"Observation: Error - {result['message']}")
+        #        else:
+        #          history.append(f"Observation: {result['result']}")
+        # 3. Return "Max iterations reached."
+        pass
+
+
+# Test
+# tracer = Tracer()
+# agent = Agent(TOOLS, tracer)
+#
+# answer = agent.run("What's the weather in Tokyo and the date today?")
+# print(f"\n=== Final answer: {answer}")
+# print(f"\n=== Trace:")
+# tracer.report()
+#
+# # Observations:
+# # - The agent orchestrates: tools execute safely; tracer records everything;
+# #   loop terminates on final_answer or max_iterations
+# # - Each component is independent; the agent composes them
+# # - Real production agents add: retry on tool errors, cost tracking,
+# #   structured logging, observability platform integration
+# # - This is the engineering 80% the chapter covers, in compact form
+```
+</RunnableCode>
 
 ## Three chapters from the end
 
