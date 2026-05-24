@@ -173,21 +173,7 @@ td {
   color: var(--text-secondary);
 }
 
-/* Skip link (accessibility) */
-.skip-link {
-  position: absolute;
-  top: -100px;
-  left: 1rem;
-  background: var(--bg-elevated);
-  color: var(--cyan-300);
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--cyan-500);
-  z-index: var(--z-tooltip);
-}
-.skip-link:focus {
-  top: 1rem;
-}
+/* Skip-link styles moved to src/components/a11y/a11y.module.css (session 135). */
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {

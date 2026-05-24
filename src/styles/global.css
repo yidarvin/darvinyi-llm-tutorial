@@ -4,6 +4,7 @@
 @import './base.css';
 @import './content.css';   /* NEW: added in session 03 */
 @import './responsive.css'; /* NEW: site-wide mobile pass — session 134 */
+@import './a11y.css';       /* NEW: site-wide a11y rules — session 135 */
 
 @tailwind base;
 @tailwind components;

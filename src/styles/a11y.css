@@ -1,0 +1,103 @@
+/* Site-wide accessibility rules — session 135.
+ *
+ * Universal focus indicators, forced-colors mode support, heading
+ * hierarchy, landmark scroll behavior, reduced-motion completion.
+ *
+ * The component-scoped a11y/ module CSS handles VisuallyHidden /
+ * SkipLink presentation. This file handles the cross-cutting rules.
+ *
+ * Sections:
+ *   1. Universal focus indicators (WCAG 2.4.7 / 1.4.11)
+ *   2. Skip-link target scroll offset
+ *   3. Forced-colors mode (Windows High Contrast)
+ *   4. Heading scroll margin (under sticky header)
+ *   5. Reduced-motion completion + scroll-behavior toggle
+ */
+
+
+/* 1. Universal focus indicators
+ * ------------------------------------------------------------------
+ * WCAG 2.4.7 (Focus Visible — AA): every focusable element needs a
+ * visible focus state. WCAG 1.4.11 (Non-text Contrast — AA): 3:1
+ * contrast against the adjacent color. cyan-400 (#22d3ee) on
+ * bg-primary (#0a0a0a) clears ~12:1 — well above the bar.
+ *
+ * `:focus-visible` (not `:focus`) so mouse clicks don't draw an
+ * outline. This is the modern correct primitive — `:focus` shows
+ * for click as well as keyboard.
+ */
+*:focus { outline: none; }
+
+*:focus-visible {
+  outline: 2px solid var(--cyan-400);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Form controls keep their existing outline-offset; the rule above
+ * applies uniformly. */
+
+
+/* 2. Skip-link target scroll offset
+ * ------------------------------------------------------------------
+ * When the skip link activates and focus lands on #main-content, give
+ * it a little breathing room above the sticky header.
+ */
+#main-content {
+  scroll-margin-top: 1rem;
+}
+
+
+/* 3. Forced-colors mode (Windows High Contrast)
+ * ------------------------------------------------------------------
+ * In forced-colors mode, the user agent overrides colors. Many
+ * borders/backgrounds become transparent. We disable adjustment on
+ * interactive controls so they stay distinguishable, and use system
+ * colors for the focus outline.
+ */
+@media (forced-colors: active) {
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    forced-color-adjust: none;
+  }
+  *:focus-visible {
+    outline: 3px solid CanvasText;
+    outline-offset: 2px;
+  }
+}
+
+
+/* 4. Heading scroll margin
+ * ------------------------------------------------------------------
+ * Anchor links land headings at the top of the viewport, but the
+ * sticky header (and TOC drawer trigger) need some breathing room.
+ */
+h1, h2, h3, h4, h5, h6 {
+  scroll-margin-top: 5rem;
+}
+
+
+/* 5. Reduced-motion completion
+ * ------------------------------------------------------------------
+ * base.css already has a sweeping `*` rule that shortens all
+ * animation/transition durations. This section adds:
+ *   - explicit `animation: none` for ad-hoc motion classes used by
+ *     widgets (karaoke prose, marquees, typing animations),
+ *   - the symmetric `no-preference` scroll-behavior so smooth scroll
+ *     is opt-in for users who haven't asked to reduce motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .karaoke,
+  .typing-animation,
+  .marquee,
+  [data-animate] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}

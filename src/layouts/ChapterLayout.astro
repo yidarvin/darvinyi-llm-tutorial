@@ -25,7 +25,7 @@ const pageTitle = chapter ? `${chapter.num}. ${chapter.title}` : 'Chapter';
     <MobileNav />
 
     <div class="chapter-layout-main">
-      <main id="main" class="chapter-content">
+      <main id="main-content" class="chapter-content" role="main">
         {chapter && (
           <header class="chapter-header">
             <div class="chapter-eyebrow">Chapter {chapter.num}</div>

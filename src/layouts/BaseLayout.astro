@@ -1,6 +1,7 @@
 ---
 import '@/styles/global.css';
 import SearchDialog from '@components/search/SearchDialog';
+import SkipLink from '@components/a11y/SkipLink';
 
 export interface Props {
   title?: string;
@@ -40,7 +41,7 @@ const fullTitle = title === 'LLM Tutorial' ? title : `${title} · LLM Tutorial`;
     <meta name="twitter:description" content={description} />
   </head>
   <body>
-    <a href="#main" class="skip-link">Skip to main content</a>
+    <SkipLink />
     <slot />
     <SearchDialog client:idle />
   </body>
