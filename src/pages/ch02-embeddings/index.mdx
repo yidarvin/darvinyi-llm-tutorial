@@ -10,15 +10,15 @@ import { EmbeddingSpace, Word2VecDynamics } from '@components/widgets';
 
 Chapter 1 ended with a neural network that could classify 2D points by quadrant. Coordinates in, class label out. Both ends continuous. Both ends were always going to play nicely with backprop.
 
-Language is different. A word is not a coordinate. *Cat* is a token — an entry in a discrete vocabulary — and there is no obvious answer to "what is `cat` − `dog`?" The chain rule has nothing to say about discrete IDs.
+Language is different. A word is not a coordinate. *Cat* is a token (an entry in a discrete vocabulary), and there is no obvious answer to "what is `cat` − `dog`?" The chain rule has nothing to say about discrete IDs.
 
 This chapter is about the bridge: how we turn discrete tokens into continuous vectors that the network from Chapter 1 (or the transformer from Chapter 4) can consume. The bridge is one matrix and one array-indexing operation. It also happens to be where most of the parameters in a small language model live.
 
 ## Why embeddings
 
-A neural network is a continuous machine. Every operation in it — affine map, activation, normalization, attention — moves real-valued vectors around. Backprop assumes those vectors are differentiable functions of upstream tensors, which in turn requires that the inputs to the first layer be real numbers we can take derivatives with respect to.
+A neural network is a continuous machine. Every operation in it (affine map, activation, normalization, attention) moves real-valued vectors around. Backprop assumes those vectors are differentiable functions of upstream tensors, which in turn requires that the inputs to the first layer be real numbers we can take derivatives with respect to.
 
-Tokens are not real numbers. The string `the cat sat` becomes, after tokenization, a sequence of integer IDs — something like `[12, 5847, 2391]`. Those integers are *labels*, not magnitudes. Feeding them into an MLP directly would be a category error: the network would happily compute $5847 - 12 = 5835$, treating the difference between *cat* and *the* as if it were a meaningful scalar quantity. It is not. The IDs are arbitrary; renumbering the vocabulary changes every input value without changing the underlying language.
+Tokens are not real numbers. The string `the cat sat` becomes, after tokenization, a sequence of integer IDs, something like `[12, 5847, 2391]`. Those integers are *labels*, not magnitudes. Feeding them into an MLP directly would be a category error: the network would happily compute $5847 - 12 = 5835$, treating the difference between *cat* and *the* as if it were a meaningful scalar quantity. It is not. The IDs are arbitrary; renumbering the vocabulary changes every input value without changing the underlying language.
 
 <Equation>
 $$
@@ -28,12 +28,12 @@ $$
 
 The naive bridge is one-hot encoding: turn each ID into a vector of length $|V|$ with a single 1 in the slot for that token and zeros everywhere else. The output is continuous in the trivial sense that it is a vector of floats. The chain rule applies. The category error is gone.
 
-But $|V|$ is enormous. Modern tokenizers have vocabularies in the 30,000–200,000 range. Multiplying a one-hot vector by a weight matrix wastes nearly all of the arithmetic on multiplying by zero — every position except one contributes nothing. At a vocabulary of 50,000 and a hidden dimension of 768, the first layer would do 50,000 × 768 ≈ 38 million multiplications to produce a vector that depends on a single integer.
+But $|V|$ is enormous. Modern tokenizers have vocabularies in the 30,000–200,000 range. Multiplying a one-hot vector by a weight matrix wastes nearly all of the arithmetic on multiplying by zero; every position except one contributes nothing. At a vocabulary of 50,000 and a hidden dimension of 768, the first layer would do 50,000 × 768 ≈ 38 million multiplications to produce a vector that depends on a single integer.
 
-Embeddings are the actual bridge. Map each token ID to a dense vector in a much smaller space — $d \sim 100$ for word2vec, $d = 768$ for GPT-2 small, $d = 12{,}288$ for GPT-3. Different tokens map to different vectors; the vectors live in $\R^d$ and can be added, subtracted, and dotted into the next layer's weight matrix without ceremony. Section 3 makes the construction precise.
+Embeddings are the actual bridge. Map each token ID to a dense vector in a much smaller space: $d \sim 100$ for word2vec, $d = 768$ for GPT-2 small, $d = 12{,}288$ for GPT-3. Different tokens map to different vectors; the vectors live in $\R^d$ and can be added, subtracted, and dotted into the next layer's weight matrix without ceremony. Section 3 makes the construction precise.
 
 <Callout type="note">
-Embeddings are where most of the parameters in a small language model live. GPT-2 small has a vocabulary of 50,257 tokens and an embedding dimension of 768. The embedding matrix alone is 50,257 × 768 ≈ 38.6 million parameters — about 30% of the model's 125M total. For Llama-class 7B models the embedding fraction drops below 5%, but at small scale embeddings are not a side detail; they are the largest single block of weights.
+Embeddings are where most of the parameters in a small language model live. GPT-2 small has a vocabulary of 50,257 tokens and an embedding dimension of 768. The embedding matrix alone is 50,257 × 768 ≈ 38.6 million parameters, about 30% of the model's 125M total. For Llama-class 7B models the embedding fraction drops below 5%, but at small scale embeddings are not a side detail; they are the largest single block of weights.
 </Callout>
 
 The next two sections build the bridge: the representation, then the operation.
@@ -46,17 +46,17 @@ $$
 (\mathbf{e}_i)_j = [i = j],
 $$
 
-where $[\cdot]$ is the Iverson bracket — 1 if the condition holds, 0 otherwise. The result is a vector with magnitude 1, a single nonzero entry, and a clean property: any two different tokens are orthogonal.
+where $[\cdot]$ is the Iverson bracket: 1 if the condition holds, 0 otherwise. The result is a vector with magnitude 1, a single nonzero entry, and a clean property: any two different tokens are orthogonal.
 
-The orthogonality is exactly the problem. Under one-hot encoding, *cat* and *dog* are as similar to each other as *cat* and *helicopter* — their dot product is zero in both cases. Nothing about the representation says *cat* and *dog* belong together. The cosine similarity between any two one-hots is identically zero. A linear classifier built on top of these vectors has no shared structure to exploit; whatever it learns about *cat* it learns from scratch for every other token.
+The orthogonality is exactly the problem. Under one-hot encoding, *cat* and *dog* are as similar to each other as *cat* and *helicopter*; their dot product is zero in both cases. Nothing about the representation says *cat* and *dog* belong together. The cosine similarity between any two one-hots is identically zero. A linear classifier built on top of these vectors has no shared structure to exploit; whatever it learns about *cat* it learns from scratch for every other token.
 
 One way to feel the failure mode: think of one-hots as stamps. Every word gets a unique stamp, and the stamps carry no information beyond "this is the word with that stamp." A library where every book is labeled by a unique serial number and nothing else gives you no way to find related books. Stamps are how you *identify* tokens; they are not how you *describe* them.
 
-A distributed representation describes a token instead of identifying it. Every word gets a $d$-dimensional vector of real values, where $d$ is much smaller than $|V|$ (often 1/50 to 1/1000 the size). The vector is not a stamp; it is a fingerprint in semantic space. *Cat* might end up encoding something like (small, furry, indoor, mammal, feline); *dog* might encode (medium, furry, indoor, mammal, canine). Most of the features are shared. The differences are meaningful. A linear classifier downstream can pick up on shared structure — anything that follows the "small furry indoor mammal" direction generalizes from cats to ferrets without seeing ferrets in training.
+A distributed representation describes a token instead of identifying it. Every word gets a $d$-dimensional vector of real values, where $d$ is much smaller than $|V|$ (often 1/50 to 1/1000 the size). The vector is not a stamp; it is a fingerprint in semantic space. *Cat* might end up encoding something like (small, furry, indoor, mammal, feline); *dog* might encode (medium, furry, indoor, mammal, canine). Most of the features are shared. The differences are meaningful. A linear classifier downstream can pick up on shared structure: anything that follows the "small furry indoor mammal" direction generalizes from cats to ferrets without seeing ferrets in training.
 
-The dimensions of a distributed embedding are not interpretable individually. Coordinate 0 is not *furriness* and coordinate 1 is not *plurality*. Useful "directions" in embedding space are linear combinations of many raw dimensions — the gender direction in word2vec, for example, is some specific unit vector in $\R^{300}$ that you can recover by averaging differences across (king, queen), (uncle, aunt), and so on. Probing for a direction works; reading off a single column does not. Section 5 returns to this.
+The dimensions of a distributed embedding are not interpretable individually. Coordinate 0 is not *furriness* and coordinate 1 is not *plurality*. Useful "directions" in embedding space are linear combinations of many raw dimensions. The gender direction in word2vec, for example, is some specific unit vector in $\R^{300}$ that you can recover by averaging differences across (king, queen), (uncle, aunt), and so on. Probing for a direction works; reading off a single column does not. Section 5 returns to this.
 
-The mathematical link between one-hot and distributed is short and worth seeing. If $E \in \R^{|V| \times d}$ is the embedding matrix (one row per token), then multiplying the one-hot vector $\mathbf{e}_i$ on the left by $E^\top$ picks out the $i$-th column of $E^\top$ — which is the $i$-th row of $E$:
+The mathematical link between one-hot and distributed is short and worth seeing. If $E \in \R^{|V| \times d}$ is the embedding matrix (one row per token), then multiplying the one-hot vector $\mathbf{e}_i$ on the left by $E^\top$ picks out the $i$-th column of $E^\top$, which is the $i$-th row of $E$:
 
 <Equation>
 $$
@@ -64,7 +64,7 @@ E^\top \mathbf{e}_i = E[i, :] \in \R^d \quad \text{(one-hot lookup = row indexin
 $$
 </Equation>
 
-So "look up the embedding for token $i$" and "multiply $E^\top$ by the one-hot vector $\mathbf{e}_i$" are the same operation by definition. The mathematical identity is useful pedagogically — it justifies treating embedding lookups as a special case of an affine map, which is what makes the gradient derivation in section 3 fall out cleanly.
+So "look up the embedding for token $i$" and "multiply $E^\top$ by the one-hot vector $\mathbf{e}_i$" are the same operation by definition. The mathematical identity is useful pedagogically: it justifies treating embedding lookups as a special case of an affine map, which is what makes the gradient derivation in section 3 fall out cleanly.
 
 <Callout type="aside">
 Never actually implement one-hot multiplication. Building the dense one-hot vector and matrix-multiplying it through $E^\top$ does $|V| \times d$ floating-point operations to recover information you could get with a single integer index. Pyodide-grade benchmarks show the indexing version is roughly 1000× faster on CPU; on GPU the gap grows. The mathematical equivalence is for arguments, not for code.
@@ -74,11 +74,11 @@ So embeddings are dense vectors. Where do they live, and how is the lookup wired
 
 ## The embedding layer as a lookup table
 
-The embedding matrix $E \in \R^{|V| \times d}$ is a learnable parameter — exactly the same kind of object as the weight matrices in Chapter 1's MLP. Row $i$ of $E$ is the embedding of token $i$. The forward pass is array indexing.
+The embedding matrix $E \in \R^{|V| \times d}$ is a learnable parameter, exactly the same kind of object as the weight matrices in Chapter 1's MLP. Row $i$ of $E$ is the embedding of token $i$. The forward pass is array indexing.
 
 ### Forward: array indexing
 
-Given a batch of token IDs `token_ids` of shape `(B,)` or `(B, T)`, the embedded output is `E[token_ids]`, with shape `(B, d)` or `(B, T, d)`. That is it. There is no nonlinearity, no bias, no normalization at this step — the embedding "layer" is just a learned mapping from integers to rows of a matrix.
+Given a batch of token IDs `token_ids` of shape `(B,)` or `(B, T)`, the embedded output is `E[token_ids]`, with shape `(B, d)` or `(B, T, d)`. That is it. There is no nonlinearity, no bias, no normalization at this step; the embedding "layer" is just a learned mapping from integers to rows of a matrix.
 
 Initialization is small Gaussian, conventionally $\mathcal{N}(0, 0.02^2)$. Note what this is *not*: it is not He initialization, and it is not Xavier. Those schemes are calibrated to preserve activation variance through a stack of affine-plus-activation layers; an embedding lookup has neither an affine combination of many inputs nor an activation function. The right prior is just "small enough that the initial signal doesn't dominate downstream layers' weights." GPT-2 uses 0.02; Llama uses 0.02. The number is empirical, and 0.02 is the field-standard answer until you have a specific reason to deviate.
 
@@ -94,7 +94,7 @@ $$
 
 Only the row that was looked up receives a non-zero gradient. Every other row of $E$ stays exactly where it was. The embedding for *cat* never moves unless a batch contains *cat*.
 
-For a batch of $B$ tokens, the gradient is the same row-by-row scatter, accumulated wherever multiple positions share a token ID. In numpy, the canonical idiom is `np.add.at(grad_E, token_ids, grad_out)` — an unbuffered scatter that handles repeated indices correctly. Without `np.add.at`, repeated indices would silently overwrite each other instead of accumulating, and the gradient would be wrong.
+For a batch of $B$ tokens, the gradient is the same row-by-row scatter, accumulated wherever multiple positions share a token ID. In numpy, the canonical idiom is `np.add.at(grad_E, token_ids, grad_out)`: an unbuffered scatter that handles repeated indices correctly. Without `np.add.at`, repeated indices would silently overwrite each other instead of accumulating, and the gradient would be wrong.
 
 The runnable block below implements forward and backward for a tiny embedding layer and shows the gradient sparsity directly: of five vocabulary rows, only the two whose IDs appeared in the batch end up non-zero.
 
@@ -139,19 +139,19 @@ print(grad_E.round(3))
   height={420}
 />
 
-At scale, gradient sparsity has a concrete cost consequence. A batch of 1024 tokens from a 50,000-token vocabulary touches at most 1024 distinct rows of $E$ — roughly 2%. Naively applying Adam to the full embedding matrix means computing and updating moment estimates for the other 98% of rows that received zero gradient, which is wasted work *and* slightly wrong: the moment estimates decay even when the gradient is zero, so unused rows drift toward zero over time under AdamW's decay. PyTorch's `nn.Embedding(sparse=True)` and equivalent flags in JAX exist precisely to skip updates on untouched rows.
+At scale, gradient sparsity has a concrete cost consequence. A batch of 1024 tokens from a 50,000-token vocabulary touches at most 1024 distinct rows of $E$, roughly 2%. Naively applying Adam to the full embedding matrix means computing and updating moment estimates for the other 98% of rows that received zero gradient, which is wasted work *and* slightly wrong: the moment estimates decay even when the gradient is zero, so unused rows drift toward zero over time under AdamW's decay. PyTorch's `nn.Embedding(sparse=True)` and equivalent flags in JAX exist precisely to skip updates on untouched rows.
 
 <Callout type="insight">
-The embedding lookup is the operation that makes neural language modeling tractable at all. Without it, every forward pass would multiply a $|V|$-dimensional one-hot vector by a $|V| \times d$ matrix at every position — billions of multiplications per training step, almost all of them by zero. The lookup replaces that with a single integer index into a contiguous row. Modern LMs do millions of these lookups per training step; the constant-time version is the difference between "trains in a week" and "trains never."
+The embedding lookup is the operation that makes neural language modeling tractable at all. Without it, every forward pass would multiply a $|V|$-dimensional one-hot vector by a $|V| \times d$ matrix at every position: billions of multiplications per training step, almost all of them by zero. The lookup replaces that with a single integer index into a contiguous row. Modern LMs do millions of these lookups per training step; the constant-time version is the difference between "trains in a week" and "trains never."
 </Callout>
 
 The embedding table is just a matrix of parameters. The question is how it gets its values. The historical answer is word2vec; the modern answer is end-to-end. The next three sections walk the historical answer because it is the cleanest pedagogical setup; section 6 corrects the misconception that word2vec is how modern LLMs work.
 
-## Word2vec — skip-gram with negative sampling
+## Word2vec: skip-gram with negative sampling
 
-Before 2013, learned word representations existed — distributional models going back to LSA and HAL, neural language models like Bengio et al. 2003 — but they were expensive and unstable at the scale of web text. Mikolov, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1301.3781](https://arxiv.org/abs/1301.3781)) changed this with a simple, scalable, self-supervised setup: word2vec.
+Before 2013, learned word representations existed (distributional models going back to LSA and HAL, neural language models like Bengio et al. 2003) but they were expensive and unstable at the scale of web text. Mikolov, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1301.3781](https://arxiv.org/abs/1301.3781)) changed this with a simple, scalable, self-supervised setup: word2vec.
 
-The setup is shamelessly simple. For each token in a corpus, predict the tokens around it. No human labels. The corpus is the supervision. Two architectural variants appeared in the same paper — Skip-gram (given a word, predict each context) and CBOW (given a context, predict the word) — but Skip-gram with negative sampling, introduced a few months later in Mikolov, Sutskever, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1310.4546](https://arxiv.org/abs/1310.4546)), is the variant that took over and that we walk through here.
+The setup is shamelessly simple. For each token in a corpus, predict the tokens around it. No human labels. The corpus is the supervision. Two architectural variants appeared in the same paper, Skip-gram (given a word, predict each context) and CBOW (given a context, predict the word), but Skip-gram with negative sampling, introduced a few months later in Mikolov, Sutskever, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1310.4546](https://arxiv.org/abs/1310.4546)), is the variant that took over and that we walk through here.
 
 ### The self-supervised objective
 
@@ -169,9 +169,9 @@ The objective is maximum likelihood: maximize the log probability of the true co
 
 ### Why the full softmax is intractable
 
-The denominator sums $\exp(v_{c'}^\top u_w)$ over every word in the vocabulary. For a vocabulary of 50,000 tokens, that is 50,000 dot products and 50,000 exponentials per training pair — and there are billions of training pairs in a real corpus. Most of the work is computing probabilities for words that are nowhere near the true context. The arithmetic is dominated by negative evidence that turns out to be too cheap a way to learn it.
+The denominator sums $\exp(v_{c'}^\top u_w)$ over every word in the vocabulary. For a vocabulary of 50,000 tokens, that is 50,000 dot products and 50,000 exponentials per training pair, and there are billions of training pairs in a real corpus. Most of the work is computing probabilities for words that are nowhere near the true context. The arithmetic is dominated by negative evidence that turns out to be too cheap a way to learn it.
 
-This is the same problem the output softmax has in any large-vocabulary language model. Two families of solutions exist: hierarchical softmax, which arranges the vocabulary as a binary tree and turns the $|V|$-way classification into $\log_2 |V|$ binary classifications along a path; and noise-contrastive methods, which replace the multinomial classification with a binary classifier that distinguishes real pairs from fake ones. Skip-gram with negative sampling — SGNS — is the noise-contrastive route.
+This is the same problem the output softmax has in any large-vocabulary language model. Two families of solutions exist: hierarchical softmax, which arranges the vocabulary as a binary tree and turns the $|V|$-way classification into $\log_2 |V|$ binary classifications along a path; and noise-contrastive methods, which replace the multinomial classification with a binary classifier that distinguishes real pairs from fake ones. Skip-gram with negative sampling, or SGNS, is the noise-contrastive route.
 
 ### Negative sampling
 
@@ -188,7 +188,7 @@ $$
 where $\sigma(x) = 1 / (1 + e^{-x})$ is the standard sigmoid.
 
 <Callout type="note">
-The two terms mirror each other. The first wants the real word-context dot product $v_c^\top u_w$ to be large — sigmoid pulls toward 1, so $-\log \sigma(\cdot)$ shrinks toward 0. The second wants each random pair's dot product to be small — equivalently, $-v_{c'_i}^\top u_w$ to be large, which the sigmoid then pulls toward 1 and the log toward 0. Together, the gradients push real co-occurrences together and random pairs apart. This is contrastive learning in a 2013 wrapper, half a decade before SimCLR and CLIP made the framing standard.
+The two terms mirror each other. The first wants the real word-context dot product $v_c^\top u_w$ to be large: sigmoid pulls toward 1, so $-\log \sigma(\cdot)$ shrinks toward 0. The second wants each random pair's dot product to be small. Equivalently, $-v_{c'_i}^\top u_w$ should be large, which the sigmoid then pulls toward 1 and the log toward 0. Together, the gradients push real co-occurrences together and random pairs apart. This is contrastive learning in a 2013 wrapper, half a decade before SimCLR and CLIP made the framing standard.
 </Callout>
 
 The noise distribution from which negatives are drawn is not uniform over the vocabulary. Mikolov et al. empirically chose
@@ -199,7 +199,7 @@ $$
 
 where $p(c)$ is the unigram probability of context word $c$. The 3/4 exponent is interpolating: uniform sampling ($p(c)^0$) wastes negatives on words too rare to teach the model anything; pure unigram sampling ($p(c)^1$) over-samples *the*, *of*, *and*, drowning useful signal in stopword noise. The 0.75 power was a hyperparameter sweep that stuck.
 
-Hyperparameter sketch: $k = 5$ negatives per positive at large scale, $k = 15$ to $20$ at small scale (more negatives compensate for fewer training pairs). Context window 5 to 10 to either side. Embedding dimension 100 to 300 — small models by modern standards. Learning rate around 0.025 with linear decay to near-zero by end of training.
+Hyperparameter sketch: $k = 5$ negatives per positive at large scale, $k = 15$ to $20$ at small scale (more negatives compensate for fewer training pairs). Context window 5 to 10 to either side. Embedding dimension 100 to 300, small models by modern standards. Learning rate around 0.025 with linear decay to near-zero by end of training.
 
 ### A working implementation
 
@@ -280,7 +280,7 @@ The widget below scales the same idea to a slightly larger toy and animates trai
   <Word2VecDynamics client:visible />
 </WidgetFrame>
 
-Word2vec was a 2013 paper, and most of what it produces — vectors trained on a single self-supervised objective and used downstream as fixed features — has been replaced by the embedding tables of end-to-end-trained LLMs. What did *not* go away is the geometric structure the paper revealed, and the most striking consequence of that structure is the topic of the next section.
+Word2vec was a 2013 paper, and most of what it produces (vectors trained on a single self-supervised objective and used downstream as fixed features) has been replaced by the embedding tables of end-to-end-trained LLMs. What did *not* go away is the geometric structure the paper revealed, and the most striking consequence of that structure is the topic of the next section.
 
 ## The geometry of learned representations
 
@@ -292,9 +292,9 @@ $$
 
 Compute the difference between *king* and *man*. Add it to *woman*. The nearest neighbor of the resulting vector in the embedding space is *queen*. The same trick works for capitals (*Paris* − *France* + *Italy* ≈ *Rome*), tenses (*walked* − *walk* + *swim* ≈ *swam*), and a sprawling list of other analogous pairs. The first time this was demonstrated on 6-billion-token-trained Skip-gram, it was the kind of empirical result that made the academic community take the geometric structure of word vectors seriously.
 
-The result is geometric, not symbolic. There is no "gender concept" stored at coordinate 42 of the embedding. What the analogies reveal is that the "male-to-female" direction in $\R^{300}$ — some specific unit vector that you would have to recover with a probe — is approximately constant across analogous pairs. The vector from *king* to *queen* and the vector from *uncle* to *aunt* point in nearly the same direction with nearly the same magnitude. Add that direction to *brother* and you land near *sister*.
+The result is geometric, not symbolic. There is no "gender concept" stored at coordinate 42 of the embedding. What the analogies reveal is that the "male-to-female" direction in $\R^{300}$ (some specific unit vector that you would have to recover with a probe) is approximately constant across analogous pairs. The vector from *king* to *queen* and the vector from *uncle* to *aunt* point in nearly the same direction with nearly the same magnitude. Add that direction to *brother* and you land near *sister*.
 
-The *why* gets a clean partial answer from Levy and Goldberg (2014, [NeurIPS](https://papers.nips.cc/paper/2014/hash/feab05aa91085b7a8012516bc3533958-Abstract.html)). They showed that the SGNS objective <EqRef id="2.sgns" /> is implicitly factorizing a matrix — specifically the shifted pointwise mutual information matrix:
+The *why* gets a clean partial answer from Levy and Goldberg (2014, [NeurIPS](https://papers.nips.cc/paper/2014/hash/feab05aa91085b7a8012516bc3533958-Abstract.html)). They showed that the SGNS objective <EqRef id="2.sgns" /> is implicitly factorizing a matrix, specifically the shifted pointwise mutual information matrix:
 
 <Equation>
 $$
@@ -302,12 +302,12 @@ v_c^\top u_w \approx \text{PMI}(c, w) - \log k, \quad \text{where} \quad \text{P
 $$
 </Equation>
 
-PMI measures how much more often two words co-occur than chance predicts. It has *additive* structure for compositional pairs — at least in the loose sense that $\text{PMI}(c, \text{queen})$ behaves approximately like $\text{PMI}(c, \text{female}) + \text{PMI}(c, \text{monarch})$ for contexts $c$ that pick up either feature. Because SGNS is factorizing PMI, the additive structure of PMI translates to *linear* structure in the embedding space, and the linear structure manifests as analogies.
+PMI measures how much more often two words co-occur than chance predicts. It has *additive* structure for compositional pairs, at least in the loose sense that $\text{PMI}(c, \text{queen})$ behaves approximately like $\text{PMI}(c, \text{female}) + \text{PMI}(c, \text{monarch})$ for contexts $c$ that pick up either feature. Because SGNS is factorizing PMI, the additive structure of PMI translates to *linear* structure in the embedding space, and the linear structure manifests as analogies.
 
-The argument is hand-wavy in exactly the way that the empirical evidence is robust. PMI is not perfectly additive. The factorization is approximate. The convergence is partial. The fact that linear analogies work as well as they do empirically is somewhat surprising; the PMI-factorization view explains why they work *at all* without quantifying why they work *so well*. The chapter does not reproduce the full proof — Levy and Goldberg's paper is short and worth reading directly.
+The argument is hand-wavy in exactly the way that the empirical evidence is robust. PMI is not perfectly additive. The factorization is approximate. The convergence is partial. The fact that linear analogies work as well as they do empirically is somewhat surprising; the PMI-factorization view explains why they work *at all* without quantifying why they work *so well*. The chapter does not reproduce the full proof; Levy and Goldberg's paper is short and worth reading directly.
 
 <Callout type="warning">
-Linear analogies are *evidence* that learned embeddings encode compositional structure. They are not *proof* that embeddings "understand" language. A substantial critical literature, starting with Linzen 2016 and Rogers et al. 2020, has shown that analogy-task success depends heavily on evaluation methodology — whether the query word is excluded from the candidate set, whether nearest-neighbor search is restricted to a vocabulary of analogous candidates, how ties are broken. With strict evaluation, accuracy drops considerably from the headline numbers in the original word2vec paper. Linear analogies are a real but oversold phenomenon. Treat them as evidence about embedding geometry, not as a benchmark for semantic understanding.
+Linear analogies are *evidence* that learned embeddings encode compositional structure. They are not *proof* that embeddings "understand" language. A substantial critical literature, starting with Linzen 2016 and Rogers et al. 2020, has shown that analogy-task success depends heavily on evaluation methodology: whether the query word is excluded from the candidate set, whether nearest-neighbor search is restricted to a vocabulary of analogous candidates, how ties are broken. With strict evaluation, accuracy drops considerably from the headline numbers in the original word2vec paper. Linear analogies are a real but oversold phenomenon. Treat them as evidence about embedding geometry, not as a benchmark for semantic understanding.
 </Callout>
 
 The widget below shows a 2D projection of pre-computed word2vec embeddings colored by semantic category, with analogy overlays drawn on top. The clusters (animals, colors, countries) are clearly visible; the parallel-arrows pattern for analogies is visible too, with the usual caveat that 2D projection compresses information and the parallelism in the projection underestimates the structure in the full 300-dimensional space.
@@ -320,11 +320,11 @@ Word2vec is the historical anchor for this material. It is not, however, how the
 
 ## Embeddings in modern LLMs
 
-Word2vec trains on a single self-supervised objective — predict context from word — and produces a fixed embedding table that gets reused downstream. The whole point of the paper was to decouple representation learning from task learning. Modern LLMs do the opposite. The embedding table is just another learnable parameter of the model; it updates via backprop along with attention weights, FFN weights, layer norms, and everything else, on whatever objective the model is being trained for (typically next-token prediction).
+Word2vec trains on a single self-supervised objective (predict context from word) and produces a fixed embedding table that gets reused downstream. The whole point of the paper was to decouple representation learning from task learning. Modern LLMs do the opposite. The embedding table is just another learnable parameter of the model; it updates via backprop along with attention weights, FFN weights, layer norms, and everything else, on whatever objective the model is being trained for (typically next-token prediction).
 
 ### End-to-end training
 
-There is no "pretrain the embeddings, then freeze them" phase in any production LLM. The embedding matrix $E$ is allocated at initialization (small Gaussian, the same $\mathcal{N}(0, 0.02^2)$ as section 3), wired into the input of the model, and updated by AdamW on the same loss that updates every other parameter. The gradient through $E$ is exactly the sparse scatter from section 3 — token IDs that appear in the batch get their rows updated; the rest of $E$ stays put.
+There is no "pretrain the embeddings, then freeze them" phase in any production LLM. The embedding matrix $E$ is allocated at initialization (small Gaussian, the same $\mathcal{N}(0, 0.02^2)$ as section 3), wired into the input of the model, and updated by AdamW on the same loss that updates every other parameter. The gradient through $E$ is exactly the sparse scatter from section 3: token IDs that appear in the batch get their rows updated; the rest of $E$ stays put.
 
 <Callout type="warning">
 A widespread misconception, often repeated in older textbooks and tutorials: "Embeddings are pre-trained with word2vec, then frozen for the LLM." This is wrong about every production LLM. Word2vec embeddings exist in the literature, and they occasionally seed small models as a warm start, but no large language model treats embeddings as a separate pre-training phase. The embedding table is a learnable parameter, trained end-to-end with the model, full stop.
@@ -334,15 +334,15 @@ Mechanically, the section-3 `EmbeddingLayer` is essentially what every modern LL
 
 ### What the embeddings learn
 
-The embedding table that emerges from end-to-end training does not optimize for the geometric properties word2vec embeddings have. The training signal is "predict the next token given the previous tokens," not "predict context given word." The resulting space encodes whatever directions help next-token prediction, which substantially overlaps with what word2vec encoded but is not identical. Probing studies still find meaningful linear structure — gender, country, sentiment directions all appear in GPT-2's input embeddings — but the classic *king − man + woman* demo does not reliably reproduce on them. The geometry is task-shaped.
+The embedding table that emerges from end-to-end training does not optimize for the geometric properties word2vec embeddings have. The training signal is "predict the next token given the previous tokens," not "predict context given word." The resulting space encodes whatever directions help next-token prediction, which substantially overlaps with what word2vec encoded but is not identical. Probing studies still find meaningful linear structure (gender, country, sentiment directions all appear in GPT-2's input embeddings) but the classic *king − man + woman* demo does not reliably reproduce on them. The geometry is task-shaped.
 
-Karpathy's `makemore` series ([github.com/karpathy/makemore](https://github.com/karpathy/makemore)) is the cleanest pedagogical reference for embedding-as-byproduct. Across the series, a character-level embedding table is trained end-to-end with progressively more elaborate downstream networks — bigram MLP, larger MLP, transformer. The embedding lookup is the same in all of them; what changes is what the downstream network does. The block below is the bigram-MLP version: an embedding table plus a single output projection, trained on next-character prediction. The embedding emerges as whatever vectors make that one downstream operation work.
+Karpathy's `makemore` series ([github.com/karpathy/makemore](https://github.com/karpathy/makemore)) is the cleanest pedagogical reference for embedding-as-byproduct. Across the series, a character-level embedding table is trained end-to-end with progressively more elaborate downstream networks (bigram MLP, larger MLP, transformer). The embedding lookup is the same in all of them; what changes is what the downstream network does. The block below is the bigram-MLP version: an embedding table plus a single output projection, trained on next-character prediction. The embedding emerges as whatever vectors make that one downstream operation work.
 
 <RunnableCode
   client:visible
   defaultCode={`import numpy as np
 
-# Embedding-as-lookup, just like section 3 — but now wired into a tiny next-char predictor.
+# Embedding-as-lookup, just like section 3, but now wired into a tiny next-char predictor.
 vocab = list("abcdefghijklmnopqrstuvwxyz ")
 V = len(vocab)
 char_to_id = {c: i for i, c in enumerate(vocab)}
@@ -355,8 +355,8 @@ class TinyLM:
         self.W_out = rng.normal(0, 0.02, (dim, vocab_size))     # output projection
 
     def forward(self, char_id):
-        embedded = self.E[char_id]              # (dim,) — the embedding
-        logits = embedded @ self.W_out          # (V,)  — scores over next-char
+        embedded = self.E[char_id]              # (dim,): the embedding
+        logits = embedded @ self.W_out          # (V,):  scores over next-char
         return logits
 
 lm = TinyLM(V, dim=16)
@@ -373,13 +373,13 @@ print(f"Most probable next char (random, untrained): '{vocab[logits.argmax()]}'"
 
 ### Layer-by-layer contextualization
 
-There is a second, subtler misconception about modern embeddings: that each token has a *single fixed* vector throughout the network. This is true at the input — every occurrence of *bank* maps to the same row of $E$ — and false at every layer above. Attention's whole job is to mix in surrounding context, and at every transformer layer the representation of *bank* at position $t$ is some learned combination of representations at every other position. After layer 1, the *bank* in *river bank* and the *bank* in *savings bank* already differ. By layer 12, they are substantially different vectors pointing in substantially different directions.
+There is a second, subtler misconception about modern embeddings: that each token has a *single fixed* vector throughout the network. This is true at the input (every occurrence of *bank* maps to the same row of $E$) and false at every layer above. Attention's whole job is to mix in surrounding context, and at every transformer layer the representation of *bank* at position $t$ is some learned combination of representations at every other position. After layer 1, the *bank* in *river bank* and the *bank* in *savings bank* already differ. By layer 12, they are substantially different vectors pointing in substantially different directions.
 
-This is the difference between *static* embeddings (the row of $E$ at the input) and *contextualized* representations (the activations at intermediate layers). Word2vec and GloVe produce static embeddings — one vector per word, regardless of context. A transformer produces a sequence of contextualized representations, with the static input embedding as the starting point of a much longer pipeline.
+This is the difference between *static* embeddings (the row of $E$ at the input) and *contextualized* representations (the activations at intermediate layers). Word2vec and GloVe produce static embeddings, one vector per word, regardless of context. A transformer produces a sequence of contextualized representations, with the static input embedding as the starting point of a much longer pipeline.
 
-Chapter 5 picks this up properly when it walks through the transformer block. The takeaway for this chapter is narrower: when we say "the embedding table in a modern LLM," we mean the input layer's lookup — $E$ in section 3, fixed per token ID. The "deeper-layer activations" are a different thing entirely, even though casual usage sometimes calls them "embeddings" too.
+Chapter 5 picks this up properly when it walks through the transformer block. The takeaway for this chapter is narrower: when we say "the embedding table in a modern LLM," we mean the input layer's lookup, $E$ in section 3, fixed per token ID. The "deeper-layer activations" are a different thing entirely, even though casual usage sometimes calls them "embeddings" too.
 
-The implications for interpretability follow. Input embeddings in word2vec are relatively direct objects to probe — they were trained for it. Input embeddings in modern LLMs are less directly interpretable because they are tuned for whatever direction helps the contextualization layers above. Probing still works; the absolute geometric cleanliness of word2vec analogies does not.
+The implications for interpretability follow. Input embeddings in word2vec are relatively direct objects to probe; they were trained for it. Input embeddings in modern LLMs are less directly interpretable because they are tuned for whatever direction helps the contextualization layers above. Probing still works; the absolute geometric cleanliness of word2vec analogies does not.
 
 ## Tying input and output embeddings
 
@@ -387,9 +387,9 @@ A language model has two big matrices that sit between the vocabulary and the hi
 
 Press and Wolf (2017, [arxiv.org/abs/1608.05859](https://arxiv.org/abs/1608.05859)) made the obvious move: tie them. Set $W_{\text{out}} = E^\top$, so the same matrix serves as input embedding and output projection. The input embedding for token $i$ is $E[i, :]$; the output logit for token $i$ given a hidden state $h$ is $h \cdot E[i, :]$. One matrix instead of two.
 
-The savings are concrete. For GPT-2 small ($|V| = 50{,}257$, $d = 768$), one of the two $|V| \times d$ matrices is 38.6 million parameters — roughly 30% of the model's 125 million total. Tying eliminates that block of parameters outright. Llama 7B, with $|V| = 32{,}000$ and $d = 4096$, would save 130 million parameters — closer to 2% of total. The relative savings shrink as models grow.
+The savings are concrete. For GPT-2 small ($|V| = 50{,}257$, $d = 768$), one of the two $|V| \times d$ matrices is 38.6 million parameters, roughly 30% of the model's 125 million total. Tying eliminates that block of parameters outright. Llama 7B, with $|V| = 32{,}000$ and $d = 4096$, would save 130 million parameters, closer to 2% of total. The relative savings shrink as models grow.
 
-The output bias is a separate matter and is usually *not* tied. Implementations typically still include a learnable bias $b \in \R^{|V|}$ on the output projection: logits at position $t$ are $h_t \cdot E^\top + b$, with the bias applied per vocabulary entry. The bias absorbs the unigram statistics of the corpus — frequent tokens (*the*, *of*, *and*) get a positive bias because they are *a priori* probable; rare tokens get a negative bias. Without the bias, the model has to bake unigram statistics into the directions of the hidden state, wasting representational capacity on something a single per-token scalar can handle.
+The output bias is a separate matter and is usually *not* tied. Implementations typically still include a learnable bias $b \in \R^{|V|}$ on the output projection: logits at position $t$ are $h_t \cdot E^\top + b$, with the bias applied per vocabulary entry. The bias absorbs the unigram statistics of the corpus: frequent tokens (*the*, *of*, *and*) get a positive bias because they are *a priori* probable; rare tokens get a negative bias. Without the bias, the model has to bake unigram statistics into the directions of the hidden state, wasting representational capacity on something a single per-token scalar can handle.
 
 <RunnableCode
   client:visible
@@ -419,30 +419,30 @@ logits = te.project(hidden)
 print(f"Logits over vocab (10 entries): {logits[0].round(3)}")
 
 # After training, the embedding of token i tends to produce the highest logit
-# for token i when used as the hidden state — the matrix is "consistent with itself."
+# for token i when used as the hidden state; the matrix is "consistent with itself."
 `}
   packages={["numpy"]}
   height={320}
 />
 
-Tying is the default in most open-source LLMs. GPT-2 ties. Llama ties. Mistral ties. Gemma ties. Some larger closed models (GPT-3 and later, by various reports) do not tie — at frontier scale the parameter budget is less binding, and the extra flexibility of independent input and output spaces may be worth the cost. The default is "tie until you have a reason not to."
+Tying is the default in most open-source LLMs. GPT-2 ties. Llama ties. Mistral ties. Gemma ties. Some larger closed models (GPT-3 and later, by various reports) do not tie; at frontier scale the parameter budget is less binding, and the extra flexibility of independent input and output spaces may be worth the cost. The default is "tie until you have a reason not to."
 
 <Callout type="aside">
-The parameter savings from tying are dramatic at small scale (~30% of a GPT-2-small) and diminish at large scale. For a 7B-parameter model, tied versus untied is a ~1% parameter difference — barely visible against the FFN and attention blocks that dominate. Tying remains the default at all scales mostly because it costs nothing and occasionally helps perplexity by a small margin (Press and Wolf reported ~5%). The marginal gain is empirical and not always reproducible; the parameter savings are mechanical and always real.
+The parameter savings from tying are dramatic at small scale (~30% of a GPT-2-small) and diminish at large scale. For a 7B-parameter model, tied versus untied is a ~1% parameter difference, barely visible against the FFN and attention blocks that dominate. Tying remains the default at all scales mostly because it costs nothing and occasionally helps perplexity by a small margin (Press and Wolf reported ~5%). The marginal gain is empirical and not always reproducible; the parameter savings are mechanical and always real.
 </Callout>
 
 ## Exercises
 
-The exercises below build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+The exercises below build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — Verify category separation by cosine similarity
+### Exercise 1 (easy): Verify category separation by cosine similarity
 
 Train the toy skip-gram model from section 4 (the 12-word corpus). Then compute cosine similarities for several pairs: within-category (e.g., `cat ↔ dog`), across-category (e.g., `cat ↔ rug`), and to connector words (e.g., `cat ↔ sat`). Report which pairs are most/least similar.
 
 <details>
 <summary>Hint</summary>
 
-After training, the `U` matrix has the word embeddings. Compute `cos(a, b) = (a @ b) / (|a| * |b|)`. Same-category words should have higher cosine than cross-category. Connector words (`sat`, `on`, `the`) should be moderately similar to many words — they co-occur with everything.
+After training, the `U` matrix has the word embeddings. Compute `cos(a, b) = (a @ b) / (|a| * |b|)`. Same-category words should have higher cosine than cross-category. Connector words (`sat`, `on`, `the`) should be moderately similar to many words; they co-occur with everything.
 
 </details>
 
@@ -450,7 +450,7 @@ After training, the `U` matrix has the word embeddings. Compute `cos(a, b) = (a 
   client:visible
   defaultCode={`import numpy as np
 
-# Re-create the toy SGNS setup from section 4 (or copy your trained U from that block)
+# Re-create the toy SGNS setup from section 4 (or copy your trained U from that block).
 # Then compute cosine similarity matrix for a subset of words.
 
 def cos(a, b):
@@ -464,7 +464,7 @@ def cos(a, b):
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — Intruder detection
+### Exercise 2 (medium): Intruder detection
 
 Given a list of 4 words, identify the one that doesn't belong using only embedding similarities. For example, in `[cat, dog, fish, car]`, the intruder is `car`. The basic approach: compute the average pairwise similarity within the list, then check which word has the lowest average similarity to the others.
 
@@ -487,14 +487,14 @@ def find_intruder(words, E, word_to_id):
     # TODO: return the word with the lowest avg
     pass
 
-# Test cases — train embeddings first, then test:
+# Test cases (train embeddings first, then test):
 # find_intruder(['cat', 'dog', 'fish', 'car'], E, word_to_id)  → 'car'
 # find_intruder(['red', 'blue', 'green', 'cat'], E, word_to_id) → 'cat'
 `}
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Implement CBOW
+### Exercise 3 (medium): Implement CBOW
 
 CBOW (Continuous Bag of Words) is word2vec's other variant. Instead of predicting context from a center word, CBOW predicts the center word from the *average* of its context word embeddings. Implement CBOW with negative sampling. Compare the resulting embeddings to skip-gram on the same toy corpus.
 
@@ -515,11 +515,11 @@ def sigmoid(x): return 1 / (1 + np.exp(-np.clip(x, -30, 30)))
 
 def cbow_step(U, W, center_id, context_ids, neg_ids, lr=0.05):
     """
-    U: (vocab, dim) — context-word embeddings (this is what CBOW averages)
-    W: (vocab, dim) — center-word embeddings (predicted)
-    center_id: int — the true center word
-    context_ids: list of ints — the surrounding context words
-    neg_ids: list of ints — negative samples
+    U: (vocab, dim): context-word embeddings (this is what CBOW averages)
+    W: (vocab, dim): center-word embeddings (predicted)
+    center_id: int, the true center word
+    context_ids: list of ints, the surrounding context words
+    neg_ids: list of ints, negative samples
     """
     # TODO: average the context word embeddings into u_bar
     # TODO: compute positive and negative logits
@@ -533,14 +533,14 @@ def cbow_step(U, W, center_id, context_ids, neg_ids, lr=0.05):
   packages={["numpy"]}
 />
 
-### Exercise 4 (hard) — Linear analogy search
+### Exercise 4 (hard): Linear analogy search
 
 Given three words $a$, $b$, $c$, find the word $d$ such that $\vec{d} - \vec{c} \approx \vec{b} - \vec{a}$, i.e., $d$ completes the analogy "$a$ is to $b$ as $c$ is to ?". Implement this search using your trained embeddings.
 
 <details>
 <summary>Hint</summary>
 
-Compute the target vector $t = b - a + c$. Then search the vocabulary for the word whose embedding is closest to $t$ (excluding $a$, $b$, $c$ themselves — they often score highest by accident). Use cosine similarity. With a tiny corpus, the results may be noisy; with real word2vec on Wikipedia, the king/queen result emerges.
+Compute the target vector $t = b - a + c$. Then search the vocabulary for the word whose embedding is closest to $t$ (excluding $a$, $b$, $c$ themselves; they often score highest by accident). Use cosine similarity. With a tiny corpus, the results may be noisy; with real word2vec on Wikipedia, the king/queen result emerges.
 
 </details>
 
@@ -561,23 +561,19 @@ def find_analogy(a, b, c, E, word_to_id, vocab):
 
 # Test:
 # find_analogy('cat', 'dog', 'fish', E, word_to_id, vocab)
-# (On the toy corpus, the result may not be meaningful — that's fine.
+# (On the toy corpus, the result may not be meaningful. That's fine.
 # The point is to implement the algorithm; with real word2vec on 6B words,
 # 'king' / 'man' / 'woman' produces 'queen'.)
 `}
   packages={["numpy"]}
 />
 
-If you finish Exercise 4 with a working implementation and want to see it succeed on real data, download a pre-trained GloVe or word2vec model from [nlp.stanford.edu/projects/glove](https://nlp.stanford.edu/projects/glove/), load the vectors with numpy, and run your analogy search on a 6-billion-word vocabulary. With real embeddings, `king - man + woman` returns `queen` with high probability — the empirical result that put word vectors on the map.
+If you finish Exercise 4 with a working implementation and want to see it succeed on real data, download a pre-trained GloVe or word2vec model from [nlp.stanford.edu/projects/glove](https://nlp.stanford.edu/projects/glove/), load the vectors with numpy, and run your analogy search on a 6-billion-word vocabulary. With real embeddings, `king - man + woman` returns `queen` with high probability, the empirical result that put word vectors on the map.
 
-## From token to context
-
-The chapter started with a category error: tokens are discrete, neural networks are continuous, and the chain rule has nothing to say about integer IDs. The fix turned out to be one matrix and one array-indexing operation. The matrix is learnable; it is initialized small, trained end-to-end with whatever model it sits underneath, and produces representations with useful geometric properties — sometimes linear-analogy-friendly, sometimes more task-shaped, depending on what objective shaped them.
-
-What the chapter's embedding is, fundamentally, is *static*. Every occurrence of *cat* maps to the same row of $E$ at the input. That is exactly the right behavior for a lookup table, and exactly the wrong behavior for understanding language. The meaning of *cat* in *the cat purred* is not the same as its meaning in *cat -lvf is a flag for tar*, and any model that treats them as identical is going to make the same mistakes on both.
+The chapter's embedding is, fundamentally, *static*. Every occurrence of *cat* maps to the same row of $E$ at the input. That is exactly the right behavior for a lookup table, and exactly the wrong behavior for understanding language. The meaning of *cat* in *the cat purred* is not the same as its meaning in *cat -lvf is a flag for tar*, and any model that treats them as identical is going to make the same mistakes on both.
 
 The fix is what the rest of Part II builds. A transformer takes the sequence of static embeddings produced by Chapter 2's lookup and runs it through a stack of attention blocks, each of which takes the previous layer's representations and refines them by mixing in information from surrounding positions. By the time the network has run twelve layers (or seventy, or two hundred), the representation at position $t$ has absorbed signal from every other position in the sequence. It is no longer "the embedding of token $t$"; it is "what token $t$ means in this context, given everything around it."
 
-That is the transformer's structural job, and Chapter 4 introduces the operation — attention — that does it. Chapter 5 builds the full block. Chapter 6 adds the missing piece: how the model knows *which* position a token is at, since attention is permutation-equivariant without help.
+That is the transformer's structural job, and Chapter 4 introduces the operation (attention) that does it. Chapter 5 builds the full block. Chapter 6 adds the missing piece: how the model knows *which* position a token is at, since attention is permutation-equivariant without help.
 
-First, though, Chapter 3 covers the other end of the bridge. The chapter has been quietly assuming that "token IDs" are a fixed input — that some upstream process produces integers between 0 and $|V| - 1$ and hands them to the embedding lookup. What that process is, and how it shapes everything downstream (vocabulary size, the geometry of $E$, the model's behavior on numbers and code and multilingual text), is its own subject. Tokenization is where token IDs come from, and the choice of tokenizer determines the rows of $E$ before training has done anything at all.
+First, though, Chapter 3 covers the other end of the bridge. The chapter has been quietly assuming that "token IDs" are a fixed input, that some upstream process produces integers between 0 and $|V| - 1$ and hands them to the embedding lookup. What that process is, and how it shapes everything downstream (vocabulary size, the geometry of $E$, the model's behavior on numbers and code and multilingual text), is its own subject. Tokenization is where token IDs come from, and the choice of tokenizer determines the rows of $E$ before training has done anything at all.
