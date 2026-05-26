@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch15-peft
-description: Parameter-efficient fine-tuning (PEFT), the practical alternative to full fine-tuning that powers most production deployments. Where Chapters 13–14 covered post-training methods (SFT, RLHF, DPO, RLVR), this chapter covers the engineering that makes them tractable: rather than training all 70B parameters of a frontier model, train ~0.1–1%, a small low-rank update that captures the essential changes. The dominant technique is LoRA (Hu et al. 2021); QLoRA (Dettmers et al. 2023) makes it accessible on consumer GPUs by combining 4-bit NF4 quantization of the base model with LoRA training. The chapter also covers adapters, prefix tuning, (IA)³, DoRA, and the modern PEFT family. Most production fine-tuning is LoRA-based; this chapter explains why and how.
+description: "Parameter-efficient fine-tuning (PEFT), the practical alternative to full fine-tuning that powers most production deployments. Where Chapters 13–14 covered post-training methods (SFT, RLHF, DPO, RLVR), this chapter covers the engineering that makes them tractable: rather than training all 70B parameters of a frontier model, train ~0.1–1%, a small low-rank update that captures the essential changes. The dominant technique is LoRA (Hu et al. 2021); QLoRA (Dettmers et al. 2023) makes it accessible on consumer GPUs by combining 4-bit NF4 quantization of the base model with LoRA training. The chapter also covers adapters, prefix tuning, (IA)³, DoRA, and the modern PEFT family. Most production fine-tuning is LoRA-based; this chapter explains why and how."
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
