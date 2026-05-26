@@ -99,7 +99,7 @@ Section 3 covers the methodologies that catch what benchmark scores miss.
 
 **Seven. Regression monitoring.** Score outputs on a fixed dataset across model and prompt versions; detect regressions when changes degrade quality. **The production-eval workhorse** — covered in code in section 6.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Pass^k evaluation: run a task k times; success only if ALL k attempts succeed.
 
@@ -167,7 +167,7 @@ Model choice is the biggest lever; bigger is not always better when cost matters
 
 **Production framing.** Define your **cost budget** (per task or per month). Define your **quality floor** (minimum acceptable score). **Find Pareto-optimal configurations** that meet both constraints. **Iterate** as models, prompts, and tools improve. The SWE-bench cost-quality story as of early $2025$: cheapest viable around $\$0.10$ per task at roughly $30\%$ success; frontier around $\$2$–$5$ per task at roughly $50\%$ success. The gap is shrinking as smaller models improve.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Identify Pareto-optimal configurations on (cost, quality).
 
@@ -268,7 +268,7 @@ Section 6 closes the production arc with the deployment patterns and the readine
 
 **Five. Feature flags.** Toggle agent features on and off without a code deploy; enable per-user rollouts; rollback in seconds. The fast-rollback option matters more for agent systems than for traditional services because failure modes are subtler and detection is slower.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Compare current vs baseline on a fixed dataset; alert on regressions.
 

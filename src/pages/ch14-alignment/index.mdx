@@ -48,7 +48,7 @@ $$\mathcal{L}_{\text{RM}} = -\mathbb{E}_{(x, y_w, y_l)} \left[ \log \sigma(r_\ph
 
 This is just classification: predict which response a human preferred, using a sigmoid log-likelihood on the score *difference*. Architecturally the reward model is usually the SFT model with the language-modeling head replaced by a scalar output, fine-tuned on the preference data with this loss. After training, $r_\phi(x, y) \to \mathbb{R}$ scores any response by how much humans should prefer it. Differences of $r_\phi$ have a probabilistic interpretation; absolute values do not.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -182,7 +182,7 @@ The quantity $\beta \log(\pi_\theta(y \mid x) / \pi_{\text{ref}}(y \mid x))$ tha
   <DPOLossLandscape client:visible />
 </WidgetFrame>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -286,7 +286,7 @@ RLVR works where the answer is checkable. **Math** (the final numeric answer can
 
 It does *not* apply to subjective tasks. **Creative writing** has no objective verifier. **Open-ended advice** has no ground-truth answer. **Conversation quality** is judgment-based, and the judgments are exactly the noisy preference data that classical RLHF/DPO were built to handle. For tasks like these, RLVR does not replace preference learning — they serve different purposes. The current state-of-the-art reasoning models use *both*: classical RLHF or DPO for alignment on open-ended tasks, RLVR layered on top for reasoning capability on verifiable ones.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import re
 

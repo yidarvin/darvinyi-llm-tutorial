@@ -60,7 +60,7 @@ The story of BM25 in $2025$ is that the old technique aged remarkably well. **Ex
 
 Where BM25 fails is exactly where you would expect from its mechanics. **Synonyms**: "automobile" and "car" share no exact terms, so a query about one will not retrieve documents about the other. **Paraphrases**: different surface forms for the same question miss each other. **Concept queries**: "What causes inflation?" matches documents that mention "inflation" by name and misses documents on monetary policy that do not.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 from rank_bm25 import BM25Okapi
 
@@ -126,7 +126,7 @@ Vectors need to live somewhere with fast nearest-neighbor search. **FAISS** (Met
 
 The index type is where the practical performance trade-offs live. **Flat** (brute force) is exact and slow at scale — fine up to a few hundred thousand vectors, painful above. **IVF** (Inverted File) clusters vectors and searches within clusters — fast and lossy in a tunable way. **HNSW** (Hierarchical Navigable Small World) is a graph-based index that is both fast and accurate at scale; it is the modern default for most production deployments. **PQ** (Product Quantization) compresses vectors aggressively — faster and smaller at the cost of recall, useful at billion-scale where storage dominates.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -198,7 +198,7 @@ Hybrid retrieval wins most when the workload is diverse. **Mixed query types** i
   <RetrievalComparator client:visible />
 </WidgetFrame>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def reciprocal_rank_fusion(rankings, k=60):
     """

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -51,7 +51,12 @@ const darvinHighlight = HighlightStyle.define([
 ]);
 
 export interface RunnableCodeProps {
-  defaultCode: string;
+  /** Source code for the editor. Either supply this OR pass a fenced
+   * markdown code block as children — children are used as a fallback
+   * when defaultCode is absent (handles `<RunnableCode>` ```python … ```
+   * `</RunnableCode>` MDX form used across ch11–ch30). */
+  defaultCode?: string;
+  children?: ReactNode;
   packages?: string[];
   height?: number;
   outputHeight?: number;
@@ -63,6 +68,7 @@ type Status = 'idle' | 'loading' | 'running' | 'done' | 'error';
 
 export default function RunnableCode({
   defaultCode,
+  children,
   packages = ['numpy'],
   height = 240,
   outputHeight = 120,
@@ -70,6 +76,11 @@ export default function RunnableCode({
   readonly = false,
 }: RunnableCodeProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const childrenRef = useRef<HTMLDivElement>(null);
+  /* Resolved source text — set during editor init, used by Reset/Run as
+   * the canonical "original code" reference. Single source of truth
+   * regardless of whether the code arrived via the prop or via children. */
+  const resolvedCodeRef = useRef<string>('');
   const viewRef = useRef<EditorView | null>(null);
   const cancelledRef = useRef(false);
 
@@ -80,8 +91,20 @@ export default function RunnableCode({
   useEffect(() => {
     if (!editorContainerRef.current) return;
 
+    /* Prefer the explicit `defaultCode` prop; fall back to text content of
+     * rendered children (handles the MDX form where a fenced code block
+     * is nested inside `<RunnableCode>...</RunnableCode>`). The hidden
+     * container's textContent preserves the original whitespace and
+     * newlines from Shiki's `<pre><code>` output. */
+    let code = defaultCode;
+    if (!code && childrenRef.current) {
+      code = childrenRef.current.textContent ?? '';
+    }
+    if (!code) return; /* nothing to render — bail silently */
+    resolvedCodeRef.current = code.trim();
+
     const state = EditorState.create({
-      doc: defaultCode.trim(),
+      doc: resolvedCodeRef.current,
       extensions: [
         lineNumbers(),
         history(),
@@ -137,12 +160,12 @@ export default function RunnableCode({
       view.destroy();
       viewRef.current = null;
     };
-  }, [defaultCode, readonly]);
+  }, [defaultCode, children, readonly]);
 
   async function handleRun() {
     if (status === 'loading' || status === 'running') return;
 
-    const code = viewRef.current?.state.doc.toString() ?? defaultCode;
+    const code = viewRef.current?.state.doc.toString() ?? resolvedCodeRef.current;
     cancelledRef.current = false;
     setOutput('');
     setError(undefined);
@@ -171,7 +194,7 @@ export default function RunnableCode({
       changes: {
         from: 0,
         to: viewRef.current.state.doc.length,
-        insert: defaultCode.trim(),
+        insert: resolvedCodeRef.current,
       },
     });
     setOutput('');
@@ -199,6 +222,18 @@ export default function RunnableCode({
 
       {isBusy && status === 'loading' && (
         <div className={styles.loadingBar} aria-hidden="true" />
+      )}
+
+      {/* Hidden container for the children-fallback path: when the chapter
+       * uses `<RunnableCode>` ```python ... ``` `</RunnableCode>` instead
+       * of the `defaultCode={...}` prop form, the MDX fenced block lands
+       * here. We read its textContent in the editor-init effect, then
+       * mount CodeMirror with that text. Hidden via the `hidden` HTML
+       * attribute — content still lives in the DOM for textContent. */}
+      {children && (
+        <div ref={childrenRef} hidden aria-hidden="true">
+          {children}
+        </div>
       )}
 
       <div className={styles.editorWrap}>

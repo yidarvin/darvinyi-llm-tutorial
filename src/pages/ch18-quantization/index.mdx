@@ -56,7 +56,7 @@ Given a range $[x_{\min}, x_{\max}]$ that the quantizer needs to cover, the two 
 
 The bit width of the quantized integers is the headline number, but the scale and zero point have their own storage cost that gets folded back into the effective bits per weight. **Per-tensor** quantization uses one scale per matrix and the overhead is negligible. **Per-channel** uses one scale per output dimension and the overhead is small. **Per-group** ($G = 64$ or $G = 128$) uses one scale per group of contiguous weights, and at INT4 with $G = 128$ the scale overhead lands at roughly $0.13$ bits per weight — small but visible. For a $7$B model the bookkeeping works out to about $7.05$ GB at INT8 per-channel and about $3.6$ GB at INT4 per-group with the scales included. The "INT4" line item gets you $4\times$ over BF16, not $8\times$, after you pay for the scales.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -117,7 +117,7 @@ The next section covers granularity — the engineering choice that affects qual
 
 At INT4 there are only $16$ distinct values on the grid. Local statistics dominate global ones at that resolution — a group of $64$ contiguous weights almost always has a much smaller dynamic range than the whole row, so the local grid is much finer than a global one would be. The cost of per-group is storage overhead: at $G = 64$ in INT4 the scales add about $0.5$ bits per weight; at $G = 128$ they add about $0.25$. **Group sizes of $64$ and $128$ are the practical defaults.** Below $32$ the scale overhead becomes a serious tax on the compression ratio; above $256$ the grid starts losing the locality that motivated per-group in the first place and quality drops noticeably. **GPTQ, AWQ, and the NF4 recipe in QLoRA all default to $G = 64$ or $G = 128$** — the consensus is narrow because the tradeoff is so well-explored.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -228,7 +228,7 @@ Notice the density: levels are tightly packed near zero (where most weights live
 
 The per-group scales themselves are a meaningful storage line item. FP32 scales at $G = 64$ cost about $0.5$ bits per weight; that is not enormous but it is bigger than the headline "four bits per weight" suggests. **Double quantization** (also from the QLoRA paper) takes the scales and quantizes *them*, grouping every $256$ scales into a super-group and quantizing the super-group to FP8 with its own (FP32) super-group scale. The math layers cleanly and the savings come out to roughly $0.3$ bits per weight. **NF4 with double quantization lands at about $4.13$ bits per weight effective** — a tiny overhead above the raw $4$-bit weights, with quality that is competitive with INT8 on most benchmarks.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 from scipy.stats import norm

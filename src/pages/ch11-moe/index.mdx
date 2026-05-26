@@ -66,7 +66,7 @@ The critical observation is that only $k$ of the $N$ FFNs are ever actually comp
 
 A runnable forward pass makes the mechanics concrete. The implementation below is a naive numpy version — clear, not fast — but it shows how routing, selection, and weighted combination compose into a single MoE layer.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -198,7 +198,7 @@ Even with the auxiliary loss, imbalance can persist. Frontier MoE training adds 
 
 The demo below compares the loss value for a balanced routing pattern against a collapsed one. The collapsed case produces a larger loss, which is exactly the gradient signal that pushes the router back toward balance.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -296,7 +296,7 @@ DeepSeek-V3 took the DeepSeek-MoE recipe to the frontier: $671$B total parameter
 
 The parameter-counting math for an MoE configuration is short enough to write out. The function below computes total and active parameters for a given config and applies it to Mixtral 8x7B and Llama-2 70B for comparison.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def moe_parameter_count(num_experts, k, d_model,
                         d_ffn=None, num_layers=32):

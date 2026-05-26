@@ -101,7 +101,7 @@ The discrete SSM recurrence. $\bar{A}$ and $\bar{B}$ are the discretized paramet
 
 The runnable cell below makes the recurrence concrete with an impulse response. We initialize a diagonal $A$ with four eigenvalues at different decay rates, send in a single $1.0$ at time $0$, and watch the output decay over the next $50$ steps. Each state element decays at its own rate; slower eigenvalues correspond to longer memory.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -168,7 +168,7 @@ This is the SSM's signature property. Attention has only the parallel mode — t
 
 The cell below verifies the duality numerically. We compute the same SSM two ways — once as a sequential recurrence, once as a convolution with a precomputed kernel — and check that the outputs agree to floating-point precision.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -275,7 +275,7 @@ This is a deliberate trade-off. Mamba gives up the convolution mode to gain sele
 
 The runnable cell below shows selectivity in action. A sequence alternates between "loud" inputs (value $5.0$) and "quiet" inputs (value $0.1$). The softplus of a linear function of $x$ produces a large $\Delta_t$ for loud tokens and a small $\Delta_t$ for quiet ones. Look at how the state moves: large jumps on loud tokens, near-stillness on quiet ones.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 

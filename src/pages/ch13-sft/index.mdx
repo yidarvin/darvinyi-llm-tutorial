@@ -84,7 +84,7 @@ where $m_t \in \{0, 1\}$ is the response mask, $\mathcal{L}_{\text{CE}}(y_t, p_t
 
 The runnable cell below builds the mask by hand on an eight-token toy sequence — four tokens of user prompt, four tokens of assistant response — and compares the unmasked loss against the masked one. The numbers differ because the masked version averages over four positions, not eight, and discards whatever signal the user-prompt positions happened to contribute.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 
@@ -187,7 +187,7 @@ The modern API is HuggingFace's `tokenizer.apply_chat_template()`. Pass a list o
 
 The runnable cell implements three of the templates by hand on the same conversation. The output is the same logical content rendered three different ways — and a Llama-3 model fed the ChatML output (or vice versa) produces garbage, because the special tokens it was trained to recognize are not there.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def format_chatml(messages):
     """ChatML: <|im_start|>role\\ncontent<|im_end|>"""
@@ -314,7 +314,7 @@ Synthetic data has hard ceilings. **The distillation ceiling**: the student cann
 
 In practice, no team trains a serious SFT recipe on raw synthetic data. The first thing that happens is filtering — drop the empty responses, the meta-references ("As an AI language model..."), the suspiciously short or suspiciously long outputs, the responses that mostly repeat the question. The cell below implements a toy version: a handful of heuristics that flag a noticeable fraction of low-quality synthetic examples.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def quality_score(example):
     """

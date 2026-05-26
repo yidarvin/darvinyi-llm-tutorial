@@ -58,7 +58,7 @@ The template for the entire family, in compact form:
 $$\text{prompt} \;\to\; \text{reasoning}_1, \text{reasoning}_2, \ldots, \text{reasoning}_k \;\to\; \text{answer}$$
 </Equation>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def call_model(prompt):
     """
@@ -125,7 +125,7 @@ The empirical wins are large but narrow. **ToT significantly outperforms CoT on 
 
 The implementation of self-consistency itself is short — extract each trace's answer, count, return the mode:
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import re
 from collections import Counter
@@ -223,7 +223,7 @@ The simpler alternative is an **outcome reward model (ORM)** that only scores th
 
 **The R1 surprise was decisive on this point.** DeepSeek showed that **pure outcome rewards work** for reasoning — no PRM needed; rule-based ORMs (exact-match on math; test-pass rate on code) trained via GRPO produced a model that matches o1 on hard benchmarks. The field has reconsidered whether PRMs are necessary for training. They are still useful for inference-time filtering, and they remain a research topic, but the simplest training recipe that works does not use them.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def mock_prm_score(trace):
     """

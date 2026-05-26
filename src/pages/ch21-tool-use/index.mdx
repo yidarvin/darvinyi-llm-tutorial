@@ -54,7 +54,7 @@ The structural shift from ReAct-era string parsing to modern JSON tool calls is 
 
 The **Chapter 19 bridge** is what makes the structural guarantee bite. **FSM masking** (Ch 19 §8) constrains the decoder at each step to emit only tokens that continue a valid JSON object matching the declared schema. The model cannot emit a `"location"` field where an integer is required, cannot emit unbalanced braces, cannot emit a string that does not match a declared `enum`. Structural validity is *guaranteed* at the token level; the model never gets the chance to produce malformed output. **Semantic correctness is still on the model** — it can still pass `location="Atlantis"` to a weather tool — but the bytes are always well-formed.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Anthropic-style tool call structure (schematic, no API calls).
 # The pattern: define schemas, send query, parse response, execute, send result back.
@@ -197,7 +197,7 @@ $$\text{loop until terminal: } \text{model} \to \text{action(s)} \to \text{execu
 
 The agent loop with a mock model and two mock tools is short enough to read end-to-end:
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Schematic agent loop with mock model + mock tools.
 

@@ -74,7 +74,7 @@ A bare score is almost never enough. **Random baseline** for a four-choice multi
   <BenchmarkHeatmap client:visible />
 </WidgetFrame>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # A minimal benchmark scoring harness.
 # Real benchmarks: thousands of items, more nuanced scoring.
@@ -217,7 +217,7 @@ When to reach for LLM-as-judge in practice. **Useful** — open-ended generation
   <LLMJudgeBiasDemo client:visible />
 </WidgetFrame>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # LLM-as-judge with position-bias mitigation via swapped-position re-judging.
 
@@ -310,7 +310,7 @@ These are the same problem at different scales. **Reward hacking** — models sc
 
 Add **capability versus propensity** from Chapter 24 — benchmarks measure what a model *can* do; deployment depends on what it *does*. WMDP is the canonical example: it measures dangerous knowledge, not propensity to share. Add **single-metric thinking** — any one score hides important variation. Seven distinct failure modes, not one big confusion. **Modern AI eval is a dashboard, not a number.** Treating any single benchmark as the model's overall quality is misleading regardless of which benchmark it is.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Detect simple forms of reward hacking on a code benchmark:
 # a model that "solves" by hard-coding test cases rather than implementing the function.

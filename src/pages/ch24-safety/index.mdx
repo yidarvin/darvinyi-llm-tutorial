@@ -60,7 +60,7 @@ The constitution is just a list of natural-language principles. The model trains
 
 The post-CAI alignment landscape has converged on a handful of variants that recombine the same ingredients. **Deliberative Alignment** (OpenAI $2024$) explicitly trains the model to *reason* about safety policy before responding — a chain of thought that references the policy, then the response. This is Chapter 20's reasoning machinery applied to safety decisions; it reduces over-refusal because the model can think through "is this actually harmful?" instead of pattern-matching on surface features. **RLAIF** generalizes CAI's preference-from-AI idea beyond the critique-and-revise structure. **DPO with safety pairs** applies Chapter 14's DPO directly to safety-labeled preference data, skipping the explicit reward model. **Continuous safety fine-tuning** is the production reality — labs retrain on new red-team findings on a rolling basis, rather than treating safety training as a one-shot pre-launch step.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Constitutional AI critique-then-revise loop (sketch).
 # Real CAI uses an LLM for both the critique and revision steps.
@@ -245,7 +245,7 @@ The right point on the dial is **context-dependent**. A coding assistant should 
 
 Four techniques carry most of the calibration work in modern systems. **Multiple refusal categories** — refusal is not uniform; categories like child safety, weapons, self-harm, and professional advice get separate policies. **Severity-graded responses** — hedge softly for ambiguous requests; refuse hard for clear harms; never refuse silently when a partial answer is safer than a flat block. **Test sets for both directions** — benign-but-spicy requests are evaluated alongside clear harms, and both false-positive and false-negative rates are tracked. **Reasoning before refusal** — deliberative alignment lets the model think through "is this actually harmful?" before refusing, which is the most effective single technique for reducing over-refusal without raising under-refusal.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # A tiny dataset for evaluating false-positive (over-refusal) and false-negative
 # (under-refusal) rates. In production: thousands of curated examples per category.
@@ -355,7 +355,7 @@ The canonical safety eval suite as of $2024$ – $2025$ has five entries worth k
 
 The arms-race dynamic is unavoidable. New defenses produce new attacks, which produce new defenses. **HarmBench scores improve year over year**, but new attacks keep finding weaknesses, and models can be re-evaluated against new attacks long after release. What "safe enough to deploy" means in practice is a combination — pass rates on the standard benchmarks above, manual red-team approval from a dedicated team, capability evals like WMDP, and no newly-discovered critical jailbreaks in pre-launch testing.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Automated red-teaming loop (sketch).
 # Real implementations use trained attacker/defender models;
@@ -492,7 +492,7 @@ Don't just match keywords — try to match *phrases* that capture intent. "Kill 
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Phrase-level refusal classifier.
 # Real production systems use trained models (e.g., Anthropic's safety classifier,
@@ -566,7 +566,7 @@ Recall = TP / (TP + FN)
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import re
 
@@ -659,7 +659,7 @@ For this exercise, mock both critique and revise with simple heuristics. In real
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 CONSTITUTION = [
     {
@@ -763,7 +763,7 @@ Real automated red-teams use trained attacker and defender models, with classifi
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import random
 

@@ -83,7 +83,7 @@ Four factors decide which architecture is right.
 
 A minimal manager-worker fits in about thirty lines of Python. Three agents — manager, researcher, calculator — and a mock decomposition step. The pattern is small to state and easy to overuse.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Minimal manager-worker multi-agent setup.
 # Manager decomposes; workers execute; manager aggregates.
@@ -195,7 +195,7 @@ Section 4 covers the most useful multi-agent pattern in practice: structured rol
 
 **Role specialization done badly.** Three agents with identical prompts and tools, wasting LLM calls. Roles that overlap heavily, leading to confused responsibilities and back-and-forth about who acts next. No clear termination, producing infinite chatter. The chapter's signature failure mode: a crew where every agent could be replaced by `system_prompt += "be careful"` on a single agent and no one would notice.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Proposer-critic-judge: adversarial role specialization.
 # Proposer generates; critic critiques; judge decides.
@@ -331,7 +331,7 @@ Several single-agent patterns often beat multi-agent for tasks people reflexivel
 
 **Self-refine (Madaan $2023$)** — one agent, multiple prompting modes — generator and critic in sequence within a single loop. The same LLM call gets reused with different system prompts, capturing the proposer-critic benefit at a fraction of the cost. **Better tool design (Ch 28)** — atomic tools that compose, rather than tool-using subagents. **Better system prompts** — explicit step-by-step instructions instead of step-by-step agent delegation. **Single-agent with memory** — persistent state in a single loop instead of state spread across agents.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Compare multi-agent vs single-agent for the same task.
 # The chapter's central honesty: multi-agent often isn't worth it.

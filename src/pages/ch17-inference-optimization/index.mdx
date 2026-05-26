@@ -88,7 +88,7 @@ For Llama-7B at $4$K context, plugging in $L = 32$, $H = 32$, $d_{\text{head}} =
 
 The runnable cell below simulates the speedup directly. It defines a toy "transformer" — four layers of $W \cdot x$ with a quadratic-attention term — and times $50$ decode steps both ways: recomputing the entire prefix each step versus carrying a KV cache forward. Even on a CPU, even with small dimensions, the recomputation tax is visible. Real transformers see a much larger gap because real attention is genuinely $O(N^2)$ per layer.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import numpy as np
 import time
@@ -215,7 +215,7 @@ $$\text{Speedup} = \frac{1 + \text{expected accepted tokens}}{1 + k \cdot (\text
 
 Numerator: tokens committed per round. Denominator: cost per round in units of one big-model forward pass. With $k = 5$, acceptance rate $\alpha = 0.7$, and a draft model $50\times$ cheaper than the big one, the formula gives roughly $2.5\times$ speedup — large enough to matter, modest enough to be honest about the engineering work required to capture it.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 def speculative_speedup(k, alpha, draft_relative_cost=0.02, overhead=0.05):
     """

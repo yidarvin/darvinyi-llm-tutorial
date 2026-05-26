@@ -120,7 +120,7 @@ Four properties make ReAct the default. **Reasoning grounds actions** — the ag
 
 A minimal ReAct agent fits in fifty lines of Python — mock LLM, mock tools, regex parsing, full loop with termination. The point is to see that the loop itself is short; the LLM and parsing handle the complexity.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # A minimal ReAct agent. Mock LLM, mock tools, regex parsing.
 # Real ReAct uses JSON / function-calling instead of regex.
@@ -246,7 +246,7 @@ When long-term memory earns its complexity. **Long-horizon tasks** — anything 
 
 More memory means more context, which means more cost and more potential confusion. Less memory means smaller context, which is faster and cheaper but may forget important details. **The right amount of memory is task-specific** — there is no general answer. The pattern in production is to start short-term-only, add structured memory for facts that must persist, and add retrieval-based long-term memory only when context-window limits force it.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Agent with conversation memory: rolling short-term + structured long-term.
 
@@ -339,7 +339,7 @@ The fixes are not exotic. Max iteration caps with cost budgets. Structured tool 
 
 The framing from Chapter 24's safety chapter applies here too. **No single safeguard catches every failure mode.** Production agents stack defenses. **Layered defenses** — max iterations plus cost cap plus output validation plus human-in-the-loop checkpoints. **Observability** — every thought, action, and observation logged; alerts on unusual patterns like high iteration counts or repeated tool failures. **Bounded autonomy** — production agents act within constrained scopes rather than open-ended ones.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Error handling pattern: retry with exponential backoff for transient tool failures.
 

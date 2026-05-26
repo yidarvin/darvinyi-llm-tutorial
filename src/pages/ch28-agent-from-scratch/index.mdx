@@ -82,7 +82,7 @@ For I/O-bound tools — anything that waits on a network or disk — async unloc
 
 A registry maps tool names to functions, schemas, and descriptions. **Single source of truth** for what tools exist. A registry pattern means you define a tool once and the OpenAI schema, the Anthropic schema, the execution wrapper, and the error handling all read from the same place.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Production-style tool registry: function + schema + description.
 # This is the pattern at the heart of every well-engineered agent.
@@ -234,7 +234,7 @@ Production tool calls fail constantly. Network failures. Services unavailable. R
 
 **Anti-patterns** that recur. Swallowing errors silently — the agent never sees them and never recovers. Retrying non-retryable errors — invalid arguments fail forever no matter how patiently you wait. Catching too broadly — `except Exception` hides bugs as readily as it hides transients. Infinite retry without backoff or cap — a denial-of-service against your own infrastructure.
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # Combining circuit breakers and retry with backoff.
 # Production agents use this layered defense.
@@ -338,7 +338,7 @@ The standard pattern, borrowed from distributed systems: **trace IDs** unique pe
   <AgentTraceInspector client:visible />
 </WidgetFrame>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 # A simple structured-logging trace layer.
 # Production: use OpenTelemetry; this shows the conceptual pattern.
@@ -491,7 +491,7 @@ The point is that the LLM never sees a Python exception — it sees a structured
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 from typing import Callable
 import math
@@ -624,7 +624,7 @@ Real production also adds: error categorization (retryable vs not), circuit brea
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import time
 import random
@@ -694,7 +694,7 @@ Real production uses OpenTelemetry, but the conceptual model is identical.
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import time
 import uuid
@@ -792,7 +792,7 @@ For the LLM, you'll mock responses — focus on the orchestration, not the model
 
 </details>
 
-<RunnableCode>
+<RunnableCode client:visible>
 ```python
 import time
 import re
