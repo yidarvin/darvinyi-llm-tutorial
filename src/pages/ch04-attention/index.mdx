@@ -1,48 +1,48 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch04-attention
-description: Scaled dot-product attention — the operation that defines the modern LLM. How a sequence refines itself by having each position look at every other. Why dot product as similarity, why softmax, why the √d_k denominator. Causal masking for autoregressive generation, and the quadratic compute cost that motivates much of the rest of the tutorial.
+description: Scaled dot-product attention, the operation that defines the modern LLM. How a sequence refines itself by having each position look at every other. Why dot product as similarity, why softmax, why the √d_k denominator. Causal masking for autoregressive generation, and the quadratic compute cost that motivates much of the rest of the tutorial.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { AttentionHeatmap, CausalMask } from '@components/widgets';
 
-The transformer is mostly attention. The rest — embeddings, feedforward layers, normalizations, residuals — is supporting cast. Attention is what does the work of letting one position in a sequence look at every other position and decide what to take from each.
+The transformer is mostly attention. The rest is supporting cast: embeddings, feedforward layers, normalizations, residuals. Attention is what does the work of letting one position in a sequence look at every other position and decide what to take from each.
 
 The operation is one matrix equation that takes three inputs and produces one output. It runs in $O(n^2)$ in the sequence length and costs roughly half the FLOPs of a modern LLM forward pass. It explains, simultaneously, why transformers are so capable and why they are so expensive.
 
-This chapter derives the attention formula from first principles. By the end, the reader should be able to write scaled dot-product attention in numpy, justify the $\sqrt{d_k}$ denominator from a variance calculation, and explain why causal masking is added to the scores rather than to the outputs. Everything else in the tutorial — multi-head attention, the transformer block, scaling, RLHF, inference optimization, agentic systems — is downstream of this one operation.
+This chapter derives the attention formula from first principles. By the end, the reader should be able to write scaled dot-product attention in numpy, justify the $\sqrt{d_k}$ denominator from a variance calculation, and explain why causal masking is added to the scores rather than to the outputs. Everything else in the tutorial is downstream of this one operation: multi-head attention, the transformer block, scaling, RLHF, inference optimization, agentic systems.
 
-## The setup — why attention exists
+## The setup: why attention exists
 
-Before attention, sequence models did two things. They used recurrence — RNNs and LSTMs, which pass a hidden state from one position to the next — or they used convolution, TCNs and similar, which compose locally with growing receptive fields. Both ideas worked. Both had structural limits that became increasingly hard to engineer around as sequences got longer.
+Before attention, sequence models did two things. They used recurrence (RNNs and LSTMs, which pass a hidden state from one position to the next), or they used convolution (TCNs and similar, which compose locally with growing receptive fields). Both ideas worked. Both had structural limits that became increasingly hard to engineer around as sequences got longer.
 
-The RNN limit is bandwidth. Information at position $i$ has to travel through the hidden state to reach position $j > i$, and that hidden state is a fixed-size vector. By the time it has carried position $i$'s contribution across hundreds of steps, the signal has been overwritten many times by intermediate positions; long-range dependencies blur into the recurrent average. Training is also sequential — position $i$'s computation depends on position $i-1$'s — so a long sequence is processed step by step, which leaves modern accelerators idle.
+The RNN limit is bandwidth. Information at position $i$ has to travel through the hidden state to reach position $j > i$, and that hidden state is a fixed-size vector. By the time it has carried position $i$'s contribution across hundreds of steps, the signal has been overwritten many times by intermediate positions; long-range dependencies blur into the recurrent average. Training is also sequential (position $i$'s computation depends on position $i-1$'s), so a long sequence is processed step by step, which leaves modern accelerators idle.
 
 The CNN limit is locality. A 1D convolution with kernel width $k$ sees only $k$ tokens at a time. To see a span of length $\ell$, the stack needs depth proportional to $\ell / k$. Long-range information takes many layers to propagate, and even when it does propagate, the network has built in a structural preference for nearby positions over distant ones.
 
-The 2017 breakthrough was to ask a sharper question. What if every position could look at every other position *directly*, with the strength of each look determined not by physical distance but by content? Position 7 could attend to position 1 just as cheaply as it attends to position 6, provided the two were relevant to each other. The hidden-state bandwidth bottleneck disappears because every position has direct access to every other position's information. The locality bias disappears because there is no locality anymore — the operation is permutation-symmetric, and positional information is added back in as a separate signal (Chapter 6).
+The 2017 breakthrough was to ask a sharper question. What if every position could look at every other position *directly*, with the strength of each look determined not by physical distance but by content? Position 7 could attend to position 1 just as cheaply as it attends to position 6, provided the two were relevant to each other. The hidden-state bandwidth bottleneck disappears because every position has direct access to every other position's information. The locality bias disappears because there is no locality anymore; the operation is permutation-symmetric, and positional information is added back in as a separate signal (Chapter 6).
 
-Attention as a concept predates the transformer by three years. Bahdanau, Cho, and Bengio (2014, [arxiv.org/abs/1409.0473](https://arxiv.org/abs/1409.0473)) introduced *attention* into neural machine translation as a learned alignment mechanism: a decoder generating a target sentence could "look at" specific positions in the source sentence rather than condensing the whole source into a single hidden vector. Luong, Pham, and Manning (2015, [arxiv.org/abs/1508.04025](https://arxiv.org/abs/1508.04025)) replaced Bahdanau's feedforward score with the cheaper dot product. Vaswani et al. (2017, [arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)) then made the structural leap: don't use attention as an auxiliary alignment mechanism for an RNN-based translator. Use it as the entire architecture. The paper's title — *Attention Is All You Need* — was a literal claim, and it has held up.
+Attention as a concept predates the transformer by three years. Bahdanau, Cho, and Bengio (2014, [arxiv.org/abs/1409.0473](https://arxiv.org/abs/1409.0473)) introduced *attention* into neural machine translation as a learned alignment mechanism: a decoder generating a target sentence could "look at" specific positions in the source sentence rather than condensing the whole source into a single hidden vector. Luong, Pham, and Manning (2015, [arxiv.org/abs/1508.04025](https://arxiv.org/abs/1508.04025)) replaced Bahdanau's feedforward score with the cheaper dot product. Vaswani et al. (2017, [arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)) then made the structural leap: don't use attention as an auxiliary alignment mechanism for an RNN-based translator. Use it as the entire architecture. The paper's title (*Attention Is All You Need*) was a literal claim, and it has held up.
 
 This chapter is about the operation itself: what scaled dot-product attention computes, why each piece of the formula is the way it is, and what its costs are. The operation lives inside the transformer block (Chapter 7), which wraps it with feedforward layers, residuals, and normalization. Multi-head attention (Chapter 5) runs several copies of it in parallel. Positional encoding (Chapter 6) adds back the position information the operation itself does not see. The widgets, code, and derivations in this chapter all serve a single goal: the reader should leave able to write the operation from memory and explain every term in it.
 
 <Callout type="aside">
-"Attention" in this chapter means *self-attention* by default — the variant where queries, keys, and values all come from the same input sequence. Section 7 introduces cross-attention, where the query comes from a different sequence than the keys and values. The original 2017 paper introduced both; modern decoder-only LLMs (the GPT family, Llama, Mistral, Claude) use only self-attention with causal masking, and the broader literature has settled into using "attention" to mean self-attention unless otherwise specified.
+"Attention" in this chapter means *self-attention* by default: the variant where queries, keys, and values all come from the same input sequence. Section 7 introduces cross-attention, where the query comes from a different sequence than the keys and values. The original 2017 paper introduced both; modern decoder-only LLMs (the GPT family, Llama, Mistral, Claude) use only self-attention with causal masking, and the broader literature has settled into using "attention" to mean self-attention unless otherwise specified.
 </Callout>
 
-The next section introduces the three-letter abstraction — $Q$, $K$, $V$ — that the rest of the chapter is built around.
+The next section introduces the three-letter abstraction ($Q$, $K$, $V$) that the rest of the chapter is built around.
 
-## Soft database lookup — the Q, K, V framing
+## Soft database lookup: the Q, K, V framing
 
-Attention is a soft database lookup. The mental model is worth holding fixed before any equations land, because $Q$, $K$, $V$ as letters are otherwise easy to memorize and hard to feel.
+Attention is a soft database lookup. Hold the mental model fixed before any equations land, because $Q$, $K$, $V$ as letters are otherwise easy to memorize and hard to feel.
 
-A traditional database has three roles. There is a *query* — what you are asking for. There is an *index of keys* — the labels the database matches against. There is a *value associated with each key* — the data the database returns when a key matches. You hand the database a query; it scans the keys for one that matches; it returns the value at that key. One query, one match, one value. The matching is exact: either the key matches or it does not.
+A traditional database has three roles. There is a *query*: what you are asking for. There is an *index of keys*: the labels the database matches against. There is a *value associated with each key*: the data the database returns when a key matches. You hand the database a query; it scans the keys for one that matches; it returns the value at that key. One query, one match, one value. The matching is exact: either the key matches or it does not.
 
 Attention does the same three-role lookup, but softly. Instead of finding the one key that matches, you compute a similarity score between the query and *every* key in the database. Softmax-normalize those scores so they become a probability distribution. The "retrieval" is then a weighted sum of *all* the values, with weights given by the softmax over similarity scores. Every value contributes to the output; the most-similar keys contribute the most.
 
-In sequence modeling, the "database" is the sequence itself. At each position $i$, the query says *what am I looking for here?* Every other position has a key saying *this is what I am* and a value saying *this is what I have to contribute*. Position $i$'s output is the soft-database lookup over the whole sequence — a blend of every position's value, weighted by how well each position's key matched position $i$'s query.
+In sequence modeling, the "database" is the sequence itself. At each position $i$, the query says *what am I looking for here?* Every other position has a key saying *this is what I am* and a value saying *this is what I have to contribute*. Position $i$'s output is the soft-database lookup over the whole sequence: a blend of every position's value, weighted by how well each position's key matched position $i$'s query.
 
 In self-attention specifically, $Q$, $K$, and $V$ are all derived from the same input sequence $X \in \R^{n \times d_{\text{model}}}$. The three roles are realized as three separate learned linear projections:
 
@@ -52,15 +52,15 @@ $$Q = X W^Q, \qquad K = X W^K, \qquad V = X W^V$$
 
 where $W^Q, W^K \in \R^{d_{\text{model}} \times d_k}$ and $W^V \in \R^{d_{\text{model}} \times d_v}$. The same input $X$ is projected three times into three different subspaces. Each row of $X$ is one position's embedding; after projection, each position has a query vector $q_i \in \R^{d_k}$, a key vector $k_i \in \R^{d_k}$, and a value vector $v_i \in \R^{d_v}$.
 
-The shapes are worth pinning down. $Q$ and $K$ must agree on dimension because we are going to take their dot product — $q_i \cdot k_j$ is the similarity score between position $i$'s query and position $j$'s key. $V$'s dimension $d_v$ can differ in principle, but in practice it is almost always set equal to $d_k$. In Vaswani's multi-head attention, $d_k = d_v = d_{\text{model}} / h$ where $h$ is the number of heads; Chapter 5 picks that up.
+$Q$ and $K$ must agree on dimension because we are going to take their dot product. That product $q_i \cdot k_j$ is the similarity score between position $i$'s query and position $j$'s key. $V$'s dimension $d_v$ can differ in principle, but in practice it is almost always set equal to $d_k$. In Vaswani's multi-head attention, $d_k = d_v = d_{\text{model}} / h$ where $h$ is the number of heads; Chapter 5 picks that up.
 
-A small classroom analogy makes the three cards feel less arbitrary. Picture eight students in a room. Each holds three cards: a Query card describing what they are curious about, a Key card describing what they know, and a Value card containing the actual content they would share. To form a study cluster, each student looks at every other student's Key card and decides how much to listen — *I will listen most to the students whose Keys match my Query*. The listening is graded, not all-or-nothing: each student distributes a fixed budget of attention across everyone. After voting, each student's resulting understanding is a weighted blend of *Value* cards from across the room, weighted by Query-Key alignment. Eight students, three cards each, one soft lookup per student. That is self-attention.
+A small classroom analogy makes the three cards feel less arbitrary. Picture eight students in a room. Each holds three cards: a Query card describing what they are curious about, a Key card describing what they know, and a Value card containing the actual content they would share. To form a study cluster, each student looks at every other student's Key card and decides how much to listen: *I will listen most to the students whose Keys match my Query*. The listening is graded, not all-or-nothing: each student distributes a fixed budget of attention across everyone. After voting, each student's resulting understanding is a weighted blend of *Value* cards from across the room, weighted by Query-Key alignment. Eight students, three cards each, one soft lookup per student. That is self-attention.
 
 <Callout type="insight">
 A common misconception is that $Q$, $K$, $V$ are fundamentally different *things*. They are not. In self-attention they originate from the same input matrix $X$; the distinction is which learned projection is applied. Three different views of the same data play three different *roles* in the attention computation, but ontologically they are the same sequence transformed three ways. This is the structural reason a single embedding can simultaneously *ask* something at position $i$ and *answer* something at position $j$: the query side and the key side of the same vector are independently learned linear functions of it.
 </Callout>
 
-What turns these three projections into a working operation is the formula that combines them — the central equation of the chapter, and the subject of section 3.
+What turns these three projections into a working operation is the formula that combines them.
 
 ## The scaled dot-product formula
 
@@ -72,7 +72,7 @@ This is the operation. Every modern LLM computes some version of it billions of 
 $$\attn(Q, K, V) = \softmax\!\left(\frac{Q K^\top}{\sqrt{d_k}}\right) V$$
 </Equation>
 
-Three matrices in, one matrix out. The output has shape $\R^{n \times d_v}$ — the same number of rows as the input sequence (one output row per position), with each row in the value-space dimension. We will refer to this as equation <EqRef id="4.attn" /> throughout the chapter.
+Three matrices in, one matrix out. The output has shape $\R^{n \times d_v}$: the same number of rows as the input sequence (one output row per position), with each row in the value-space dimension. We will refer to this as equation <EqRef id="4.attn" /> throughout the chapter.
 
 ### Walking through the shapes
 
@@ -80,24 +80,24 @@ The formula has four operations stacked inside it. Each one has a shape and an i
 
 The first is $Q K^\top$, a matrix multiplication of $(n, d_k)$ and $(d_k, n)$, producing an $n \times n$ matrix. This is the *attention scores* matrix. Entry $(i, j)$ is the dot product $q_i \cdot k_j$, which is large when position $i$'s query and position $j$'s key point in similar directions in $\R^{d_k}$ and negative when they point in opposite directions. The scores matrix is the raw, unnormalized statement of how strongly each position wants to attend to each other position.
 
-The second is the division by $\sqrt{d_k}$. This is the *scaling* — the eponymous "scaled" in scaled dot-product attention. The factor restores unit variance to the scores when queries and keys have unit-variance components; section 4 derives this from a short variance calculation. Without it, dot products grow large in magnitude as $d_k$ grows, and the next step — softmax — saturates.
+The second is the division by $\sqrt{d_k}$. This is the *scaling*, the eponymous "scaled" in scaled dot-product attention. The factor restores unit variance to the scores when queries and keys have unit-variance components; section 4 derives this from a short variance calculation. Without it, dot products grow large in magnitude as $d_k$ grows, and the next step (softmax) saturates.
 
 The third is softmax over the last dimension. Each row of the scaled scores is independently passed through softmax, producing a row of non-negative numbers that sum to one. The full output is an $n \times n$ matrix of attention *weights*: $p_{ij}$ is the probability with which position $i$ attends to position $j$. Each row is a probability distribution; the entire matrix is a stack of $n$ such distributions, one per output position.
 
-The fourth is the multiplication by $V$, a matrix multiplication of $(n, n)$ and $(n, d_v)$, producing $(n, d_v)$. This is the *weighted sum*: each output row $i$ is $\sum_j p_{ij} v_j$, a convex combination of value vectors with the weights determined by softmax. Position $i$'s output is "content-addressed retrieval" — a blend of every position's value, weighted by how well each position's key matched position $i$'s query.
+The fourth is the multiplication by $V$, a matrix multiplication of $(n, n)$ and $(n, d_v)$, producing $(n, d_v)$. This is the *weighted sum*: each output row $i$ is $\sum_j p_{ij} v_j$, a convex combination of value vectors with the weights determined by softmax. Position $i$'s output is "content-addressed retrieval": a blend of every position's value, weighted by how well each position's key matched position $i$'s query.
 
 Read end-to-end: a sequence of $n$ vectors comes in, gets projected three ways into queries, keys, and values, builds an $n \times n$ matrix of pairwise content-similarities, softmaxes that matrix row-wise into a stack of probability distributions, and uses those distributions to blend the values into a new sequence of $n$ vectors. The output sequence is the same length as the input. Each output position is a content-addressed mix of the whole input.
 
 ### A working implementation
 
-The numpy version is short. Twenty lines, including the docstring and the demo. Every modern transformer implementation eventually delegates to a much faster GPU kernel — Flash Attention, vendor-specific cuBLAS calls, JAX/XLA fusions — but they all compute exactly what the lines below compute.
+The numpy version is short. Twenty lines, including the docstring and the demo. Every modern transformer implementation eventually delegates to a much faster GPU kernel (Flash Attention, vendor-specific cuBLAS calls, JAX/XLA fusions), but they all compute exactly what the lines below compute.
 
 <RunnableCode
   client:visible
   defaultCode={`import numpy as np
 
 def softmax(x, axis=-1):
-    """Numerically stable softmax — subtract the max before exponentiating."""
+    """Numerically stable softmax: subtract the max before exponentiating."""
     x = x - x.max(axis=axis, keepdims=True)
     exp_x = np.exp(x)
     return exp_x / exp_x.sum(axis=axis, keepdims=True)
@@ -107,7 +107,7 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
     Q: (n, d_k) queries
     K: (n, d_k) keys
     V: (n, d_v) values
-    mask: optional (n, n) — 0 where attention is allowed, -inf where blocked
+    mask: optional (n, n), 0 where attention is allowed, -inf where blocked
     Returns: (output, attention_weights)
     """
     d_k = Q.shape[-1]
@@ -135,21 +135,21 @@ print(f"\\nRow sums: {weights.sum(axis=-1)}")
   height={520}
 />
 
-The widget below ties the formula to a concrete sequence. The same six-position input flows through the same four operations the code above implements — $Q$ and $K$ projected from the input, their dot product producing the scores matrix, the scaling and softmax turning scores into weights, the weights blending the values into the output.
+The widget below ties the formula to a concrete sequence. The same six-position input flows through the same four operations the code above implements: $Q$ and $K$ projected from the input, their dot product producing the scores matrix, the scaling and softmax turning scores into weights, the weights blending the values into the output.
 
-<WidgetFrame title="Scaled dot-product attention" caption="Watch attention compute step by step on the sentence 'the cat sat on the mat'. Hand-tuned Q, K, V matrices produce an interpretable local-attention pattern at the softmax stage — each token attends primarily to its neighbor.">
+<WidgetFrame title="Scaled dot-product attention" caption="Watch attention compute step by step on the sentence 'the cat sat on the mat'. Hand-tuned Q, K, V matrices produce an interpretable local-attention pattern at the softmax stage: each token attends primarily to its neighbor.">
   <AttentionHeatmap client:visible />
 </WidgetFrame>
 
 <Callout type="note">
-The softmax in the code above subtracts the max before exponentiating — `x = x - x.max(...)`. This is the standard numerical-stability trick: without it, large logits cause `np.exp` to overflow. Mathematically the subtraction is a no-op (the factor cancels in numerator and denominator), but numerically it is the difference between a stable computation and an array of `inf` / `nan`. Production frameworks (PyTorch, JAX, TensorFlow) do this automatically; understanding *why* matters for debugging.
+The softmax in the code above subtracts the max before exponentiating: `x = x - x.max(...)`. This is the standard numerical-stability trick. Without it, large logits cause `np.exp` to overflow. Mathematically the subtraction is a no-op (the factor cancels in numerator and denominator), but numerically it is the difference between a stable computation and an array of `inf` / `nan`. Production frameworks (PyTorch, JAX, TensorFlow) do this automatically; understanding *why* matters for debugging.
 </Callout>
 
 The denominator $\sqrt{d_k}$ in equation <EqRef id="4.attn" /> is the one piece of the formula that is not visually obvious. The next section explains where it comes from.
 
 ## Why √d_k? The variance argument
 
-The most-asked question about attention is the one the formula itself does not motivate: why divide by $\sqrt{d_k}$? Why not by $d_k$? Why divide at all? The answer is a short, clean variance calculation — and it is one of the more satisfying design-justification arguments in deep learning.
+The most-asked question about attention is the one the formula itself does not motivate: why divide by $\sqrt{d_k}$? Why not by $d_k$? Why divide at all? The answer is a short, clean variance calculation.
 
 ### The variance grows with d_k
 
@@ -173,11 +173,11 @@ Dot products grow in *variance* linearly with $d_k$, which means they grow in *s
 
 Softmax does not care about absolute values; it cares about *differences*. If you shift every input by the same constant, the output is unchanged. But if you *scale* every input by the same constant, the output changes dramatically: large positive logits drive their corresponding probabilities toward 1, and everything else toward 0.
 
-When a softmax distribution becomes peaked — one entry near 1, the others near 0 — its gradient with respect to the logits is near zero in every direction. The model cannot redistribute attention away from a saturated state, because the gradient signal that would push it there has vanished. This is the *peaked-softmax problem*, and it is a generic failure mode for any architecture that pipes large logits into a softmax.
+When a softmax distribution becomes peaked (one entry near 1, the others near 0), its gradient with respect to the logits is near zero in every direction. The model cannot redistribute attention away from a saturated state, because the gradient signal that would push it there has vanished. This is the *peaked-softmax problem*, and it is a generic failure mode for any architecture that pipes large logits into a softmax.
 
-The implication for attention is direct. Without scaling: large $d_k$ → large dot products → peaked softmax → vanishing gradients → the model commits early in training to confident but rigid attention patterns and cannot refine them. Training stalls. Wider attention heads — counterintuitively — become *harder* to train than narrow ones.
+The implication for attention is direct. Without scaling: large $d_k$ → large dot products → peaked softmax → vanishing gradients → the model commits early in training to confident but rigid attention patterns and cannot refine them. Training stalls. Wider attention heads, counterintuitively, become *harder* to train than narrow ones.
 
-The fix is to divide by the standard deviation of the unscaled scores, restoring unit variance regardless of $d_k$. That standard deviation is $\sqrt{d_k}$, which is exactly the denominator in the formula. The choice of $\sqrt{d_k}$ rather than $d_k$ is not aesthetic; it is the difference between standardizing to unit variance and over-normalizing to variance $1/d_k$. The same logic governs Z-score normalization elsewhere in statistics — divide by std, not by variance — and attention is just applying that standardization to dot products.
+The fix is to divide by the standard deviation of the unscaled scores, restoring unit variance regardless of $d_k$. That standard deviation is $\sqrt{d_k}$, which is exactly the denominator in the formula. The choice of $\sqrt{d_k}$ rather than $d_k$ is not aesthetic; it is the difference between standardizing to unit variance and over-normalizing to variance $1/d_k$. The same logic governs Z-score normalization elsewhere in statistics (divide by std, not by variance), and attention is just applying that standardization to dot products.
 
 ### Empirical verification
 
@@ -206,21 +206,21 @@ for d_k in [8, 64, 512, 4096]:
   height={280}
 />
 
-The raw score std tracks $\sqrt{d_k}$ — roughly 2.8 at $d_k = 8$, 8 at $d_k = 64$, 22.6 at $d_k = 512$, 64 at $d_k = 4096$. The scaled score std stays near 1 throughout. The unscaled softmax max approaches 1 as $d_k$ grows — the distribution saturates — while the scaled version stays moderate. The derivation and the empirical numbers agree.
+The raw score std tracks $\sqrt{d_k}$: roughly 2.8 at $d_k = 8$, 8 at $d_k = 64$, 22.6 at $d_k = 512$, 64 at $d_k = 4096$. The scaled score std stays near 1 throughout. The unscaled softmax max approaches 1 as $d_k$ grows (the distribution saturates), while the scaled version stays moderate. The derivation and the empirical numbers agree.
 
 <Callout type="insight">
-This is one of the cleanest design-justification arguments in deep learning. A four-line variance calculation explains an engineering choice that, encountered first in a formula, looks arbitrary. Many readers see $\sqrt{d_k}$ for the first time as a "magic" denominator; the variance argument turns it into "of course." Several other normalization choices in modern architectures — layer norm's $1/\sqrt{d}$ scaling on weight initialization, the $1/\sqrt{\text{fan-in}}$ in He and Glorot init — fall out of the same logic.
+This is one of the cleanest design-justification arguments in deep learning. A four-line variance calculation explains an engineering choice that, encountered first in a formula, looks arbitrary. Many readers see $\sqrt{d_k}$ for the first time as a "magic" denominator; the variance argument turns it into "of course." Several other normalization choices in modern architectures (layer norm's $1/\sqrt{d}$ scaling on weight initialization, the $1/\sqrt{\text{fan-in}}$ in He and Glorot init) fall out of the same logic.
 </Callout>
 
 That handles the denominator. The numerator's softmax has its own justification, which is the subject of the next section.
 
 ## Why softmax? The normalization choice
 
-The attention formula calls for *some* function that turns the scaled scores into weights that can be used in a weighted sum. The constraints are mild: the weights should be non-negative, they should sum to one along each row (so the output is a proper convex combination of values, not a re-scaled blend), and the function should be differentiable so the model can train end-to-end through it. Softmax satisfies all three. So do several alternatives. The chapter focuses on softmax because it is by far the most common — almost every production LLM uses it — but it is worth being clear that "softmax" and "attention" are conceptually separable.
+The attention formula calls for *some* function that turns the scaled scores into weights that can be used in a weighted sum. The constraints are mild: the weights should be non-negative, they should sum to one along each row (so the output is a proper convex combination of values, not a re-scaled blend), and the function should be differentiable so the model can train end-to-end through it. Softmax satisfies all three. So do several alternatives. The chapter focuses on softmax because it is by far the most common (almost every production LLM uses it), but "softmax" and "attention" are conceptually separable.
 
-Softmax has four specific properties that motivated its adoption. First, it produces a *valid probability distribution* — strictly positive entries summing to one. Second, it is *differentiable everywhere* — unlike argmax, which is discontinuous at ties. Third, it *emphasizes the maximum* — the entry with the largest input gets the largest weight, but smaller inputs still contribute. Fourth, it is *translation-invariant* — $\softmax(x + c) = \softmax(x)$ for any scalar $c$, which is the reason subtracting the max before exponentiating preserves the output exactly while preventing overflow.
+Softmax has four specific properties that motivated its adoption. First, it produces a *valid probability distribution*: strictly positive entries summing to one. Second, it is *differentiable everywhere*, unlike argmax, which is discontinuous at ties. Third, it *emphasizes the maximum*: the entry with the largest input gets the largest weight, but smaller inputs still contribute. Fourth, it is *translation-invariant*: $\softmax(x + c) = \softmax(x)$ for any scalar $c$, which is the reason subtracting the max before exponentiating preserves the output exactly while preventing overflow.
 
-The translation invariance is more than a numerical convenience; it tells you what softmax is sensitive to. Only differences between logits matter. $[5, 3, 2]$ and $[1003, 1001, 1000]$ produce the same softmax. This is why "subtract the max" works as a stability trick — it is just choosing the canonical representative of an equivalence class of inputs that all softmax the same.
+The translation invariance is more than a numerical convenience; it tells you what softmax is sensitive to. Only differences between logits matter. $[5, 3, 2]$ and $[1003, 1001, 1000]$ produce the same softmax. This is why "subtract the max" works as a stability trick: it is just choosing the canonical representative of an equivalence class of inputs that all softmax the same.
 
 The definition, with the stability subtraction baked in:
 
@@ -228,7 +228,7 @@ The definition, with the stability subtraction baked in:
 $$\softmax(x)_i = \frac{e^{x_i - \max_j x_j}}{\sum_k e^{x_k - \max_j x_j}}$$
 </Equation>
 
-The gradient of softmax with respect to its input has a closed form worth knowing:
+The gradient of softmax with respect to its input has a closed form:
 
 <Equation>
 $$\frac{\partial \softmax(x)_i}{\partial x_j} = \softmax(x)_i \cdot (\delta_{ij} - \softmax(x)_j)$$
@@ -236,31 +236,31 @@ $$\frac{\partial \softmax(x)_i}{\partial x_j} = \softmax(x)_i \cdot (\delta_{ij}
 
 where $\delta_{ij}$ is the Kronecker delta (1 if $i = j$, 0 otherwise). Two implications fall out. On the diagonal ($i = j$), the gradient is $\sigma_i (1 - \sigma_i)$, which peaks at $\sigma_i = 1/2$ (gradient $1/4$) and goes to zero at $\sigma_i \in \{0, 1\}$. Off the diagonal ($i \neq j$), the gradient is $-\sigma_i \sigma_j$, largest in magnitude when both probabilities are intermediate. The picture: gradients flow well when softmax is near-uniform, and collapse when softmax becomes peaked. This is the same statement as the $\sqrt{d_k}$ motivation in section 4, viewed from the gradient side rather than the variance side. They are two views of one phenomenon.
 
-A handful of alternatives have been considered and used in specialized settings. *Hardmax* / *argmax* is the limit of softmax as the temperature goes to zero — pick the maximum, ignore the rest. It is non-differentiable and cannot be used in a gradient-based training loop. *L1 normalization* — $|x_i| / \sum_j |x_j|$ — is non-differentiable at zero and does not emphasize the maximum, so it tends to spread weight too uniformly. *Sparsemax* (Martins and Astudillo, 2016) is a differentiable function that produces *exact* zeros for low-scoring entries, useful when you want attention to commit to a small subset; it shows up in some specialized attention variants but has not displaced softmax in mainstream transformers. *Linear attention* skips softmax entirely and uses kernel tricks to factor the attention matrix into a product of lower-rank pieces; it changes the operation's algebraic structure and produces $O(n)$ instead of $O(n^2)$ scaling. These alternatives exist; readers who want depth can pursue them.
+A handful of alternatives have been considered and used in specialized settings. *Hardmax* / *argmax* is the limit of softmax as the temperature goes to zero: pick the maximum, ignore the rest. It is non-differentiable and cannot be used in a gradient-based training loop. *L1 normalization*, $|x_i| / \sum_j |x_j|$, is non-differentiable at zero and does not emphasize the maximum, so it tends to spread weight too uniformly. *Sparsemax* (Martins and Astudillo, 2016) is a differentiable function that produces *exact* zeros for low-scoring entries, useful when you want attention to commit to a small subset; it shows up in some specialized attention variants but has not displaced softmax in mainstream transformers. *Linear attention* skips softmax entirely and uses kernel tricks to factor the attention matrix into a product of lower-rank pieces; it changes the operation's algebraic structure and produces $O(n)$ instead of $O(n^2)$ scaling. These alternatives exist; readers who want depth can pursue them.
 
-Temperature is worth a sentence. The expression $\softmax(x / \tau)$ for some $\tau > 0$ controls how peaked the distribution gets. $\tau < 1$ sharpens it; $\tau > 1$ flattens it. Temperature shows up at inference time in LLM sampling (Chapter 19) as the knob that trades determinism against creativity. It is almost never used during training. The $\sqrt{d_k}$ scaling in equation <EqRef id="4.attn" /> is effectively a fixed temperature — one that depends on the head dimension rather than being a free hyperparameter.
+The expression $\softmax(x / \tau)$ for some $\tau > 0$ controls how peaked the distribution gets. $\tau < 1$ sharpens it; $\tau > 1$ flattens it. Temperature shows up at inference time in LLM sampling (Chapter 19) as the knob that trades determinism against creativity. It is almost never used during training. The $\sqrt{d_k}$ scaling in equation <EqRef id="4.attn" /> is effectively a fixed temperature, one that depends on the head dimension rather than being a free hyperparameter.
 
 <Callout type="warning">
 "Softmax is mandatory" is a common assumption that turns out to be wrong. Softmax is *standard*, not required. The properties listed above are nice, but they are not the only properties one could want. Linear attention variants drop softmax to escape the $O(n^2)$ cost; sparse attention variants use thresholded versions to commit attention to a small set of positions; "Performer"-style methods approximate softmax with kernel features to recover linear scaling. The chapter focuses on softmax because every major modern LLM uses it, but the choice is empirical, not principled. If softmax is replaced in a future architecture, the rest of the attention formula does not have to change.
 </Callout>
 
-So far the chapter has assumed each position can attend to every other position — fully bidirectional attention, the variant used in BERT and other encoder-only models. For autoregressive generation, this assumption needs to change.
+So far the chapter has assumed each position can attend to every other position. This is fully bidirectional attention, the variant used in BERT and other encoder-only models. For autoregressive generation, this assumption needs to change.
 
-## Causal masking — attention for autoregressive models
+## Causal masking: attention for autoregressive models
 
-Autoregressive language models — the GPT family, Llama, Mistral, Claude — generate text one token at a time. At training time, the model is asked to predict the next token at every position simultaneously: given positions $1$ through $i$, predict position $i + 1$. The full sequence is processed in one forward pass for efficiency, but the *output* at position $i$ may only depend on positions $1$ through $i$ — never on positions $i + 1, \ldots, n$, which represent tokens that have not been generated yet.
+Autoregressive language models (the GPT family, Llama, Mistral, Claude) generate text one token at a time. At training time, the model is asked to predict the next token at every position simultaneously: given positions $1$ through $i$, predict position $i + 1$. The full sequence is processed in one forward pass for efficiency, but the *output* at position $i$ may only depend on positions $1$ through $i$, never on positions $i + 1, \ldots, n$, which represent tokens that have not been generated yet.
 
-The vanilla attention formula in section 3 violates this. Equation <EqRef id="4.attn" /> lets every position attend to every other position. Position 2 sees position 5; position 3 sees position 10. During training that would be catastrophic — the model would learn to "predict" the next token by looking at the next token, achieving zero loss without learning anything. At inference, the future positions do not even exist yet; there is nothing to attend to.
+The vanilla attention formula in section 3 violates this. Equation <EqRef id="4.attn" /> lets every position attend to every other position. Position 2 sees position 5; position 3 sees position 10. During training that would be catastrophic: the model would learn to "predict" the next token by looking at the next token, achieving zero loss without learning anything. At inference, the future positions do not even exist yet; there is nothing to attend to.
 
-The fix is *causal masking*. Before the softmax, add a mask matrix $M$ to the scores. The mask has $0$ at every $(i, j)$ position where $j \leq i$ (attention allowed) and $-\infty$ at every position where $j > i$ (attention blocked). After softmax, $\softmax(-\infty) = 0$, so the blocked positions contribute zero weight. The allowed positions still sum to one — softmax normalizes across them — so each output position is a clean convex combination of the past.
+The fix is *causal masking*. Before the softmax, add a mask matrix $M$ to the scores. The mask has $0$ at every $(i, j)$ position where $j \leq i$ (attention allowed) and $-\infty$ at every position where $j > i$ (attention blocked). After softmax, $\softmax(-\infty) = 0$, so the blocked positions contribute zero weight. The allowed positions still sum to one (softmax normalizes across them), so each output position is a clean convex combination of the past.
 
 <Equation>
 $$\text{scores}_{ij} = \begin{cases} \dfrac{q_i \cdot k_j}{\sqrt{d_k}} & \text{if } j \leq i \\ -\infty & \text{if } j > i \end{cases}$$
 </Equation>
 
-Two implementation details matter. First, the mask is added *before* softmax, not after. A natural-seeming alternative — compute the full softmax, then zero out illegal positions — would break the sum-to-one constraint: the remaining probabilities would not sum to 1, and the weighted sum across the past would be miscalibrated by an unpredictable factor. Adding $-\infty$ pre-softmax ensures the blocked positions contribute zero probability mass and the legal positions automatically renormalize.
+Two implementation details matter. First, the mask is added *before* softmax, not after. A natural-seeming alternative (compute the full softmax, then zero out illegal positions) would break the sum-to-one constraint: the remaining probabilities would not sum to 1, and the weighted sum across the past would be miscalibrated by an unpredictable factor. Adding $-\infty$ pre-softmax ensures the blocked positions contribute zero probability mass and the legal positions automatically renormalize.
 
-Second, "negative infinity" in practice is implemented as a large negative number — $-10^9$ is conventional — rather than literal `-np.inf`. The reason is purely numerical: certain softmax implementations subtract the max before exponentiating, and if every row entry is $-\infty$, the subtraction yields $-\infty - (-\infty) = $ `NaN`. A finite large negative number behaves identically for any practical purpose ($e^{-10^9}$ rounds to zero in any normal floating-point format) without the `NaN` failure mode.
+Second, "negative infinity" in practice is implemented as a large negative number ($-10^9$ is conventional) rather than literal `-np.inf`. The reason is purely numerical: certain softmax implementations subtract the max before exponentiating, and if every row entry is $-\infty$, the subtraction yields $-\infty - (-\infty) = $ `NaN`. A finite large negative number behaves identically for any practical purpose ($e^{-10^9}$ rounds to zero in any normal floating-point format) without the `NaN` failure mode.
 
 In matrix form, the mask is a lower-triangular matrix with zeros below or on the diagonal and $-\infty$ above. It is added to $QK^\top / \sqrt{d_k}$ before the softmax is applied row-wise.
 
@@ -303,17 +303,17 @@ print(f"\\nMasked row sums: {masked.sum(axis=-1)}")
   height={480}
 />
 
-The masked attention matrix is strictly lower-triangular: row $i$ has non-zero weights only at columns $1$ through $i$. Each row still sums to one. The first position can only attend to itself (a trivial single-position distribution); the last position can attend to anywhere in the sequence. Same shape, same softmax, same matrix multiplication — only one additive matrix changes.
+The masked attention matrix is strictly lower-triangular: row $i$ has non-zero weights only at columns $1$ through $i$. Each row still sums to one. The first position can only attend to itself (a trivial single-position distribution); the last position can attend to anywhere in the sequence. Same shape, same softmax, same matrix multiplication. Only one additive matrix changes.
 
 <WidgetFrame title="Causal masking" caption="Toggle between bidirectional and causally-masked attention on the same 6-token sequence. The mask matrix (top) shows which positions are blocked; the two attention matrices below show the difference in the resulting patterns.">
   <CausalMask client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
-"Causal masking is applied after attention" is wrong, but a common assumption — and an instructive one to be wrong about. The mask must be applied to the *scores* (before softmax), not to the *outputs* (after softmax). If you zeroed illegal positions after softmax, the legal positions would still carry their original probabilities, which no longer sum to one; the weighted sum across the past would be a fractional convex combination, with the remaining mass disappearing. Pre-softmax additive $-\infty$ is the only construction that preserves the sum-to-one property of the legal positions.
+"Causal masking is applied after attention" is a common but wrong assumption. The mask must be applied to the *scores* (before softmax), not to the *outputs* (after softmax). If you zeroed illegal positions after softmax, the legal positions would still carry their original probabilities, which no longer sum to one; the weighted sum across the past would be a fractional convex combination, with the remaining mass disappearing. Pre-softmax additive $-\infty$ is the only construction that preserves the sum-to-one property of the legal positions.
 </Callout>
 
-Two related masking patterns appear in practice. *Padding masks* zero out attention to padding tokens in batched training (variable-length sequences are right-padded to a common length for batching). *Prefix-LM masks* allow bidirectional attention within a prefix and causal attention thereafter, used in some encoder-decoder hybrids. Both are additive masks of the same kind — different patterns of zeros and $-\infty$ in the same matrix slot — and combine cleanly with the causal mask by addition.
+Two related masking patterns appear in practice. *Padding masks* zero out attention to padding tokens in batched training (variable-length sequences are right-padded to a common length for batching). *Prefix-LM masks* allow bidirectional attention within a prefix and causal attention thereafter, used in some encoder-decoder hybrids. Both are additive masks of the same kind (different patterns of zeros and $-\infty$ in the same matrix slot), and combine cleanly with the causal mask by addition.
 
 Everything so far has been self-attention. The next section is a brief detour into the variant where $Q$ comes from one sequence and $K, V$ from another.
 
@@ -325,21 +325,21 @@ In *self-attention*, $Q$, $K$, and $V$ all come from the same input sequence $X$
 
 In *cross-attention*, $Q$ comes from one sequence and $K$, $V$ come from another. The classic setting is an encoder-decoder model for translation. The encoder processes the source sentence; the decoder generates the target sentence one token at a time. At each decoder layer, $Q$ is computed from the decoder's current state (the target sentence so far), while $K$ and $V$ are computed from the encoder's output (the full source sentence). The decoder "attends to" the source: at each position in the target, the model looks across the encoded source to decide what to retrieve.
 
-Mechanically the formula does not change. The shapes adjust — $Q$ has $n_{\text{tgt}}$ rows, $K$ and $V$ have $n_{\text{src}}$ rows — so the attention matrix becomes $n_{\text{tgt}} \times n_{\text{src}}$ instead of $n \times n$, and the output is $n_{\text{tgt}} \times d_v$. The softmax is still row-wise; the weighted sum still produces one output row per query row.
+Mechanically the formula does not change. The shapes adjust ($Q$ has $n_{\text{tgt}}$ rows, $K$ and $V$ have $n_{\text{src}}$ rows), so the attention matrix becomes $n_{\text{tgt}} \times n_{\text{src}}$ instead of $n \times n$, and the output is $n_{\text{tgt}} \times d_v$. The softmax is still row-wise; the weighted sum still produces one output row per query row.
 
-The architectural choice is structural. Encoder-decoder models — the original 2017 transformer, T5, BART, mT5 — use cross-attention in the decoder to access the encoder's representation, plus self-attention within each stack. Decoder-only models — GPT, Llama, the modern open-source landscape — use only self-attention with causal masking. The decoder-only architecture has won most of the recent attention (so to speak) because it is structurally simpler: one stack, one operation, one training objective. The encoder-decoder split remains preferred for tasks with a clear input-output asymmetry — translation, summarization, document-conditioned generation — where it offers a cleaner inductive bias.
+The architectural choice is structural. Encoder-decoder models (the original 2017 transformer, T5, BART, mT5) use cross-attention in the decoder to access the encoder's representation, plus self-attention within each stack. Decoder-only models (GPT, Llama, the modern open-source landscape) use only self-attention with causal masking. The decoder-only architecture has won most of the recent attention (so to speak) because it is structurally simpler: one stack, one operation, one training objective. The encoder-decoder split remains preferred for tasks with a clear input-output asymmetry (translation, summarization, document-conditioned generation), where it offers a cleaner inductive bias.
 
 Modern multimodal models often use cross-attention to fuse modalities: an image encoder produces $K$ and $V$ from visual tokens, the language decoder produces $Q$ from text tokens, and cross-attention lets the language model attend over the image. The variant gets reused in any setting where one sequence needs to be conditioned on another, distinct sequence.
 
-All of this — self-attention, cross-attention, masking variants — runs on the same scaled dot-product operation, which means it inherits the same computational cost. That cost is the subject of the next section.
+All of this (self-attention, cross-attention, masking variants) runs on the same scaled dot-product operation, which means it inherits the same computational cost. That cost is the subject of the next section.
 
-## Computational cost — the O(n²) bottleneck
+## Computational cost: the O(n²) bottleneck
 
 Attention is expensive. The cost shows up in two places: compute and memory. Both scale with the *square* of the sequence length, which is the structural reason long-context LLMs are hard.
 
-For a sequence of length $n$ with head dimension $d_k = d_v = d$, the per-layer compute breaks down as follows. The matrix multiplication $QK^\top$ is $O(n^2 d)$ — $2 n^2 d$ FLOPs under the standard counting (one multiply and one add per output element). The softmax over the $n \times n$ scores matrix is $O(n^2)$ — a constant number of operations per entry. The multiplication $AV$ is $O(n^2 d)$ — another $2 n^2 d$ FLOPs. The total is $O(n^2 d)$, dominated by the two matrix multiplications.
+For a sequence of length $n$ with head dimension $d_k = d_v = d$, the per-layer compute breaks down as follows. The matrix multiplication $QK^\top$ is $O(n^2 d)$, or $2 n^2 d$ FLOPs under the standard counting (one multiply and one add per output element). The softmax over the $n \times n$ scores matrix is $O(n^2)$, a constant number of operations per entry. The multiplication $AV$ is $O(n^2 d)$, another $2 n^2 d$ FLOPs. The total is $O(n^2 d)$, dominated by the two matrix multiplications.
 
-Memory is the more immediate constraint. The attention matrix $A$ has shape $(n, n)$. For batch size $b$, the on-device memory for this single matrix is $b n^2$ values, which at fp32 is $4 b n^2$ bytes and at fp16 is $2 b n^2$ bytes. At $n = 8192$ with $b = 1$, that is $256$ MB at fp32, $128$ MB at fp16 — a substantial fraction of a single GPU's high-bandwidth memory budget, just for the attention matrix in one layer. With multiple layers, multiple heads, and gradients during training, the multiplier compounds.
+Memory is the more immediate constraint. The attention matrix $A$ has shape $(n, n)$. For batch size $b$, the on-device memory for this single matrix is $b n^2$ values, which at fp32 is $4 b n^2$ bytes and at fp16 is $2 b n^2$ bytes. At $n = 8192$ with $b = 1$, that is $256$ MB at fp32, $128$ MB at fp16. Either is a substantial fraction of a single GPU's high-bandwidth memory budget, just for the attention matrix in one layer. With multiple layers, multiple heads, and gradients during training, the multiplier compounds.
 
 The runnable block below puts numbers on a few sequence lengths.
 
@@ -368,34 +368,34 @@ for n in [256, 1024, 4096, 16384, 131072]:
 
 For a more realistic LLM-scale picture: a 7B-parameter model with $n = 4096$ and per-head dimension $d = 64$ does roughly $4096^2 \times 64 \times 2 \approx 2 \times 10^9$ FLOPs of attention compute per head per layer. With 32 heads and 32 layers, total attention compute is on the order of $10^{12}$ FLOPs per forward pass per token. The feedforward layers (each FFN multiplies by a $4 d_{\text{model}}$-wide hidden layer) contribute more per layer when $n$ is small; as $n$ grows, attention's $n^2$ scaling overtakes the FFN's linear scaling, and at long enough contexts attention dominates the FLOPs.
 
-The quadratic scaling is the structural reason context length is a major architectural choice. Doubling $n$ quadruples both compute and memory for the attention matrix. Going from 4K to 128K context is a 32× multiplier on $n$, but a 1024× multiplier on attention's resource demand. The full $128$K attention matrix at fp16 is $\sim 32$ GB per head per layer — vastly exceeding any single GPU's memory.
+The quadratic scaling is the structural reason context length is a major architectural choice. Doubling $n$ quadruples both compute and memory for the attention matrix. Going from 4K to 128K context is a 32× multiplier on $n$, but a 1024× multiplier on attention's resource demand. The full $128$K attention matrix at fp16 is $\sim 32$ GB per head per layer, vastly exceeding any single GPU's memory.
 
 <Callout type="note">
-At $n = 131072$ — the 128K context length of recent Claude and GPT-class models — the raw attention matrix at fp16 is roughly $32$ GB per head per layer for batch size 1. The largest single-GPU memory available today is 80 GB; a multi-layer multi-head model cannot materialize all those matrices simultaneously. This is why long-context inference depends on Flash Attention and related memory-efficient implementations that *never* materialize the full $n \times n$ matrix — they compute attention in tiles, fusing the softmax and matmul into a single pass through GPU memory. Same math, different memory layout.
+At $n = 131072$ (the 128K context length of recent Claude and GPT-class models), the raw attention matrix at fp16 is roughly $32$ GB per head per layer for batch size 1. The largest single-GPU memory available today is 80 GB; a multi-layer multi-head model cannot materialize all those matrices simultaneously. This is why long-context inference depends on Flash Attention and related memory-efficient implementations that *never* materialize the full $n \times n$ matrix. They compute attention in tiles, fusing the softmax and matmul into a single pass through GPU memory. Same math, different memory layout.
 </Callout>
 
-The cost is also the motivation for much of the rest of the tutorial. Chapter 11 introduces state-space models — alternative architectures with $O(n)$ scaling that may or may not displace attention for long-context tasks. Chapter 17 introduces the *KV cache*: at inference time, the $K$ and $V$ matrices for past tokens are computed once and cached, so each new token's attention costs $O(n)$ rather than $O(n^2)$. Chapter 17 also covers Flash Attention and related techniques. The reason the rest of the tutorial spends so much time on these variants is the cost discussed here.
+The cost is also the motivation for much of the rest of the tutorial. Chapter 11 introduces state-space models, alternative architectures with $O(n)$ scaling that may or may not displace attention for long-context tasks. Chapter 17 introduces the *KV cache*: at inference time, the $K$ and $V$ matrices for past tokens are computed once and cached, so each new token's attention costs $O(n)$ rather than $O(n^2)$. Chapter 17 also covers Flash Attention and related techniques. The reason the rest of the tutorial spends so much time on these variants is the cost discussed here.
 
 ## From single-head to multi-head
 
 The attention this chapter has built has one $W^Q$, one $W^K$, one $W^V$. One projection per role, producing one $d_k$-dimensional matching space and one $d_v$-dimensional value space. Vaswani et al. observed almost immediately that a single attention "head" is leaving capacity on the table.
 
-The natural next move is to run several attention operations in parallel. Each "head" has its own learned $W^Q$, $W^K$, $W^V$ projections, into smaller subspaces (typically $d_k = d_v = d_{\text{model}} / h$ for $h$ heads). Each head computes its own attention pattern over the same input sequence — but with different learned projections, the heads can specialize. In a trained transformer, different heads end up doing visibly different jobs: one head may focus mostly on recent positions, another on subject-verb relationships across long spans, another on coreference, another on syntax. The model gets $h$ different views of the sequence for roughly the same compute as one $d_k$-dimensional attention, because the per-head dimension shrinks proportionally.
+The natural next move is to run several attention operations in parallel. Each "head" has its own learned $W^Q$, $W^K$, $W^V$ projections, into smaller subspaces (typically $d_k = d_v = d_{\text{model}} / h$ for $h$ heads). Each head computes its own attention pattern over the same input sequence. With different learned projections, the heads can specialize. In a trained transformer, different heads end up doing visibly different jobs: one head may focus mostly on recent positions, another on subject-verb relationships across long spans, another on coreference, another on syntax. The model gets $h$ different views of the sequence for roughly the same compute as one $d_k$-dimensional attention, because the per-head dimension shrinks proportionally.
 
-The outputs of the $h$ heads are concatenated into a single $(n, h \cdot d_v) = (n, d_{\text{model}})$ matrix and passed through one more learned linear projection $W^O$ that mixes the heads into the output. Chapter 5 derives all of this — the shapes, the parameter count, the empirical evidence that heads specialize, and the implementation. Everything Chapter 5 builds is single-head attention from this chapter, replicated $h$ times in parallel and stitched back together.
+The outputs of the $h$ heads are concatenated into a single $(n, h \cdot d_v) = (n, d_{\text{model}})$ matrix and passed through one more learned linear projection $W^O$ that mixes the heads into the output. Chapter 5 derives all of this: the shapes, the parameter count, the empirical evidence that heads specialize, and the implementation. Everything Chapter 5 builds is single-head attention from this chapter, replicated $h$ times in parallel and stitched back together.
 
 ## Exercises
 
-The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — Verify scaled dot-product attention
+### Exercise 1 (easy): Verify scaled dot-product attention
 
 Implement scaled dot-product attention from scratch and verify two properties: (a) the attention weights for each row sum to 1, (b) without the $\sqrt{d_k}$ scaling, the softmax produces a much more peaked distribution at large $d_k$.
 
 <details>
 <summary>Hint</summary>
 
-Use the implementation from section 3 as a starting point. For property (a), compute `weights.sum(axis=-1)` — should be all 1s. For property (b), compare `softmax(scores)` to `softmax(scores / sqrt(d_k))` at d_k = 8 vs d_k = 512. The max weight should be much higher without scaling.
+Use the implementation from section 3 as a starting point. For property (a), compute `weights.sum(axis=-1)`; it should be all 1s. For property (b), compare `softmax(scores)` to `softmax(scores / sqrt(d_k))` at d_k = 8 vs d_k = 512. The max weight should be much higher without scaling.
 
 </details>
 
@@ -430,7 +430,7 @@ V = rng.normal(0, 1, (n, d_k))
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — Implement causal masking
+### Exercise 2 (medium): Implement causal masking
 
 Extend your scaled dot-product attention from Exercise 1 to support causal masking. Verify that each position only attends to itself and earlier positions; verify that masked rows still sum to 1.
 
@@ -475,7 +475,7 @@ V = rng.normal(0, 1, (n, d_k))
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Quantify the O(n²) memory cost
+### Exercise 3 (medium): Quantify the O(n²) memory cost
 
 Compute the memory required for attention at various sequence lengths. Compare to the memory required for the FFN's largest tensor at the same sequence length. Find the crossover point where attention's memory exceeds FFN's.
 
@@ -509,14 +509,14 @@ for n in [256, 1024, 4096, 16384, 65536]:
   packages={["numpy"]}
 />
 
-### Exercise 4 (hard) — Implement cross-attention
+### Exercise 4 (hard): Implement cross-attention
 
 Implement cross-attention: queries come from one sequence; keys and values from another. Demonstrate it on a toy encoder-decoder setup where the decoder (length 4) attends to an encoder output (length 6). Verify shapes and that the attention works regardless of the two sequences having different lengths.
 
 <details>
 <summary>Hint</summary>
 
-The formula is identical to self-attention — `softmax(QK^T / sqrt(d_k)) V` — but Q has shape `(n_dec, d_k)` while K and V have shape `(n_enc, d_k)`. The attention matrix is `(n_dec, n_enc)`, not square. There's no causal masking in standard cross-attention; the decoder attends to the entire encoder output.
+The formula is identical to self-attention, `softmax(QK^T / sqrt(d_k)) V`, but Q has shape `(n_dec, d_k)` while K and V have shape `(n_enc, d_k)`. The attention matrix is `(n_dec, n_enc)`, not square. There's no causal masking in standard cross-attention; the decoder attends to the entire encoder output.
 
 </details>
 
@@ -555,8 +555,4 @@ V_enc = rng.normal(0, 1, (n_enc, d_k))
   packages={["numpy"]}
 />
 
-Scaled dot-product attention is the operation that defines the modern LLM. $Q$, $K$, $V$ are three learned views of the same input. Dot product scores their similarity. Division by $\sqrt{d_k}$ keeps the scores from saturating softmax. Softmax turns scores into a probability distribution over positions. Multiplying by $V$ blends values according to that distribution. Causal masking restricts the attention to the past for autoregressive generation. The whole operation runs in $O(n^2)$ in the sequence length, both in compute and memory.
-
 Everything else in this tutorial is downstream of this. Chapter 5 stacks multiple parallel attentions into multi-head attention. Chapter 6 adds positional information back into a permutation-symmetric operation. Chapter 7 wraps attention in the transformer block. Chapter 11 introduces an alternative that trades the formula for linear scaling. Chapter 17 makes inference efficient without changing the math.
-
-What we built in this chapter is what all of them start from.
