@@ -1,54 +1,54 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch07-pretraining-data
-description: Modern LLMs are trained on trillions of tokens of web text, but raw web data is mostly low-quality. This chapter covers how the training corpus gets built — sourcing from CommonCrawl, deduplicating with MinHash and LSH, filtering with quality classifiers, and decontaminating against benchmarks. Major datasets from The Pile (2020) to DCLM (2024).
+description: Modern LLMs are trained on trillions of tokens of web text, but raw web data is mostly low-quality. This chapter covers how the training corpus gets built, sourcing from CommonCrawl, deduplicating with MinHash and LSH, filtering with quality classifiers, and decontaminating against benchmarks. Major datasets from The Pile (2020) to DCLM (2024).
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { DedupInteractive, QualityFilter } from '@components/widgets';
 
-Six chapters in, the architecture is complete. Tokens go in. Embeddings get added to positional encodings. Attention runs, blocks stack, the last layer projects back to vocabulary space and a softmax produces probabilities. The forward pass is exactly the forward pass of every modern decoder-only LLM. What sits inside the weight matrices, though, is still random noise. The model from Chapters 1–6 is inert — a parameterized function with no preferences, no knowledge, no behavior.
+Six chapters in, the architecture is complete. Tokens go in. Embeddings get added to positional encodings. Attention runs, blocks stack, the last layer projects back to vocabulary space and a softmax produces probabilities. The forward pass is exactly the forward pass of every modern decoder-only LLM. What sits inside the weight matrices, though, is still random noise. The model from Chapters 1–6 is inert, a parameterized function with no preferences, no knowledge, no behavior.
 
-What turns it into a working LLM is data. Trillions of tokens of text, drawn mostly from the open web, run through a long pipeline that throws away most of what came in and keeps a curated remainder. This chapter is the unglamorous half of LLM training. The architecture is what gets papers; data engineering is what gets results. The empirical story from 2020 through 2024 is unambiguous: at scale, **data quality dominates over data quantity**. Apple's DCLM result is the canonical demonstration — a 7B model trained on a carefully filtered 3.8T-token corpus outperforms LLaMA-3 8B trained on 15T tokens. Quality beats quantity by a wide enough margin that the field's intuitions from 2020 ("just add more tokens") look quaint in retrospect.
+What turns it into a working LLM is data. Trillions of tokens of text, drawn mostly from the open web, run through a long pipeline that throws away most of what came in and keeps a curated remainder. This chapter is the unglamorous half of LLM training. The architecture is what gets papers; data engineering is what gets results. The empirical story from 2020 through 2024 is unambiguous: at scale, **data quality dominates over data quantity**. Apple's DCLM result is the canonical demonstration, a 7B model trained on a carefully filtered 3.8T-token corpus outperforms LLaMA-3 8B trained on 15T tokens. Quality beats quantity by a wide enough margin that the field's intuitions from 2020 ("just add more tokens") look quaint in retrospect.
 
-What follows is the modern data pipeline. Start with CommonCrawl — petabytes of raw web text. Strip exact duplicates (cheap). Strip near-duplicates with MinHash and LSH (more expensive, more important). Filter for quality with heuristics and learned classifiers. Decontaminate against benchmarks. Mix sources with intentional weights. After Chapter 8 builds the training loop, the corpus this chapter constructs is what we feed it.
+What follows is the modern data pipeline. Start with CommonCrawl, petabytes of raw web text. Strip exact duplicates (cheap). Strip near-duplicates with MinHash and LSH (more expensive, more important). Filter for quality with heuristics and learned classifiers. Decontaminate against benchmarks. Mix sources with intentional weights. After Chapter 8 builds the training loop, the corpus this chapter constructs is what we feed it.
 
-## The setup — why data matters as much as architecture
+## The setup: why data matters as much as architecture
 
-The empirical claim of this chapter is one sentence: at scale, data quality dominates over data quantity. The claim is non-obvious — it cuts against the field's instincts from the GPT-2 and GPT-3 era, when "more tokens" was a reliable lever for better models. Two results from 2023–2024 made the new picture concrete.
+The empirical claim of this chapter is one sentence: at scale, data quality dominates over data quantity. The claim is non-obvious; it cuts against the field's instincts from the GPT-2 and GPT-3 era, when "more tokens" was a reliable lever for better models. Two results from 2023–2024 made the new picture concrete.
 
 **SlimPajama (Cerebras 2023)** was the first canary. Together AI had released RedPajama, a 1.2T-token open reproduction of LLaMA's training mix. Cerebras took RedPajama, ran more aggressive deduplication, threw out roughly 49% of the tokens, and trained models on the remaining 627B. Those models *outperformed* equivalent models trained on the full 1.2T. Less data, better result. The conclusion was uncomfortable: the LLaMA-grade public dataset everyone was using contained enough redundant content that removing half of it made the models better, not worse.
 
 **DCLM (Apple 2024)** was the decisive result. The DataComp-LM benchmark trained matched 7B models on different curated subsets of CommonCrawl. The DCLM-Baseline (3.8T tokens, heavily filtered) produced a 7B model that *outperformed LLaMA-3 8B trained on 15T tokens*. A model with fewer parameters, trained on roughly a quarter of the data, beat the LLaMA-3 baseline on the standard battery of benchmarks. The headline interpretation is direct: at scale, aggressive curation can buy more than 4× more tokens of mediocre data.
 
-These results sit on top of older work. Lee et al. 2022 ([arxiv.org/abs/2107.06499](https://arxiv.org/abs/2107.06499)) showed that near-duplicate removal reduces test-set memorization and improves held-out perplexity. Hoffmann et al. 2022 (the Chinchilla paper) emphasized that the right ratio of tokens to parameters matters — but the Chinchilla derivation implicitly assumed clean training data. When data quality varies, the "20 tokens per parameter" rule of thumb is a lower bound that aggressive filtering can move sideways. DCLM is partly a demonstration that the Chinchilla regime under-counts what high-quality data can do.
+These results sit on top of older work. Lee et al. 2022 ([arxiv.org/abs/2107.06499](https://arxiv.org/abs/2107.06499)) showed that near-duplicate removal reduces test-set memorization and improves held-out perplexity. Hoffmann et al. 2022 (the Chinchilla paper) emphasized that the right ratio of tokens to parameters matters, but the Chinchilla derivation implicitly assumed clean training data. When data quality varies, the "20 tokens per parameter" rule of thumb is a lower bound that aggressive filtering can move sideways. DCLM is partly a demonstration that the Chinchilla regime under-counts what high-quality data can do.
 
-What does "quality" actually mean? The chapter unpacks it in four parts. *Absence of junk*: no boilerplate, no broken HTML, no machine-translated word salad, no SEO bait. *Absence of duplicates*: every token in the corpus appears roughly once. Repeated content does not earn its training-compute keep, and it inflates the model's tendency to memorize. *Presence of value*: educational content, technical writing, reasoning chains, code — the kind of text a trained model can actually learn from. *Absence of benchmark contamination*: no MMLU questions or HumanEval problems leaking into training, which would inflate the reported scores by replacing learning with recall.
+What does "quality" actually mean? The chapter unpacks it in four parts. *Absence of junk*: no boilerplate, no broken HTML, no machine-translated word salad, no SEO bait. *Absence of duplicates*: every token in the corpus appears roughly once. Repeated content does not earn its training-compute keep, and it inflates the model's tendency to memorize. *Presence of value*: educational content, technical writing, reasoning chains, code, the kind of text a trained model can actually learn from. *Absence of benchmark contamination*: no MMLU questions or HumanEval problems leaking into training, which would inflate the reported scores by replacing learning with recall.
 
 What follows is the pipeline that achieves these properties at scale.
 
 <Callout type="warning">
-"More data is always better" was the operative intuition of the GPT-2 / GPT-3 era and the framing that the original scaling-laws papers reinforced. The 2023–2024 results overturned it. Past a certain point, **low-quality data hurts more than it helps**: it wastes training compute, increases memorization of junk content, and (at the margin) seems to reduce reasoning quality on held-out tasks. DCLM-Baseline beating LLaMA-3 on a quarter of the tokens is the result everyone now cites. The lesson is not "data doesn't matter" — it is "the right kind of data matters more than the total amount."
+"More data is always better" was the operative intuition of the GPT-2 / GPT-3 era and the framing that the original scaling-laws papers reinforced. The 2023–2024 results overturned it. Past a certain point, **low-quality data hurts more than it helps**: it wastes training compute, increases memorization of junk content, and (at the margin) seems to reduce reasoning quality on held-out tasks. DCLM-Baseline beating LLaMA-3 on a quarter of the tokens is the result everyone now cites. The lesson is not "data doesn't matter"; it is "the right kind of data matters more than the total amount."
 </Callout>
 
-## Web data — CommonCrawl and what's in it
+## Web data: CommonCrawl and what's in it
 
 Where do the trillions of tokens come from? Almost all of them, in 2024, come from the web. The dominant public source is CommonCrawl: a nonprofit project that has been crawling the web since 2008, releasing a fresh snapshot roughly every month. Every snapshot is petabytes of HTML; the cumulative archive is one of the largest publicly accessible text resources in the world. Modern LLM data pipelines start by downloading one or more CommonCrawl snapshots and decompressing them on a large cluster.
 
-A single recent snapshot is on the order of 3 billion web pages and 250 TB of compressed data. The crawl is wide rather than deep — Wikipedia is in there, but so are millions of low-traffic domains, blog comment threads, forum archives, machine-generated SEO pages, and the strange backwaters of the web that no human reads on purpose. The format on disk is standardized: WARC files hold the raw HTTP responses (headers + body), WET files hold plain text already extracted via a standard boilerplate-stripping pass, and WAT files hold HTML metadata. Most LLM pipelines work from WET or build their own extraction on top of WARC, depending on how much they trust the standard extraction.
+A single recent snapshot is on the order of 3 billion web pages and 250 TB of compressed data. The crawl is wide rather than deep. Wikipedia is in there, but so are millions of low-traffic domains, blog comment threads, forum archives, machine-generated SEO pages, and the strange backwaters of the web that no human reads on purpose. The format on disk is standardized: WARC files hold the raw HTTP responses (headers + body), WET files hold plain text already extracted via a standard boilerplate-stripping pass, and WAT files hold HTML metadata. Most LLM pipelines work from WET or build their own extraction on top of WARC, depending on how much they trust the standard extraction.
 
-What is *in* CommonCrawl, at the level of content, is a long tail. A rough mental model: the top ~1% of pages are high-quality — educational sites, scientific writing, technical blogs, Wikipedia-like reference material. The middle ~80% are mediocre — social media, listicles, e-commerce product pages, low-effort news. The bottom ~19% are actively bad — outright spam, broken HTML that decoded into garbage, machine-translated content, autogenerated text, scraped duplicates of other sites. These fractions are crude estimates, but the shape is real and consistent across snapshots: most of CommonCrawl is not text you would want a language model to learn from.
+What is *in* CommonCrawl, at the level of content, is a long tail. A rough mental model: the top ~1% of pages are high-quality (educational sites, scientific writing, technical blogs, Wikipedia-like reference material). The middle ~80% are mediocre (social media, listicles, e-commerce product pages, low-effort news). The bottom ~19% are actively bad (outright spam, broken HTML that decoded into garbage, machine-translated content, autogenerated text, scraped duplicates of other sites). These fractions are crude estimates, but the shape is real and consistent across snapshots: most of CommonCrawl is not text you would want a language model to learn from.
 
-Why use CommonCrawl at all, given the noise? Scale. The high-quality 1% of CommonCrawl, in absolute terms, is vastly larger than any dedicated curated corpus. Wikipedia is roughly 5 GB of text; CommonCrawl's top 1% is hundreds of TB. The job of a data pipeline is to *find* the high-quality fraction efficiently — and modern filtering has gotten good enough that it pays off. FineWeb-Edu (HuggingFace 2024) kept roughly 9% of FineWeb after educational-content filtering. That 9% is on the order of 1.3T tokens, and models trained on it outperform models trained on the same amount of randomly-sampled web text by a substantial margin. The bet that curated CommonCrawl beats hand-curated alternatives, on volume alone, has paid off repeatedly.
+Why use CommonCrawl at all, given the noise? Scale. The high-quality 1% of CommonCrawl, in absolute terms, is vastly larger than any dedicated curated corpus. Wikipedia is roughly 5 GB of text; CommonCrawl's top 1% is hundreds of TB. The job of a data pipeline is to *find* the high-quality fraction efficiently, and modern filtering has gotten good enough that it pays off. FineWeb-Edu (HuggingFace 2024) kept roughly 9% of FineWeb after educational-content filtering. That 9% is on the order of 1.3T tokens, and models trained on it outperform models trained on the same amount of randomly-sampled web text by a substantial margin. The bet that curated CommonCrawl beats hand-curated alternatives, on volume alone, has paid off repeatedly.
 
-The picture is shifting at the high end. GPT-4 and similarly recent frontier models are reportedly trained on custom crawls rather than CommonCrawl alone — the methodology is similar (crawl, extract, dedupe, filter), but the source is proprietary. The public dataset frontier (FineWeb, DCLM) still uses CommonCrawl as the starting point, and the curation techniques transfer to either source. This chapter treats CommonCrawl as canonical because it is what the open pipelines work from; the closed pipelines work from the same building blocks.
+The picture is shifting at the high end. GPT-4 and similarly recent frontier models are reportedly trained on custom crawls rather than CommonCrawl alone; the methodology is similar (crawl, extract, dedupe, filter), but the source is proprietary. The public dataset frontier (FineWeb, DCLM) still uses CommonCrawl as the starting point, and the curation techniques transfer to either source. This chapter treats CommonCrawl as canonical because it is what the open pipelines work from; the closed pipelines work from the same building blocks.
 
-Before the curation can begin, the data needs to be inspected — counted, summarized, sanity-checked. Even at the toy scale of a few documents, basic statistics surface the kinds of problems the rest of the pipeline will address.
+Before the curation can begin, the data needs to be inspected, counted, summarized, sanity-checked. Even at the toy scale of a few documents, basic statistics surface the kinds of problems the rest of the pipeline will address.
 
 <RunnableCode
   client:visible
-  defaultCode={`# A toy "corpus" of 5 simulated documents — for demonstration only.
+  defaultCode={`# A toy "corpus" of 5 simulated documents, for demonstration only.
 # Real CommonCrawl pipelines run this kind of summary on billions of documents.
 corpus = [
     "The capital of France is Paris. It is the largest city in France.",
@@ -71,25 +71,25 @@ for i, d in enumerate(corpus):
           f"{len(unique_words):>2d} unique ({unique_ratio:.2f} ratio)")
 
 # Doc 1 (the spam-like one) has a notably low unique-word ratio.
-# That signal alone — repetition — is enough to flag it for the quality filter.
+# That signal alone: repetition, is enough to flag it for the quality filter.
 `}
   packages={[]}
   height={360}
 />
 
 <Callout type="warning">
-"Web data is mostly junk" is true at the document level and misleading at the volume level. Raw web text is *mostly* low-quality, but the high-quality fraction is enormous — far larger than any dedicated curated source. FineWeb-Edu's educational-content filter retains roughly 9% of FineWeb, and that 9% produces dramatically better models than 9% sampled randomly from FineWeb. The job of data curation is to *find* the high-quality fraction at scale, not to abandon the web. Curated CommonCrawl beats hand-curated alternatives on volume; that is why the pipelines look the way they do.
+"Web data is mostly junk" is true at the document level and misleading at the volume level. Raw web text is *mostly* low-quality, but the high-quality fraction is enormous, far larger than any dedicated curated source. FineWeb-Edu's educational-content filter retains roughly 9% of FineWeb, and that 9% produces dramatically better models than 9% sampled randomly from FineWeb. The job of data curation is to *find* the high-quality fraction at scale, not to abandon the web. Curated CommonCrawl beats hand-curated alternatives on volume; that is why the pipelines look the way they do.
 </Callout>
 
 ## Exact deduplication
 
-The first cleanup pass on raw web data is the easy one: remove documents whose content is byte-identical to other documents. Modern pipelines drop roughly 5–10% of CommonCrawl this way. The reason exact duplicates exist in the first place is mundane — mirror sites, syndicated news articles republished on dozens of domains, scraped copies of Wikipedia, blog spam that copy-pastes content across thousands of low-effort pages. None of this carries new information; keeping it would mean training the model on the same tokens many times under the guise of seeing more data.
+The first cleanup pass on raw web data is the easy one: remove documents whose content is byte-identical to other documents. Modern pipelines drop roughly 5–10% of CommonCrawl this way. The reason exact duplicates exist in the first place is mundane: mirror sites, syndicated news articles republished on dozens of domains, scraped copies of Wikipedia, blog spam that copy-pastes content across thousands of low-effort pages. None of this carries new information; keeping it would mean training the model on the same tokens many times under the guise of seeing more data.
 
-The algorithm is short. Hash every document with a fast non-cryptographic hash function — xxhash and MurmurHash are the standard choices, each about an order of magnitude faster than SHA-256 and entirely adequate for set-membership. Group documents by hash. From each group, keep one document and discard the rest. The whole operation is single-pass, embarrassingly parallel, and dominated by I/O rather than compute. On a cluster, the dedup step finishes in hours even on a multi-terabyte input.
+The algorithm is short. Hash every document with a fast non-cryptographic hash function; xxhash and MurmurHash are the standard choices, each about an order of magnitude faster than SHA-256 and entirely adequate for set-membership. Group documents by hash. From each group, keep one document and discard the rest. The whole operation is single-pass, embarrassingly parallel, and dominated by I/O rather than compute. On a cluster, the dedup step finishes in hours even on a multi-terabyte input.
 
-What exact dedup does *not* catch is the much larger near-duplicate problem. Any text edited with the slightest variation — different whitespace, a corrected typo, an extra trailing period, a paragraph rearranged — slips past exact matching. The web is full of these almost-but-not-quite duplicates: news articles republished with a different headline, forum posts that quote earlier posts in long quote-trees, boilerplate footers that vary only in a date string. Modern pipelines find that aggressive near-duplicate removal drops 30–50% of CommonCrawl — three to ten times the volume of exact dedup. Section 4 is about that harder problem.
+What exact dedup does *not* catch is the much larger near-duplicate problem. Any text edited with the slightest variation (different whitespace, a corrected typo, an extra trailing period, a paragraph rearranged) slips past exact matching. The web is full of these almost-but-not-quite duplicates: news articles republished with a different headline, forum posts that quote earlier posts in long quote-trees, boilerplate footers that vary only in a date string. Modern pipelines find that aggressive near-duplicate removal drops 30–50% of CommonCrawl, three to ten times the volume of exact dedup. Section 4 is about that harder problem.
 
-Two finer points about exact dedup itself. **Document-level versus line-level.** Document-level dedup removes whole copies of documents. Line-level dedup, applied after document-level, removes recurring lines that appear across many otherwise-different documents — navigation menus, copyright notices, "click here to subscribe" banners. Both are useful; they catch different problems. Production pipelines usually do both passes. **Hash choice matters.** Use a fast non-cryptographic hash. SHA-256 is overkill: the security guarantees are irrelevant for set-membership, and the speed cost on terabytes of input is substantial. xxhash, in particular, is roughly 10× faster and produces collisions at rates that are still well below the practical noise floor.
+Two finer points about exact dedup itself. **Document-level versus line-level.** Document-level dedup removes whole copies of documents. Line-level dedup, applied after document-level, removes recurring lines that appear across many otherwise-different documents, navigation menus, copyright notices, "click here to subscribe" banners. Both are useful; they catch different problems. Production pipelines usually do both passes. **Hash choice matters.** Use a fast non-cryptographic hash. SHA-256 is overkill: the security guarantees are irrelevant for set-membership, and the speed cost on terabytes of input is substantial. xxhash, in particular, is roughly 10× faster and produces collisions at rates that are still well below the practical noise floor.
 
 <RunnableCode
   client:visible
@@ -97,7 +97,7 @@ Two finer points about exact dedup itself. **Document-level versus line-level.**
 from collections import defaultdict
 
 def doc_hash(text: str) -> str:
-    """Hash a document. md5 is fine here — we just want set-membership."""
+    """Hash a document. md5 is fine here, we just want set-membership."""
     return hashlib.md5(text.encode()).hexdigest()
 
 # Toy corpus with intentional duplicates and a near-duplicate.
@@ -124,19 +124,19 @@ deduped = [corpus[i] for i in deduped_indices]
 
 print(f"\\nOriginal: {len(corpus)} docs  →  Exact-deduped: {len(deduped)} docs")
 print(f"Removed: {len(corpus) - len(deduped)} exact duplicates of doc 0.")
-print(f"Note: doc 2 ('paris' lowercased) was NOT deduped — exact match only.")
+print(f"Note: doc 2 ('paris' lowercased) was NOT deduped, exact match only.")
 `}
   packages={[]}
   height={420}
 />
 
 <Callout type="warning">
-"Dedup is just removing exact duplicates" misses the bigger half of the problem. Exact dedup removes 5–10% of CommonCrawl; aggressive near-duplicate dedup with MinHash removes 30–50%. The removed near-duplicates are scraping artifacts, boilerplate variations, lightly-edited reposts, and quote-and-paraphrase patterns — and they hurt model quality more, per byte, than the exact duplicates do. Section 4 covers the harder problem.
+"Dedup is just removing exact duplicates" misses the bigger half of the problem. Exact dedup removes 5–10% of CommonCrawl; aggressive near-duplicate dedup with MinHash removes 30–50%. The removed near-duplicates are scraping artifacts, boilerplate variations, lightly-edited reposts, and quote-and-paraphrase patterns, and they hurt model quality more, per byte, than the exact duplicates do. Section 4 covers the harder problem.
 </Callout>
 
-## Near-duplicate dedup — MinHash and LSH
+## Near-duplicate dedup: MinHash and LSH
 
-Near-duplicate detection is the algorithmic heart of the pipeline. The naive formulation is straightforward and infeasible: for every pair of documents, measure how similar they are, and discard documents whose similarity to something already kept is above a threshold. With $N$ documents the pairwise cost is $O(N^2)$, and the per-pair cost is itself proportional to document size. For $N \sim 10^9$ documents — the scale of a CommonCrawl snapshot after exact dedup — this is roughly $10^{18}$ operations. No realistic cluster runs that in a useful amount of time.
+Near-duplicate detection is the algorithmic heart of the pipeline. The naive formulation is straightforward and infeasible: for every pair of documents, measure how similar they are, and discard documents whose similarity to something already kept is above a threshold. With $N$ documents the pairwise cost is $O(N^2)$, and the per-pair cost is itself proportional to document size. For $N \sim 10^9$ documents, the scale of a CommonCrawl snapshot after exact dedup, this is roughly $10^{18}$ operations. No realistic cluster runs that in a useful amount of time.
 
 What modern pipelines actually do is a two-stage approximation. **MinHash** turns each document into a small fixed-length fingerprint that supports fast similarity *estimation*. **Locality-sensitive hashing (LSH)** uses those fingerprints to find candidate near-duplicates in sublinear time. The combination is what makes massive-scale near-dup possible. The construction is one of the elegant results in applied randomization, due to Broder (1997).
 
@@ -150,27 +150,27 @@ $$J(A, B) = \frac{|A \cap B|}{|A \cup B|}.$$
 
 Jaccard is symmetric, takes values in $[0, 1]$, and treats two sets as identical when they contain the same elements. The standard way to turn a document into a set is **shingling**: take all overlapping substrings of a fixed length and use that set of substrings as the document's representation. Character 5-shingles are the most common choice. The string "The quick" produces shingles {`"The q"`, `"he qu"`, `"e qui"`, `" quic"`, `"quick"`}; a slightly different string produces a slightly different shingle set, with most shingles shared. Two documents with high Jaccard on their shingle sets are near-duplicates.
 
-The naive $O(N^2 \cdot \bar{n})$ cost — where $\bar{n}$ is the average shingle count per document — is the wall MinHash exists to break. Comparing two documents directly requires looking at their full shingle sets. MinHash replaces that work with a comparison of two small fingerprints.
+The naive $O(N^2 \cdot \bar{n})$ cost, where $\bar{n}$ is the average shingle count per document, is the wall MinHash exists to break. Comparing two documents directly requires looking at their full shingle sets. MinHash replaces that work with a comparison of two small fingerprints.
 
 ### MinHash
 
-The clever observation, due to Broder, is about random hash functions. Suppose $h$ is a hash function that maps each shingle to a real number, with all real numbers equally likely. For two sets $A$ and $B$, consider $\min(h(A))$ — the smallest hash value over all shingles in $A$ — and $\min(h(B))$. Both minima look at the *same* set of elements in $A \cup B$; the difference is which subset gets considered. The element with the globally smallest hash in $A \cup B$ is equally likely to be any element of the union, and it ends up as both $\min(h(A))$ and $\min(h(B))$ exactly when it lies in $A \cap B$. So:
+The clever observation, due to Broder, is about random hash functions. Suppose $h$ is a hash function that maps each shingle to a real number, with all real numbers equally likely. For two sets $A$ and $B$, consider $\min(h(A))$, the smallest hash value over all shingles in $A$, and $\min(h(B))$. Both minima look at the *same* set of elements in $A \cup B$; the difference is which subset gets considered. The element with the globally smallest hash in $A \cup B$ is equally likely to be any element of the union, and it ends up as both $\min(h(A))$ and $\min(h(B))$ exactly when it lies in $A \cap B$. So:
 
 <Equation label="7.minhash">
 $$\Pr\bigl[\min(h(A)) = \min(h(B))\bigr] = \frac{|A \cap B|}{|A \cup B|} = J(A, B).$$
 </Equation>
 
-A single hash function gives a single random bit of evidence — minima match or they don't, and the probability of matching is $J(A, B)$. The **MinHash signature** uses $k$ independent hash functions $h_1, \ldots, h_k$ and stores the $k$-vector of minima for each document. The Jaccard estimate is the fraction of signature positions where the two documents agree:
+A single hash function gives a single random bit of evidence, minima match or they don't, and the probability of matching is $J(A, B)$. The **MinHash signature** uses $k$ independent hash functions $h_1, \ldots, h_k$ and stores the $k$-vector of minima for each document. The Jaccard estimate is the fraction of signature positions where the two documents agree:
 
 $$\hat{J}(A, B) = \frac{1}{k} \sum_{i=1}^{k} \mathbb{1}\bigl[h_i^{\min}(A) = h_i^{\min}(B)\bigr].$$
 
-The estimator is unbiased — its expectation is exactly $J(A, B)$ — and its standard error is roughly $1/\sqrt{k}$. With $k = 200$ hash functions, expect about 7% error on the Jaccard estimate. For dedup decisions made at threshold $0.8$ or higher, that error is acceptable. With $k = 64$ the error climbs to 12.5%; with $k = 1000$ it drops to 3%. The standard production choice sits near $k = 200$ as a balance between signature size and estimator precision.
+The estimator is unbiased, its expectation is exactly $J(A, B)$, and its standard error is roughly $1/\sqrt{k}$. With $k = 200$ hash functions, expect about 7% error on the Jaccard estimate. For dedup decisions made at threshold $0.8$ or higher, that error is acceptable. With $k = 64$ the error climbs to 12.5%; with $k = 1000$ it drops to 3%. The standard production choice sits near $k = 200$ as a balance between signature size and estimator precision.
 
-Why this is fast: comparing two MinHash signatures is $O(k)$ — count positions where the integers match. Comparing two raw shingle sets is $O(\bar{n})$ where $\bar{n}$ might be thousands. For typical documents, signature comparison is two to three orders of magnitude cheaper.
+Why this is fast: comparing two MinHash signatures is $O(k)$ (count positions where the integers match). Comparing two raw shingle sets is $O(\bar{n})$ where $\bar{n}$ might be thousands. For typical documents, signature comparison is two to three orders of magnitude cheaper.
 
 ### Locality-sensitive hashing (LSH)
 
-MinHash gives a fast similarity *estimator*. The pairwise search is still $O(N^2)$ — fast comparisons, but still $\binom{N}{2}$ of them. LSH gives a fast similarity *search*: a way to find pairs likely to have high Jaccard without comparing all pairs.
+MinHash gives a fast similarity *estimator*. The pairwise search is still $O(N^2)$, fast comparisons, but still $\binom{N}{2}$ of them. LSH gives a fast similarity *search*: a way to find pairs likely to have high Jaccard without comparing all pairs.
 
 The construction is short. Divide each $k$-length MinHash signature into $b$ **bands** of $r$ rows each, with $b \cdot r = k$. Hash each band of each signature to a bucket. Documents whose signatures share at least one bucket are *candidate* near-duplicates; everything else is treated as dissimilar without further comparison. Candidates are then verified with an explicit MinHash agreement count or a true Jaccard computation. The expected number of candidates is far smaller than $\binom{N}{2}$, which is the whole point.
 
@@ -178,7 +178,7 @@ The probability that two documents become candidates as a function of their true
 
 $$\Pr[\text{candidate}] \approx 1 - (1 - s^r)^b.$$
 
-The curve is sigmoid-shaped. Below the threshold it stays near zero; above the threshold it rises sharply to one. The transition is approximately at $s^* \approx (1/b)^{1/r}$. Choose $b$ and $r$ so that $s^*$ sits near the similarity threshold you actually want — usually somewhere in $[0.7, 0.9]$ for "near-duplicate" decisions. A common production choice is $k = 200$, $b = 50$, $r = 4$, which puts the transition near $s \approx 0.38$ and reliably catches near-duplicates above $s = 0.5$. Choosing $b$ and $r$ is a tuning exercise; the chapter does not derive the curve.
+The curve is sigmoid-shaped. Below the threshold it stays near zero; above the threshold it rises sharply to one. The transition is approximately at $s^* \approx (1/b)^{1/r}$. Choose $b$ and $r$ so that $s^*$ sits near the similarity threshold you actually want, usually somewhere in $[0.7, 0.9]$ for "near-duplicate" decisions. A common production choice is $k = 200$, $b = 50$, $r = 4$, which puts the transition near $s \approx 0.38$ and reliably catches near-duplicates above $s = 0.5$. Choosing $b$ and $r$ is a tuning exercise; the chapter does not derive the curve.
 
 <WidgetFrame title="MinHash near-duplicate detection" caption="Eight sample documents with intentional near-duplicates. Hand-computed Jaccard similarity from character 5-shingles (MinHash with k=200 would give estimates within ~7%). Adjust the threshold to see how aggressive dedup affects the kept set. Group A and B are intentional near-duplicate clusters; documents 6, 7 are distinct; document 8 is spam.">
   <DedupInteractive client:visible />
@@ -243,36 +243,36 @@ print(f"  MinHash estimate: {estimate_jaccard(sig_a, sig_c):.3f}")
 />
 
 <Callout type="insight">
-MinHash converts an $O(N^2 \cdot \bar{n})$ similarity computation into $O(N \cdot k)$ for the fingerprinting step plus an $O(N)$ candidate pool through LSH. For $N = 10^9$ documents and $k = 200$, this is the difference between "infeasible on any cluster" and "runs in a few hours on a large one." MinHash plus LSH is what makes near-duplicate dedup possible at the scale where most of the gain happens — and the gain, empirically, is substantial. SlimPajama's 49% reduction of RedPajama through aggressive dedup, and the improved downstream model quality it produced, is the empirical evidence that this stage of the pipeline pays off.
+MinHash converts an $O(N^2 \cdot \bar{n})$ similarity computation into $O(N \cdot k)$ for the fingerprinting step plus an $O(N)$ candidate pool through LSH. For $N = 10^9$ documents and $k = 200$, this is the difference between "infeasible on any cluster" and "runs in a few hours on a large one." MinHash plus LSH is what makes near-duplicate dedup possible at the scale where most of the gain happens, and the gain, empirically, is substantial. SlimPajama's 49% reduction of RedPajama through aggressive dedup, and the improved downstream model quality it produced, is the empirical evidence that this stage of the pipeline pays off.
 </Callout>
 
 ## Quality filtering
 
-Deduplication removes redundant content. Quality filtering removes low-value content — text that is unique but not worth training on. The two passes are complementary: dedup throws away the same content seen twice, quality filtering throws away content that no model should be learning from in the first place. Modern pipelines combine three flavors of filter, in roughly increasing order of cost and sophistication.
+Deduplication removes redundant content. Quality filtering removes low-value content, text that is unique but not worth training on. The two passes are complementary: dedup throws away the same content seen twice, quality filtering throws away content that no model should be learning from in the first place. Modern pipelines combine three flavors of filter, in roughly increasing order of cost and sophistication.
 
 ### Heuristic filters
 
-The cheap pass uses deterministic rules on text statistics. None of these rules is subtle; together they remove a meaningful fraction of the obvious noise. **Length filters** drop documents that are too short (under 100 characters — usually a stub, an error page, or a single-line scrape) and anomalously long (over a few million characters — usually a concatenated dump or a corrupt extraction). **Language detection** runs a fast classifier — fastText is the standard — to identify document language and drops anything outside the target language set. **Repetition filters** flag documents with high n-gram repetition; ratios like (unique words / total words) below 0.3 are strong signals of spam or autogenerated text. **Symbol-to-word ratio** identifies code, formulae, and tables; what to do with them depends on intent (a math-heavy model wants to keep them, a general chatbot might filter aggressively). **Profanity filters** drop documents above a threshold percent of profanity, applied carefully — over-aggressive profanity filtering removes legitimate adult content and historical text, and the literature warns against tuning it too tight.
+The cheap pass uses deterministic rules on text statistics. None of these rules is subtle; together they remove a meaningful fraction of the obvious noise. **Length filters** drop documents that are too short (under 100 characters, usually a stub, an error page, or a single-line scrape) and anomalously long (over a few million characters, usually a concatenated dump or a corrupt extraction). **Language detection** runs a fast classifier (fastText is the standard) to identify document language and drops anything outside the target language set. **Repetition filters** flag documents with high n-gram repetition; ratios like (unique words / total words) below 0.3 are strong signals of spam or autogenerated text. **Symbol-to-word ratio** identifies code, formulae, and tables; what to do with them depends on intent (a math-heavy model wants to keep them, a general chatbot might filter aggressively). **Profanity filters** drop documents above a threshold percent of profanity. Apply carefully: over-aggressive filtering removes legitimate adult content and historical text, and the literature warns against tuning it too tight.
 
-The heuristic pass is fast (single-pass over text, no model inference) and catches the most egregious problems. It does not catch subtle quality issues — a well-formed but uninformative blog post about pet rocks passes every heuristic and still does not belong in a high-quality training set.
+The heuristic pass is fast (single-pass over text, no model inference) and catches the most egregious problems. It does not catch subtle quality issues. A well-formed but uninformative blog post about pet rocks passes every heuristic and still does not belong in a high-quality training set.
 
 ### Classifier-based filters
 
-The next stage trains learned classifiers and uses their scores as filters. The simplest version, used in early curated datasets, is a **Wikipedia-likeness** classifier: train a binary classifier on Wikipedia (positive class) versus random web pages (negative class), then score new web documents and filter by classifier confidence. The classifier learns the surface features of curated reference prose — coherent paragraphs, complete sentences, factual tone — and rejects documents that lack them. It works passably well but bakes in Wikipedia's specific style as the implicit target.
+The next stage trains learned classifiers and uses their scores as filters. The simplest version, used in early curated datasets, is a **Wikipedia-likeness** classifier: train a binary classifier on Wikipedia (positive class) versus random web pages (negative class), then score new web documents and filter by classifier confidence. The classifier learns the surface features of curated reference prose (coherent paragraphs, complete sentences, factual tone) and rejects documents that lack them. It works passably well but bakes in Wikipedia's specific style as the implicit target.
 
-The 2024 leap was FineWeb-Edu's **educational-quality classifier**. The training labels come from an LLM judging "is this educational content?" on a sample of web pages — the same kind of LLM-as-a-judge labeling that became standard for instruction-tuning data — and a classifier is trained on those labels. The resulting filter keeps about 9% of FineWeb. That 9% trains dramatically better models than 9% sampled randomly from FineWeb, and the gap is large enough that the educational filter has become the de facto standard for curated web data. The key innovation is the labeling target ("educational content" is what we actually want, not "Wikipedia-like") and the use of an LLM to generate enough labels to make the target learnable.
+The 2024 leap was FineWeb-Edu's **educational-quality classifier**. The training labels come from an LLM judging "is this educational content?" on a sample of web pages (the same kind of LLM-as-a-judge labeling that became standard for instruction-tuning data), and a classifier is trained on those labels. The resulting filter keeps about 9% of FineWeb. That 9% trains dramatically better models than 9% sampled randomly from FineWeb, and the gap is large enough that the educational filter has become the de facto standard for curated web data. The key innovation is the labeling target ("educational content" is what we actually want, not "Wikipedia-like") and the use of an LLM to generate enough labels to make the target learnable.
 
 **Perplexity filtering** is a third classifier-based approach. Score each document with a small reference model. Documents with very *low* perplexity (the reference model finds them trivially predictable) are usually boilerplate, repeated phrases, or formatted text with little linguistic content; documents with very *high* perplexity (the reference model finds them surprising in a bad way) are usually noise, broken extractions, or non-English text that slipped through language detection. Keep the documents in a "Goldilocks" perplexity range. The bounds are tuning hyperparameters and vary by intent.
 
 ### Model-based filters
 
-The most expensive filters use an LLM directly to score document quality. The LLM looks at each document and produces a quality judgment — sometimes a score, sometimes a category, sometimes a longer rationale. DCLM's curation pipeline uses model-based scoring for at least part of its filtering. The cost-per-token is much higher than heuristics or small classifiers, but the model can catch subtleties (a well-written page that argues a conspiracy theory; a page that looks educational but is factually wrong) that the cheaper filters miss. As LLM inference gets cheaper, model-based filtering becomes more attractive; in 2024+ pipelines, it is increasingly common as a final-stage filter applied to whatever survived the cheaper stages.
+The most expensive filters use an LLM directly to score document quality. The LLM looks at each document and produces a quality judgment: sometimes a score, sometimes a category, sometimes a longer rationale. DCLM's curation pipeline uses model-based scoring for at least part of its filtering. The cost-per-token is much higher than heuristics or small classifiers, but the model can catch subtleties (a well-written page that argues a conspiracy theory; a page that looks educational but is factually wrong) that the cheaper filters miss. As LLM inference gets cheaper, model-based filtering becomes more attractive; in 2024+ pipelines, it is increasingly common as a final-stage filter applied to whatever survived the cheaper stages.
 
-<WidgetFrame title="Quality filters" caption="Ten text samples spanning the quality spectrum. Toggle each filter (length, language, repetition, classifier) on or off to see which samples are kept. The 'drops alone' count shows how many samples that filter would catch by itself — informative for seeing what each filter catches that others miss.">
+<WidgetFrame title="Quality filters" caption="Ten text samples spanning the quality spectrum. Toggle each filter (length, language, repetition, classifier) on or off to see which samples are kept. The 'drops alone' count shows how many samples that filter would catch by itself, informative for seeing what each filter catches that others miss.">
   <QualityFilter client:visible />
 </WidgetFrame>
 
-A handful of heuristic rules already does meaningful work. The implementation below — length, ASCII-letter ratio as a crude English proxy, and unique-word ratio — catches the obvious noise across a small handful of sample documents. Production pipelines layer dozens of such rules plus classifiers on top, but the heuristic pass alone removes a noticeable fraction of CommonCrawl noise at almost no compute cost.
+A handful of heuristic rules already does meaningful work. The implementation below (length, ASCII-letter ratio as a crude English proxy, and unique-word ratio) catches the obvious noise across a small handful of sample documents. Production pipelines layer dozens of such rules plus classifiers on top, but the heuristic pass alone removes a noticeable fraction of CommonCrawl noise at almost no compute cost.
 
 <RunnableCode
   client:visible
@@ -326,18 +326,18 @@ for text, _label in samples:
 />
 
 <Callout type="aside">
-The framing of "quality filtering" suggests purely subtractive cleanup — remove the bad, keep the rest. Modern practice is more curated than that. FineWeb-Edu is essentially "filter to keep only the small fraction that looks educational"; the result is a 9× smaller dataset that trains better models. The pipeline isn't only removing junk — it is *upweighting* the highest-quality content by throwing away everything else. The mental model "curate toward target quality" fits the 2024+ practice better than "scrub the bad bits out."
+The framing of "quality filtering" suggests purely subtractive cleanup: remove the bad, keep the rest. Modern practice is more curated than that. FineWeb-Edu is essentially "filter to keep only the small fraction that looks educational"; the result is a 9× smaller dataset that trains better models. The pipeline isn't only removing junk; it is *upweighting* the highest-quality content by throwing away everything else. The mental model "curate toward target quality" fits the 2024+ practice better than "scrub the bad bits out."
 </Callout>
 
-## Decontamination — removing benchmark leaks
+## Decontamination: removing benchmark leaks
 
-The most subtle filter is decontamination. If MMLU questions, HumanEval problems, or GSM8K math word problems appear in the training corpus — verbatim or close to it — the model learns to recall the answers instead of solving from scratch. When the same model is then evaluated on those benchmarks, the reported score reflects memorization, not capability. The problem became visible in the 2022–2023 period as benchmark scores climbed faster than independent capability estimates suggested they should.
+The most subtle filter is decontamination. If MMLU questions, HumanEval problems, or GSM8K math word problems appear in the training corpus, verbatim or close to it, the model learns to recall the answers instead of solving from scratch. When the same model is then evaluated on those benchmarks, the reported score reflects memorization, not capability. The problem became visible in the 2022–2023 period as benchmark scores climbed faster than independent capability estimates suggested they should.
 
-The fix is simple in concept. Take the text of every benchmark of interest — MMLU, HumanEval, GSM8K, ARC, MATH, BIG-Bench, and so on — and construct n-gram fingerprints. The standard choice is **13-gram word fingerprints**: too short and almost every document matches *something* (the phrase "the answer is" appears across the web); too long and paraphrases slip through. Thirteen words gives a useful balance. For each training document, compute its 13-grams and check whether any match the benchmark set. If yes, drop the document or flag it.
+The fix is simple in concept. Take the text of every benchmark of interest (MMLU, HumanEval, GSM8K, ARC, MATH, BIG-Bench, and so on) and construct n-gram fingerprints. The standard choice is **13-gram word fingerprints**: too short and almost every document matches *something* (the phrase "the answer is" appears across the web); too long and paraphrases slip through. Thirteen words gives a useful balance. For each training document, compute its 13-grams and check whether any match the benchmark set. If yes, drop the document or flag it.
 
-The implementation is short — a hash join between two sets of n-grams. Whether it actually catches contamination is the hard part. Three failure modes recur. **Paraphrases evade.** "What is the capital of France?" and "France's capital city is what?" share zero 13-grams; an n-gram filter has no way to know they ask the same question. **Translations evade.** Benchmark text translated to another language and back is not n-gram-equivalent to the original. **Partial overlaps slip through.** A document that quotes only the question, only the answer, or only an explanation will match fewer 13-grams than the threshold and survive. In each case, the contamination is real and the filter misses it.
+The implementation is short, a hash join between two sets of n-grams. Whether it actually catches contamination is the hard part. Three failure modes recur. **Paraphrases evade.** "What is the capital of France?" and "France's capital city is what?" share zero 13-grams; an n-gram filter has no way to know they ask the same question. **Translations evade.** Benchmark text translated to another language and back is not n-gram-equivalent to the original. **Partial overlaps slip through.** A document that quotes only the question, only the answer, or only an explanation will match fewer 13-grams than the threshold and survive. In each case, the contamination is real and the filter misses it.
 
-The honest summary is that decontamination is *approximate*. Modern public datasets (FineWeb, DCLM) publish their decontamination procedures and the benchmarks they filter against, which lets independent researchers audit. The audits consistently find residual contamination at low single-digit percentages. The reported benchmark scores in 2024+ should be read with that in mind — they include a small but real contribution from leaked content, even in carefully curated datasets. This is partly why the field is increasingly moving toward "private" benchmarks (held-out by the benchmark maintainers) and "human-judged" evaluations rather than pure score-on-public-benchmark reporting.
+The honest summary is that decontamination is *approximate*. Modern public datasets (FineWeb, DCLM) publish their decontamination procedures and the benchmarks they filter against, which lets independent researchers audit. The audits consistently find residual contamination at low single-digit percentages. The reported benchmark scores in 2024+ should be read with that in mind: they include a small but real contribution from leaked content, even in carefully curated datasets. This is partly why the field is increasingly moving toward "private" benchmarks (held-out by the benchmark maintainers) and "human-judged" evaluations rather than pure score-on-public-benchmark reporting.
 
 <RunnableCode
   client:visible
@@ -348,7 +348,7 @@ The honest summary is that decontamination is *approximate*. Modern public datas
         return {tuple(words)}
     return {tuple(words[i:i+n]) for i in range(len(words) - n + 1)}
 
-# A "benchmark" entry — a question + answer pattern.
+# A "benchmark" entry: a question + answer pattern.
 benchmark = ("Question: What is the chemical symbol for gold ? "
              "Answer: The chemical symbol for gold is Au.")
 benchmark_grams = ngrams(benchmark, n=13)
@@ -356,7 +356,7 @@ benchmark_grams = ngrams(benchmark, n=13)
 # Candidate training documents.
 documents = [
     "Gold is a precious metal used in jewelry and electronics for centuries.",
-    # Verbatim copy of the benchmark text — should be flagged.
+    # Verbatim copy of the benchmark text, should be flagged.
     "Question: What is the chemical symbol for gold ? "
     "Answer: The chemical symbol for gold is Au.",
     "The atomic number of gold is 79, and its symbol Au comes from Latin 'aurum'.",
@@ -380,42 +380,42 @@ for i, d in enumerate(documents):
 />
 
 <Callout type="warning">
-"Decontamination is solved" is a comforting story and not quite true. n-gram matching catches verbatim leaks and very close paraphrases; it misses true paraphrases, translations, and partial overlaps. Modern public datasets publish their decontamination procedures (FineWeb and DCLM both do), which makes the situation auditable — and the audits consistently find residual contamination at low single-digit percentages. Treat raw benchmark scores in 2024+ as inflated by a small but nonzero amount, and trust held-out or human-judged evaluations more than public-benchmark numbers when the gap is small.
+"Decontamination is solved" is a comforting story and not quite true. n-gram matching catches verbatim leaks and very close paraphrases; it misses true paraphrases, translations, and partial overlaps. Modern public datasets publish their decontamination procedures (FineWeb and DCLM both do), which makes the situation auditable, and the audits consistently find residual contamination at low single-digit percentages. Treat raw benchmark scores in 2024+ as inflated by a small but nonzero amount, and trust held-out or human-judged evaluations more than public-benchmark numbers when the gap is small.
 </Callout>
 
-## Modern datasets — a timeline
+## Modern datasets: a timeline
 
 The field's data practice has evolved fast. The arc from 2020 to 2024 traces a steady shift from "lots of tokens, modest filtering" to "fewer tokens, aggressive curation," and the marker results along the way are worth knowing by name.
 
-**Pre-2020.** GPT-2 (Radford et al. 2019) trained on WebText — 40 GB of text scraped from pages linked in high-karma Reddit posts. The corpus was proprietary, but the construction recipe (use Reddit as a quality filter for which web pages to crawl) was novel and influential. GPT-3 (Brown et al. 2020) used a heavier mix: 60% filtered CommonCrawl, 22% WebText2, 16% Books1+Books2, 3% Wikipedia, weighted upward during training toward the higher-quality sources. Total: roughly 570B tokens. The data itself was not released, and the filtering procedures were documented only sketchily. Most of GPT-3's training tokens were lightly-filtered CommonCrawl by current standards.
+**Pre-2020.** GPT-2 (Radford et al. 2019) trained on WebText, 40 GB of text scraped from pages linked in high-karma Reddit posts. The corpus was proprietary, but the construction recipe (use Reddit as a quality filter for which web pages to crawl) was novel and influential. GPT-3 (Brown et al. 2020) used a heavier mix: 60% filtered CommonCrawl, 22% WebText2, 16% Books1+Books2, 3% Wikipedia, weighted upward during training toward the higher-quality sources. Total: roughly 570B tokens. The data itself was not released, and the filtering procedures were documented only sketchily. Most of GPT-3's training tokens were lightly-filtered CommonCrawl by current standards.
 
-**The Pile (EleutherAI 2020, [arxiv.org/abs/2101.00027](https://arxiv.org/abs/2101.00027)).** EleutherAI released 800 GB of curated text drawn from 22 sub-datasets — CommonCrawl, ArXiv, GitHub, Books3, PubMed Central, StackExchange, OpenWebText2, and others. It was the first major *open* curated mixture and set the template for "diverse sources, deliberately mixed" that subsequent datasets followed. GPT-Neo, GPT-J, and Pythia trained on The Pile; it was the public alternative to GPT-3's proprietary mix and the reference point for open LLM training for several years.
+**The Pile (EleutherAI 2020, [arxiv.org/abs/2101.00027](https://arxiv.org/abs/2101.00027)).** EleutherAI released 800 GB of curated text drawn from 22 sub-datasets, CommonCrawl, ArXiv, GitHub, Books3, PubMed Central, StackExchange, OpenWebText2, and others. It was the first major *open* curated mixture and set the template for "diverse sources, deliberately mixed" that subsequent datasets followed. GPT-Neo, GPT-J, and Pythia trained on The Pile; it was the public alternative to GPT-3's proprietary mix and the reference point for open LLM training for several years.
 
 **RedPajama (Together AI 2023).** Together AI published a 1.2T-token open recipe to reproduce LLaMA's training data: the same source mix (CommonCrawl, C4, GitHub, Wikipedia, Books, ArXiv, StackExchange), reconstructed from public sources. RedPajama was the first public LLaMA-grade dataset and made it possible for open-source labs to train models comparable to LLaMA-1 without access to proprietary data.
 
-**SlimPajama (Cerebras 2023).** Cerebras took RedPajama and ran aggressive deduplication — both exact and near-duplicate via MinHash — that removed 49% of tokens. The result, 627B tokens of cleaned RedPajama, trained models that *outperformed* equivalent models on the full 1.2T. SlimPajama was the empirical demonstration that dedup quality matters more than raw size at scale, and it shifted how subsequent open datasets framed their value proposition: not "we have more tokens" but "we have better tokens."
+**SlimPajama (Cerebras 2023).** Cerebras took RedPajama and ran aggressive deduplication, both exact and near-duplicate via MinHash, that removed 49% of tokens. The result, 627B tokens of cleaned RedPajama, trained models that *outperformed* equivalent models on the full 1.2T. SlimPajama was the empirical demonstration that dedup quality matters more than raw size at scale, and it shifted how subsequent open datasets framed their value proposition: not "we have more tokens" but "we have better tokens."
 
 **FineWeb (HuggingFace 2024, [arxiv.org/abs/2406.17557](https://arxiv.org/abs/2406.17557)).** A 15T-token open dataset built from CommonCrawl with detailed ablations of every filtering and dedup decision. The standout artifact is **FineWeb-Edu**: the 1.3T-token subset that survives FineWeb's educational-quality classifier. Models trained on FineWeb-Edu match or beat models trained on much larger raw mixtures, and the ablation tables in the FineWeb paper are the clearest public evidence that classifier-based filtering pays off.
 
-**DCLM (Apple 2024, [arxiv.org/abs/2406.11794](https://arxiv.org/abs/2406.11794)).** DataComp-LM is a benchmark for studying data curation and a released curated dataset (DCLM-Baseline, 3.8T tokens) built using extensive filtering, dedup, and decontamination. The headline result: a 7B model trained on DCLM-Baseline outperforms LLaMA-3 8B trained on 15T tokens. DCLM is, as of 2024, the canonical "quality beats quantity at scale" demonstration. Apple released the dataset, the benchmark, and the curation pipeline — making it the most thoroughly documented modern data curation effort in public.
+**DCLM (Apple 2024, [arxiv.org/abs/2406.11794](https://arxiv.org/abs/2406.11794)).** DataComp-LM is a benchmark for studying data curation and a released curated dataset (DCLM-Baseline, 3.8T tokens) built using extensive filtering, dedup, and decontamination. The headline result: a 7B model trained on DCLM-Baseline outperforms LLaMA-3 8B trained on 15T tokens. DCLM is, as of 2024, the canonical "quality beats quantity at scale" demonstration. Apple released the dataset, the benchmark, and the curation pipeline, making it the most thoroughly documented modern data curation effort in public.
 
-The arc of what the field learned looks like this. **2020 era**: scale matters most — more tokens, bigger models. **2022 era (Chinchilla)**: match parameters to tokens; pure parameter scaling was off-balance. **2023 era (SlimPajama)**: dedup quality matters as much as raw size; redundant data is wasted compute. **2024 era (DCLM)**: aggressive filtering beats large unfiltered. Each phase did not invalidate the previous one; rather, each added a constraint that the previous phase had under-weighted.
+The arc of what the field learned looks like this. **2020 era**: scale matters most, more tokens, bigger models. **2022 era (Chinchilla)**: match parameters to tokens; pure parameter scaling was off-balance. **2023 era (SlimPajama)**: dedup quality matters as much as raw size; redundant data is wasted compute. **2024 era (DCLM)**: aggressive filtering beats large unfiltered. Each phase did not invalidate the previous one; rather, each added a constraint that the previous phase had under-weighted.
 
-A footnote that increasingly matters: **synthetic data**. Post-2024, the highest-performing models report mixing in LLM-generated synthetic content for specific high-value domains — math, code, reasoning. DCLM and similar pipelines include carefully-prompted synthetic data alongside filtered web. The proportions are usually small (single-digit percentages of the total mix) but their contribution to capability is reportedly outsized for the targeted domains. Synthetic data for pretraining is a frontier topic on its own; Chapter 13 covers synthetic data construction in the context of instruction tuning, where it has been used for longer and is better characterized.
+A footnote that increasingly matters: **synthetic data**. Post-2024, the highest-performing models report mixing in LLM-generated synthetic content for specific high-value domains, math, code, reasoning. DCLM and similar pipelines include carefully-prompted synthetic data alongside filtered web. The proportions are usually small (single-digit percentages of the total mix) but their contribution to capability is reportedly outsized for the targeted domains. Synthetic data for pretraining is a frontier topic on its own; Chapter 13 covers synthetic data construction in the context of instruction tuning, where it has been used for longer and is better characterized.
 
-## Bridge — from corpus to model
+## Bridge: from corpus to model
 
 What this chapter assembled is a recipe for producing a training-ready corpus from raw web text. Start with CommonCrawl. Extract plain text from WARC into WET. Run exact dedup with a fast hash. Run near-duplicate dedup with MinHash and LSH. Apply heuristic quality filters (length, language, repetition, ratios). Apply classifier-based filters (Wikipedia-likeness, then the educational-quality classifier that 2024 made standard). Optionally apply model-based filters for the final stage. Run decontamination against all benchmarks of interest. Mix the resulting corpus with other curated sources (code, books, ArXiv, Wikipedia) using intentional weights. What comes out is trillions of tokens of actual high-value text.
 
-What this chapter did not produce is a model. The architecture from Chapters 1–6 still has random initial weights — every Q matrix, every K matrix, every embedding row, every FFN bias is a sample from a small normal distribution. A forward pass on this untrained model produces near-uniform probability distributions over the vocabulary. The model is the *function*, ready to be specialized; the corpus is the *data*, ready to specialize it. The specialization is training.
+What this chapter did not produce is a model. The architecture from Chapters 1–6 still has random initial weights, every Q matrix, every K matrix, every embedding row, every FFN bias is a sample from a small normal distribution. A forward pass on this untrained model produces near-uniform probability distributions over the vocabulary. The model is the *function*, ready to be specialized; the corpus is the *data*, ready to specialize it. The specialization is training.
 
-Chapter 8 picks up here. It builds the training loop: cross-entropy loss over the predicted token distribution, AdamW as the optimizer, a learning-rate schedule with warmup and cosine decay, gradient clipping, mixed-precision arithmetic, data loading from the corpus into batches, and the engineering of running this loop for billions of steps without losing numerical stability. After Chapter 8, the architecture from Chapters 1–6 and the corpus from this chapter are joined into a working small LLM — small in scale, but real in the architecture and the data pipeline that produced it.
+Chapter 8 picks up here. It builds the training loop: cross-entropy loss over the predicted token distribution, AdamW as the optimizer, a learning-rate schedule with warmup and cosine decay, gradient clipping, mixed-precision arithmetic, data loading from the corpus into batches, and the engineering of running this loop for billions of steps without losing numerical stability. After Chapter 8, the architecture from Chapters 1–6 and the corpus from this chapter are joined into a working small LLM, small in scale, but real in the architecture and the data pipeline that produced it.
 
 ## Exercises
 
-The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default; try the problem first.
 
-### Exercise 1 (medium) — Implement MinHash and verify the Jaccard estimate
+### Exercise 1 (medium): Implement MinHash and verify the Jaccard estimate
 
 Implement MinHash from scratch and verify its accuracy as a Jaccard similarity estimator. Compare the MinHash estimate to true Jaccard for several pairs of documents; verify the standard error decreases with more hash functions (k).
 
@@ -463,19 +463,19 @@ text_c = "Quantum mechanics is hard."
 # print(f"MinHash J(a,c) ≈ {estimate_jaccard(sig_a, sig_c):.3f}")
 
 # Standard error should be ≈ 1/sqrt(num_hashes)
-# Try with num_hashes = 50 vs 500 — error should be smaller with more hashes
+# Try with num_hashes = 50 vs 500: error should be smaller with more hashes
 `}
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — LSH banding S-curve
+### Exercise 2 (medium): LSH banding S-curve
 
 Implement LSH banding: divide a MinHash signature into `b` bands of `r` rows, hash each band, and use bucket collisions to find candidate near-duplicates. Plot the S-curve: probability of being a candidate vs true similarity, for several choices of `(b, r)`.
 
 <details>
 <summary>Hint</summary>
 
-For chosen (b, r), the probability that two documents become candidates given true similarity `s` is approximately `1 - (1 - s^r)^b`. This is an S-curve — flat near 0 for low similarity, sharp transition near `s ≈ (1/b)^(1/r)`, flat near 1 for high similarity. Plot the curve for (b=50, r=4), (b=20, r=10), and (b=100, r=2) to see how (b, r) shapes the cutoff.
+For chosen (b, r), the probability that two documents become candidates given true similarity `s` is approximately `1 - (1 - s^r)^b`. This is an S-curve, flat near 0 for low similarity, sharp transition near `s ≈ (1/b)^(1/r)`, flat near 1 for high similarity. Plot the curve for (b=50, r=4), (b=20, r=10), and (b=100, r=2) to see how (b, r) shapes the cutoff.
 
 </details>
 
@@ -505,14 +505,14 @@ for s in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
     pass
 
 # Interpretation:
-# - (50, 4) — good for finding moderately similar pairs (threshold ~0.4)
-# - (20, 10) — only finds very similar pairs (threshold ~0.74)
-# - (100, 2) — too permissive — flags weakly similar as candidates
+# - (50, 4): good for finding moderately similar pairs (threshold ~0.4)
+# - (20, 10): only finds very similar pairs (threshold ~0.74)
+# - (100, 2): too permissive, flags weakly similar as candidates
 `}
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Build a multi-filter quality pipeline
+### Exercise 3 (medium): Build a multi-filter quality pipeline
 
 Combine multiple quality heuristics (length, language, repetition, profanity) into a single pipeline. Apply to a small corpus; report per-filter rejection counts and the final kept set.
 
@@ -569,7 +569,7 @@ corpus = [
   packages={[]}
 />
 
-### Exercise 4 (hard) — Decontamination and its limitations
+### Exercise 4 (hard): Decontamination and its limitations
 
 Implement n-gram-based decontamination: given benchmark text, identify training documents containing matching n-grams. Then demonstrate the limitation: paraphrased versions of the benchmark question slip through.
 
@@ -597,10 +597,10 @@ def contains_benchmark(doc, benchmark_ngrams, n=13):
 benchmark = "What is the chemical symbol for gold ? Answer : The chemical symbol for gold is Au"
 benchmark_ngrams_set = ngrams(benchmark, n=13)
 
-# Training corpus — some clean, some contaminated, some paraphrased
+# Training corpus: some clean, some contaminated, some paraphrased
 training_docs = [
     "Gold is a precious metal used in jewelry for thousands of years.",                          # safe
-    "What is the chemical symbol for gold ? Answer : The chemical symbol for gold is Au — atomic number 79.",  # contaminated (exact)
+    "What is the chemical symbol for gold ? Answer : The chemical symbol for gold is Au, atomic number 79.",  # contaminated (exact)
     "The chemical symbol for gold, denoted Au from Latin 'aurum', appears on the periodic table.",  # PARAPHRASE
 ]
 
@@ -615,4 +615,4 @@ training_docs = [
   packages={[]}
 />
 
-The takeaway from this chapter is the empirical one. The architecture is the recipe; the data is the ingredients. With great data, a small model can be remarkable. With bad data, a huge model is mediocre. Modern pretraining is as much data engineering as it is machine learning, and the leaderboards reflect that — DCLM-Baseline beating LLaMA-3 with a quarter of the tokens is what data engineering, done seriously, can buy.
+The takeaway from this chapter is the empirical one. The architecture is the recipe; the data is the ingredients. With great data, a small model can be remarkable. With bad data, a huge model is mediocre. Modern pretraining is as much data engineering as it is machine learning, and the leaderboards reflect that: DCLM-Baseline beating LLaMA-3 with a quarter of the tokens is what data engineering, done seriously, can buy.
