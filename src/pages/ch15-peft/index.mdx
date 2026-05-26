@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch15-peft
-description: Parameter-efficient fine-tuning (PEFT), the practical alternative to full fine-tuning that powers most production deployments. Where Chapters 13–14 covered post-training methods (SFT, RLHF, DPO, RLVR), this chapter covers the engineering that makes them tractable, rather than training all 70B parameters of a frontier model, train ~0.1–1%, a small low-rank update that captures the essential changes. The dominant technique is LoRA (Hu et al. 2021); QLoRA (Dettmers et al. 2023) makes it accessible on consumer GPUs by combining 4-bit NF4 quantization of the base model with LoRA training. The chapter also covers adapters, prefix tuning, (IA)³, DoRA, and the modern PEFT family. Most production fine-tuning is LoRA-based, this chapter explains why and how.
+description: Parameter-efficient fine-tuning (PEFT), the practical alternative to full fine-tuning that powers most production deployments. Where Chapters 13–14 covered post-training methods (SFT, RLHF, DPO, RLVR), this chapter covers the engineering that makes them tractable: rather than training all 70B parameters of a frontier model, train ~0.1–1%, a small low-rank update that captures the essential changes. The dominant technique is LoRA (Hu et al. 2021); QLoRA (Dettmers et al. 2023) makes it accessible on consumer GPUs by combining 4-bit NF4 quantization of the base model with LoRA training. The chapter also covers adapters, prefix tuning, (IA)³, DoRA, and the modern PEFT family. Most production fine-tuning is LoRA-based; this chapter explains why and how.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
@@ -10,7 +10,7 @@ import { LoRAArchitecture, ParameterBudgetCalculator } from '@components/widgets
 
 Chapters 13 and 14 left you with the recipes for post-training. Take a base model, run SFT to teach it the chatbot format, layer DPO or RLHF on top to teach it quality, and you have a useful assistant. The recipes are clear; the problem is that doing them at the parameter scale of modern models is operationally brutal. Full fine-tuning of a $70$B-parameter model holds parameters, gradients, and AdamW's two optimizer moments in memory simultaneously, roughly $840$ GB before activations. That is $10\times$ A100s at minimum. Out of reach for most teams.
 
-Most production fine-tuning is not done that way. Instead, teams freeze the base model, no gradient, no optimizer state for those parameters, and train only a small subset, typically $0.1\%$ to $1\%$ of the base model's parameters. The dominant technique is **LoRA** (Low-Rank Adaptation), introduced by Hu et al. (2021). The hypothesis: fine-tuning updates have *low intrinsic dimensionality*, the matrix of changes $\Delta W = W_{\text{ft}} - W_{\text{base}}$ can be well approximated by a low-rank decomposition $\Delta W \approx BA$. Train $B$ and $A$, both small. Leave $W$ frozen and large.
+Most production fine-tuning is not done that way. Instead, teams freeze the base model (no gradient, no optimizer state for those parameters) and train only a small subset, typically $0.1\%$ to $1\%$ of the base model's parameters. The dominant technique is **LoRA** (Low-Rank Adaptation), introduced by Hu et al. (2021). The hypothesis: fine-tuning updates have *low intrinsic dimensionality*. The matrix of changes $\Delta W = W_{\text{ft}} - W_{\text{base}}$ can be well approximated by a low-rank decomposition $\Delta W \approx BA$. Train $B$ and $A$, both small. Leave $W$ frozen and large.
 
 Combined with **QLoRA** (Dettmers et al. 2023), which adds $4$-bit NF4 quantization of the base model to LoRA training, you can fine-tune a $70$B model on a single $48$ GB GPU. This is what made open-source post-training explode after early $2023$. This chapter walks through LoRA mechanics, the broader PEFT family (adapters, prefix tuning, (IA)³), QLoRA's tricks, and the modern variants (DoRA, AdaLoRA, MoLoRA). It is the practical-engineering counterpart to Chapters 13 and 14's algorithmic content.
 
@@ -26,7 +26,7 @@ The arithmetic is uncomfortable. Weights plus gradients plus optimizer state alo
 
 The key observation is that most parameters do not need to change much during fine-tuning. Pre-training spent trillions of tokens learning useful features, syntax, world knowledge, the residual-stream representations explored in Chapter 8. Fine-tuning typically teaches the model to *combine* and *select among* those features differently, not to relearn them. The "combination knob" has fewer degrees of freedom than the underlying feature library.
 
-If that observation is right, then the path forward is direct: freeze the base model entirely, and train only a small subset of additional parameters that captures the combination updates. Memory drops by roughly $10\times$, because the base weights need no gradient or optimizer state, they just sit in HBM as constants during the forward pass. That is the PEFT promise, and the rest of the chapter is about cashing it in.
+If that observation is right, then the path forward is direct: freeze the base model entirely, and train only a small subset of additional parameters that captures the combination updates. Memory drops by roughly $10\times$, because the base weights need no gradient or optimizer state: they just sit in HBM as constants during the forward pass. That is the PEFT promise, and the rest of the chapter is about cashing it in.
 
 <Callout type="note">
 Chapter 15 is the *engineering* chapter of Phase 11. Chapters 13 and 14 gave you methods; this chapter gives you the engineering that makes those methods practical at scale. Most production post-training, open-source and frontier, uses some form of PEFT. The conceptual material is straightforward; the impact is enormous.
@@ -61,7 +61,7 @@ The savings are striking. For $d = k = 4096$ (a typical attention projection in 
 Aggregated across a $7$B transformer with LoRA on all attention projections, the trainable parameter count typically lands at $0.1\%$ to $1\%$ of base model parameters. For a $70$B model that is $50$–$500$ MB of trainable parameters against $140$ GB of frozen base. Gradients and optimizer state only need to cover the trainable subset, which is where the order-of-magnitude memory savings come from.
 
 <Callout type="aside">
-The low-rank hypothesis is not a theorem, it is an empirical observation. There exist tasks where it fails, rare but real. For most instruction tuning, preference optimization, and style adaptation, low-rank captures the relevant changes. For tasks requiring *deep* knowledge updates, adding a new language, a new modality, or substantial reasoning capability, full fine-tuning often wins. Section 8 returns to this trade-off.
+The low-rank hypothesis is not a theorem; it is an empirical observation. There exist tasks where it fails, rare but real. For most instruction tuning, preference optimization, and style adaptation, low-rank captures the relevant changes. For tasks requiring *deep* knowledge updates (adding a new language, a new modality, or substantial reasoning capability), full fine-tuning often wins. Section 8 returns to this trade-off.
 </Callout>
 
 The next section turns the decomposition into the actual forward pass and training recipe.
@@ -74,7 +74,7 @@ For a weight matrix $W_0 \in \mathbb{R}^{d \times k}$ in the base model, LoRA mo
 
 $$h = W_0 x + \Delta W x = W_0 x + \frac{\alpha}{r} B A x$$
 
-$W_0$ is the *frozen* pre-trained weight matrix, it never receives a gradient and never enters the optimizer state. $A$ and $B$ are the *trainable* low-rank factors. $r$ is the rank (typically $8$ to $32$). $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$, discussed in the next section). The forward pass is two matrix multiplications in parallel; the LoRA path is cheap because $r$ is small.
+$W_0$ is the *frozen* pre-trained weight matrix; it never receives a gradient and never enters the optimizer state. $A$ and $B$ are the *trainable* low-rank factors. $r$ is the rank (typically $8$ to $32$). $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$, discussed in the next section). The forward pass is two matrix multiplications in parallel; the LoRA path is cheap because $r$ is small.
 
 ### Initialization
 
@@ -84,7 +84,7 @@ The zero-init of $B$ is load-bearing. Without it, for instance, if both $A$ and 
 
 ### Merging vs adapter-mode
 
-At inference, LoRA gives you two options for how to evaluate the model. The first is to **merge** the adapter into the base weight matrix once at the end of training: compute $W_{\text{merged}} = W_0 + (\alpha/r) B A$ and store the result. From then on, the forward pass uses $W_{\text{merged}}$ directly, there is no LoRA path to evaluate at inference, and the model is computationally indistinguishable from a base model of the same shape. **Zero inference overhead.** This is the right choice for production deployment when the adapter is fixed.
+At inference, LoRA gives you two options for how to evaluate the model. The first is to **merge** the adapter into the base weight matrix once at the end of training: compute $W_{\text{merged}} = W_0 + (\alpha/r) B A$ and store the result. From then on, the forward pass uses $W_{\text{merged}}$ directly; there is no LoRA path to evaluate at inference, and the model is computationally indistinguishable from a base model of the same shape. **Zero inference overhead.** This is the right choice for production deployment when the adapter is fixed.
 
 The second option is **adapter-mode** inference. Keep $W_0$, $A$, and $B$ separate in memory; evaluate both terms on every forward pass. The cost is a small constant overhead per layer, the LoRA matmul against $r$-dimensional bottlenecks is cheap, but it is not free. The benefit is that adapters are *swappable* per request. A serving stack can load one base model and many adapter checkpoints, then route incoming requests to whichever adapter the request needs. Modern inference engines (vLLM, TGI) support multi-LoRA serving in exactly this mode, and it is increasingly common when one base model powers dozens of fine-tuned personas or vertical specializations.
 
