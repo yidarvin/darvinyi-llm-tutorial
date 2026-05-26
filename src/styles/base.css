@@ -1,5 +1,13 @@
-/* Headings — name the thing; no acts-of-discussing-the-thing */
-h1 {
+/* Headings — name the thing; no acts-of-discussing-the-thing.
+ *
+ * Selectors are prefixed with `body ` so specificity is (0,0,2) — beats
+ * Tailwind preflight's `h1,h2,h3,h4,h5,h6 { font-size: inherit; font-weight:
+ * inherit }` reset (0,0,1), which loads after this file via the @tailwind
+ * directive in global.css. Class-scoped headings in components
+ * (e.g., .sidebar-part-title) keep their (0,1,0) specificity and still win
+ * over these rules, so component chrome is unaffected.
+ */
+body h1 {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 48px;
   line-height: 1.15;
@@ -10,7 +18,7 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
-h2 {
+body h2 {
   font-size: 36px;
   line-height: 1.25;
   font-weight: 600;
@@ -18,9 +26,12 @@ h2 {
   color: var(--text-primary);
   margin-top: 4rem;
   margin-bottom: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-default);
+  max-width: var(--container-prose);
 }
 
-h3 {
+body h3 {
   font-size: 28px;
   line-height: 1.3;
   font-weight: 600;
@@ -30,17 +41,17 @@ h3 {
   margin-bottom: 1rem;
 }
 
-h4 {
+body h4 {
   font-size: 22px;
   line-height: 1.4;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   margin-top: 2rem;
   margin-bottom: 0.75rem;
 }
 
-h5, h6 {
+body h5, body h6 {
   font-size: 18px;
   line-height: 1.5;
   font-weight: 600;

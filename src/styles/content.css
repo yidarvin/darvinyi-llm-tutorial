@@ -18,6 +18,15 @@
 .katex { font-size: 1em; }
 .katex-display .katex { font-size: 1.1em; }
 
+/* Shiki injects inline background-color from the github-dark-dimmed theme
+   (#22272e), which sits on a different surface than the project's
+   bg-elevated (#111111) used by callouts and widgets. Force the bg back
+   onto the elevated surface so code blocks read as one of the card family.
+   The Shiki token colors still contrast well at #111111. */
+pre.astro-code {
+  background: var(--bg-elevated) !important;
+}
+
 /* Heading anchors from rehype-autolink-headings:
    the heading TEXT itself is wrapped in <a class="heading-anchor">.
    We want headings to LOOK like headings (no cyan, no underline)

@@ -148,36 +148,38 @@ img, video, iframe, svg {
  * ------------------------------------------------------------------
  * Body text stays 16 px (never sub-14). Headings shrink modestly so
  * the chapter title doesn't dominate the viewport at 320 px.
- * Headings are global element selectors (defined in base.css), so the
- * overrides apply cleanly from this global stylesheet. Layout-level
- * overrides (.chapter-title, .chapter-content, .chapter-layout-main)
- * live in ChapterLayout.astro so they coexist with its scoped styles.
+ * Selectors use `body ` prefix to match base.css's specificity bump
+ * (0,0,2) — required to beat Tailwind preflight's element-selector
+ * `h1..h6 { font-size: inherit }` reset. Layout-level overrides
+ * (.chapter-title, .chapter-content, .chapter-layout-main) live in
+ * ChapterLayout.astro so they coexist with its scoped styles.
  */
 @media (max-width: 720px) {
-  h1 {
+  body h1 {
     font-size: 32px;
     line-height: 1.2;
     margin-bottom: 1rem;
   }
-  h2 {
+  body h2 {
     font-size: 26px;
     line-height: 1.25;
     margin-top: 2.5rem;
+    padding-top: 1rem;
   }
-  h3 {
+  body h3 {
     font-size: 22px;
     line-height: 1.3;
     margin-top: 2rem;
   }
-  h4 {
+  body h4 {
     font-size: 18px;
     margin-top: 1.5rem;
   }
 }
 @media (max-width: 380px) {
-  h1 { font-size: 28px; }
-  h2 { font-size: 22px; }
-  h3 { font-size: 19px; }
+  body h1 { font-size: 28px; }
+  body h2 { font-size: 22px; padding-top: 0.75rem; }
+  body h3 { font-size: 19px; }
 }
 
 
