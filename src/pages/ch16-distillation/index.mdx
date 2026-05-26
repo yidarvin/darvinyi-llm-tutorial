@@ -44,13 +44,13 @@ Distillation uses **soft labels**: the teacher's full probability distribution o
 
 ### Dark knowledge
 
-Hinton coined the term **dark knowledge** for the information encoded in the *relative probabilities of non-target classes*. The teacher implicitly knows that some classes are more similar than others, and that knowledge sits in the distribution's tail. It is invisible to hard-label training and preserved by soft-label training. Concretely, soft labels give the student more signal per training example: not just "the right answer is X" but "the right answer is X, and these other answers are similar in this way." That extra structure is exactly what a small model needs to recover the teacher's behavior with fewer parameters, it does not have to rediscover the similarity geometry; it inherits it.
+Hinton coined the term **dark knowledge** for the information encoded in the *relative probabilities of non-target classes*. The teacher implicitly knows that some classes are more similar than others, and that knowledge sits in the distribution's tail. It is invisible to hard-label training and preserved by soft-label training. Concretely, soft labels give the student more signal per training example: not just "the right answer is X" but "the right answer is X, and these other answers are similar in this way." That extra structure is exactly what a small model needs to recover the teacher's behavior with fewer parameters: it does not have to rediscover the similarity geometry; it inherits it.
 
-The pedagogical analogy is exact. A standardized-test answer key says "Question 5 → B." A good answer key explains: "B is correct; C is a tempting wrong answer because of *X*; A is far off." Hard labels are the answer key; soft labels are the full study guide. Distillation is pedagogy applied to neural networks, and the names "teacher" and "student" are not metaphors stretched too far, they describe the actual mechanism.
+The pedagogical analogy is exact. A standardized-test answer key says "Question 5 → B." A good answer key explains: "B is correct; C is a tempting wrong answer because of *X*; A is far off." Hard labels are the answer key; soft labels are the full study guide. Distillation is pedagogy applied to neural networks, and the names "teacher" and "student" are not metaphors stretched too far: they describe the actual mechanism.
 
 ### Temperature scaling
 
-There is a practical problem with using raw softmax distributions as soft labels: well-trained models produce *peaked* distributions. The correct class might get probability $0.999$, with everything else compressed near zero. **The dark knowledge is *there* but *crushed***, the non-target class probabilities are too small to provide useful gradient signal. The teacher's similarity structure is buried under the dominant peak.
+There is a practical problem with using raw softmax distributions as soft labels: well-trained models produce *peaked* distributions. The correct class might get probability $0.999$, with everything else compressed near zero. **The dark knowledge is *there* but *crushed***: the non-target class probabilities are too small to provide useful gradient signal. The teacher's similarity structure is buried under the dominant peak.
 
 **Temperature scaling** fixes this. Divide the logits by a temperature $T > 1$ before the softmax:
 
