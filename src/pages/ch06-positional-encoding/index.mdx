@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch06-positional-encoding
-description: Attention is permutation-equivariant — shuffle the input and the output shuffles identically. Language is not. This chapter covers how position information enters the transformer — sinusoidal encoding (the original), learned embeddings (BERT, GPT-2), Rotary Positional Embedding (the modern default in Llama, Mistral, and most open-source LLMs), and ALiBi (length extrapolation).
+description: Attention is permutation-equivariant: shuffle the input and the output shuffles identically. Language is not. This chapter covers how position information enters the transformer: sinusoidal encoding (the original), learned embeddings (BERT, GPT-2), Rotary Positional Embedding (the modern default in Llama, Mistral, and most open-source LLMs), and ALiBi (length extrapolation).
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { SinusoidalPE, RoPERotation } from '@components/widgets';
 
-The transformer block from Chapter 5 has a curious property: it does not know the order of its inputs. Shuffle the input sequence — "cat the on mat sat the" instead of "the cat sat on the mat" — and the block's output is shuffled identically. Multi-head attention, the FFN, the residuals, the layer norms: none of them encode position. Each row of the output is determined by *which* other rows interact with it, not by *where* they sit in the sequence.
+The transformer block from Chapter 5 has a curious property: it does not know the order of its inputs. Shuffle the input sequence, "cat the on mat sat the" instead of "the cat sat on the mat", and the block's output is shuffled identically. Multi-head attention, the FFN, the residuals, the layer norms: none of them encode position. Each row of the output is determined by *which* other rows interact with it, not by *where* they sit in the sequence.
 
 Language does not have that symmetry. "The dog bit the man" and "The man bit the dog" share the same multiset of tokens; they do not share a meaning. Word order encodes grammatical role, scope, dependency. A model that processes the two sequences as permutations of the same bag will produce essentially the same output for both, and that is the wrong behavior for every language task there is.
 
-Position information has to enter the model somewhere. Four approaches dominate. The original transformer (Vaswani et al. 2017) added precomputed sinusoidal waves to the input embeddings. BERT and GPT-2 learned a position-specific embedding for each slot, treating "position 5" like a vocabulary word. Modern open-source LLMs — Llama, Mistral, Qwen, most of the post-2021 field — use Rotary Positional Embedding (RoPE), which rotates the query and key vectors inside each attention layer. A fourth approach, ALiBi, skips positional encoding entirely and adds a distance-based bias to attention scores; this turns out to extrapolate cleanly to sequences much longer than those seen during training.
+Position information has to enter the model somewhere. Four approaches dominate. The original transformer (Vaswani et al. 2017) added precomputed sinusoidal waves to the input embeddings. BERT and GPT-2 learned a position-specific embedding for each slot, treating "position 5" like a vocabulary word. Modern open-source LLMs (Llama, Mistral, Qwen, most of the post-2021 field) use Rotary Positional Embedding (RoPE), which rotates the query and key vectors inside each attention layer. A fourth approach, ALiBi, skips positional encoding entirely and adds a distance-based bias to attention scores; this turns out to extrapolate cleanly to sequences much longer than those seen during training.
 
 ## Why position matters
 
@@ -26,7 +26,7 @@ The property falls directly out of the attention formula. Look at one output row
 
 $$\text{out}_i = \sum_{j=1}^n \text{softmax}\!\left(\frac{q_i \cdot k_j}{\sqrt{d_k}}\right)\,v_j,$$
 
-a weighted sum over *all* positions where the weights are computed from the dot products of $q_i$ with every $k_j$. Relabel the positions — call position 3 "position 7" and vice versa — and exactly the same dot products get computed, the same weights, the same weighted sum. The output rows simply get the new labels. Nothing about the operation depends on what integer is attached to a row; it depends only on which feature vector lives there.
+a weighted sum over *all* positions where the weights are computed from the dot products of $q_i$ with every $k_j$. Relabel the positions (call position 3 "position 7" and vice versa), and exactly the same dot products get computed, the same weights, the same weighted sum. The output rows simply get the new labels. Nothing about the operation depends on what integer is attached to a row; it depends only on which feature vector lives there.
 
 The FFN does not break the symmetry either. The FFN is position-wise: the same MLP runs independently on each row. Permuting the rows permutes the outputs identically. Residual connections add the input back, which preserves the permutation. Layer norm operates on each row independently. Every component of the Chapter 5 block treats the input as a set.
 
@@ -37,7 +37,7 @@ There are two natural places to inject position. One is to modify the *input*: a
 The other is to modify the *operation*: change the attention computation itself so the dot product depends on position. The Q and K vectors are rotated or biased in a position-dependent way; the value vectors and the rest of the block stay the same. RoPE and ALiBi work this way. They sit inside each attention layer rather than at the input, and they re-inject position at every block rather than letting one initial injection propagate through.
 
 <Callout type="warning">
-A persistent misconception is that "attention has positional information built in." It does not. Plain self-attention is exactly permutation-equivariant — the attention formula has no term that depends on the integer position $i$ except through the row it picks out. The intuition that attention "sees the whole sequence and so must see position" confuses *seeing all the tokens* with *seeing where each token is*. The model sees all the tokens; it does not see where any of them are unless something outside the attention operation tells it.
+A persistent misconception is that "attention has positional information built in." It does not. Plain self-attention is exactly permutation-equivariant: the attention formula has no term that depends on the integer position $i$ except through the row it picks out. The intuition that attention "sees the whole sequence and so must see position" confuses *seeing all the tokens* with *seeing where each token is*. The model sees all the tokens; it does not see where any of them are unless something outside the attention operation tells it.
 </Callout>
 
 The next four sections cover the four main ways the field has chosen to tell it: sinusoidal, learned, RoPE, ALiBi. Two add to the input; two modify attention. The chapter's destination is RoPE, which has effectively won.
@@ -53,19 +53,19 @@ $$\text{PE}(p, 2k) = \sin\!\left(\frac{p}{10000^{2k/d_{\text{model}}}}\right)$$
 $$\text{PE}(p, 2k+1) = \cos\!\left(\frac{p}{10000^{2k/d_{\text{model}}}}\right)$$
 </Equation>
 
-The encoding lives in the same space as the input embeddings — shape $(n, d_{\text{model}})$ for a sequence of length $n$ — and is added element-wise to the token embeddings before the first block. Adjacent dimensions are paired: dimension $2k$ holds the sine and dimension $2k+1$ holds the cosine, both at the same frequency $\omega_k = 1/10000^{2k/d_{\text{model}}}$.
+The encoding lives in the same space as the input embeddings, shape $(n, d_{\text{model}})$ for a sequence of length $n$, and is added element-wise to the token embeddings before the first block. Adjacent dimensions are paired: dimension $2k$ holds the sine and dimension $2k+1$ holds the cosine, both at the same frequency $\omega_k = 1/10000^{2k/d_{\text{model}}}$.
 
-The encoding has no parameters. The values are determined entirely by $p$, $k$, and the constant $10000$. A model using sinusoidal PE has the same parameter count it would have without any positional encoding — the matrix is a fixed function of position, not a learned table.
+The encoding has no parameters. The values are determined entirely by $p$, $k$, and the constant $10000$. A model using sinusoidal PE has the same parameter count it would have without any positional encoding; the matrix is a fixed function of position, not a learned table.
 
 ### The frequency schedule
 
-The choice of frequencies is what makes the design work. The frequency $\omega_k = 1/10000^{2k/d_{\text{model}}}$ produces a geometric sequence: at $k = 0$, $\omega_0 = 1$ and the period is $2\pi \approx 6.28$ positions; at $k = d_{\text{model}}/2 - 1$, $\omega_k \approx 1/10000$ and the period is $10000 \cdot 2\pi \approx 62831$ positions. The low-$k$ pairs oscillate rapidly with position — distinguishing positions 5 and 6 by a large change in phase. The high-$k$ pairs oscillate slowly — distinguishing positions 5 and 6 by almost nothing, but distinguishing positions 5 and 5000 by a small but resolvable change in phase.
+The choice of frequencies is what makes the design work. The frequency $\omega_k = 1/10000^{2k/d_{\text{model}}}$ produces a geometric sequence: at $k = 0$, $\omega_0 = 1$ and the period is $2\pi \approx 6.28$ positions; at $k = d_{\text{model}}/2 - 1$, $\omega_k \approx 1/10000$ and the period is $10000 \cdot 2\pi \approx 62831$ positions. The low-$k$ pairs oscillate rapidly with position, distinguishing positions 5 and 6 by a large change in phase. The high-$k$ pairs oscillate slowly, distinguishing positions 5 and 6 by almost nothing, but distinguishing positions 5 and 5000 by a small but resolvable change in phase.
 
 A useful way to think about it: each dimension pair encodes position at a particular *resolution*. The fast pairs give the model precise position information about nearby tokens. The slow pairs give the model coarse position information about far-apart tokens. Together they form a fingerprint with components at many scales, so the model can learn to attend to whichever scale is useful for a given relationship.
 
 The base $10000$ controls the range covered. With $d_{\text{model}} = 512$, the slowest frequency has period roughly $62{,}000$ positions, which is more than enough for a model trained at sequence lengths of $512$ or $2048$. Modern long-context models sometimes use larger bases ($50{,}000$ or even $500{,}000$) when targeting context lengths of $128{,}000+$, to give the slow pairs the headroom needed to distinguish far-apart positions in the very-long-context regime.
 
-<WidgetFrame title="Sinusoidal positional encoding" caption="The sinusoidal PE matrix as a heatmap: position on the y-axis, dimension on the x-axis. Different dimensions encode position at different frequencies — low dimensions oscillate quickly, high dimensions oscillate slowly. Click any column to see its underlying sin or cos wave plotted below.">
+<WidgetFrame title="Sinusoidal positional encoding" caption="The sinusoidal PE matrix as a heatmap: position on the y-axis, dimension on the x-axis. Different dimensions encode position at different frequencies, low dimensions oscillate quickly, high dimensions oscillate slowly. Click any column to see its underlying sin or cos wave plotted below.">
   <SinusoidalPE client:visible />
 </WidgetFrame>
 
@@ -75,7 +75,7 @@ Sinusoidal PE is precomputed once for the maximum sequence length the model will
 
 $$x_p^{(0)} = \text{embedding}(\text{token}_p) + \text{PE}(p),$$
 
-with PE sliced down to the current sequence length. The block stack then runs on this combined representation. The position information enters once, at the input, and propagates through the network via the residual stream — every block sees a sum of "what" (the embedding contribution) and "where" (the PE contribution), and is free to use either.
+with PE sliced down to the current sequence length. The block stack then runs on this combined representation. The position information enters once, at the input, and propagates through the network via the residual stream, every block sees a sum of "what" (the embedding contribution) and "where" (the PE contribution), and is free to use either.
 
 The numpy implementation is a few lines. The matrix is built by broadcasting a column of positions against a row of inverse frequencies, then filling the even columns with sine and the odd columns with cosine.
 
@@ -105,23 +105,23 @@ print(f"PE at position 50 (first 8 dims): {PE[50, :8].round(3)}")
 print(f"\\nFar (slow) dimensions, position 0 vs position 50:")
 print(f"  pos  0, dims 60-63: {PE[0,  60:64].round(4)}")
 print(f"  pos 50, dims 60-63: {PE[50, 60:64].round(4)}")
-print(f"  (nearly identical — these dimensions have period ~62000)")
+print(f"  (nearly identical, these dimensions have period ~62000)")
 `}
   packages={["numpy"]}
   height={460}
 />
 
 <Callout type="note">
-The base $10000$ in <EqRef id="6.sin" /> is the standard value from Vaswani 2017. It works well for sequences up to a few thousand positions. Modern long-context models (Llama 3 and successors) sometimes increase the base substantially — Llama 3 uses $500{,}000$ — to keep the slow frequencies meaningful at $128{,}000$-position contexts. The base is a knob: smaller values give more resolution at short distances and less at long; larger values do the opposite. The chapter sticks with $10000$ because it is the historical default and the value virtually all sinusoidal-PE references use.
+The base $10000$ in <EqRef id="6.sin" /> is the standard value from Vaswani 2017. It works well for sequences up to a few thousand positions. Modern long-context models (Llama 3 and successors) sometimes increase the base substantially (Llama 3 uses $500{,}000$) to keep the slow frequencies meaningful at $128{,}000$-position contexts. The base is a knob: smaller values give more resolution at short distances and less at long; larger values do the opposite. The chapter sticks with $10000$ because it is the historical default and the value virtually all sinusoidal-PE references use.
 </Callout>
 
-The next section returns to a subtle property of the sinusoidal design — a property Vaswani's paper claimed in a footnote and subsequent work made rigorous.
+The next section returns to a subtle property of the sinusoidal design, a property Vaswani's paper claimed in a footnote and subsequent work made rigorous.
 
 ## The implicit relative-position argument
 
 The original transformer paper made a striking claim about sinusoidal PE in a footnote of Section 3.5: "We chose this function because we hypothesized it would allow the model to easily learn to attend by *relative* positions, since for any fixed offset $k$, $\text{PE}_{p+k}$ can be represented as a linear function of $\text{PE}_p$." The footnote made the choice sound principled rather than arbitrary. It is worth working through the math, because the property is real but its practical impact has been overstated for years.
 
-Consider one frequency pair $(2k, 2k+1)$ in the sinusoidal PE. At position $p$ this pair has the value $(\sin(\omega_k p), \cos(\omega_k p))$ — a point on the unit circle at angle $\omega_k p$. At position $p + \Delta$ this same pair has the value $(\sin(\omega_k (p + \Delta)), \cos(\omega_k (p + \Delta)))$ — the same point on the unit circle, rotated by an additional angle $\omega_k \Delta$. Standard angle-addition identities give the rotation explicitly:
+Consider one frequency pair $(2k, 2k+1)$ in the sinusoidal PE. At position $p$ this pair has the value $(\sin(\omega_k p), \cos(\omega_k p))$, a point on the unit circle at angle $\omega_k p$. At position $p + \Delta$ this same pair has the value $(\sin(\omega_k (p + \Delta)), \cos(\omega_k (p + \Delta)))$, the same point on the unit circle, rotated by an additional angle $\omega_k \Delta$. Standard angle-addition identities give the rotation explicitly:
 
 $$\begin{pmatrix} \sin(\omega_k(p+\Delta)) \\ \cos(\omega_k(p+\Delta)) \end{pmatrix} = \begin{pmatrix} \cos(\omega_k \Delta) & \sin(\omega_k \Delta) \\ -\sin(\omega_k \Delta) & \cos(\omega_k \Delta) \end{pmatrix} \begin{pmatrix} \sin(\omega_k p) \\ \cos(\omega_k p) \end{pmatrix}.$$
 
@@ -129,25 +129,25 @@ The matrix on the right depends *only* on $\Delta$, the relative offset between 
 
 What this implies: a model could in principle learn linear projections of the PE that extract relative-position information. Run $\text{PE}_p$ and $\text{PE}_{p+\Delta}$ through some learned linear map, and the resulting attention scores can be made to depend only on $\Delta$ rather than on $p$ and $p+\Delta$ separately. The information is representationally there.
 
-What this does *not* imply: that the trained model actually learns to use this property. The model has to discover the right linear combinations on its own, and there is no architectural pressure toward them. Empirically, sinusoidal PE often underperforms learned PE on in-distribution evaluation, and the relative-position structure does not seem to be reliably exploited. The footnote's claim is true *in principle* and somewhat true in practice — but only somewhat.
+What this does *not* imply: that the trained model actually learns to use this property. The model has to discover the right linear combinations on its own, and there is no architectural pressure toward them. Empirically, sinusoidal PE often underperforms learned PE on in-distribution evaluation, and the relative-position structure does not seem to be reliably exploited. The footnote's claim is true *in principle* and somewhat true in practice, but only somewhat.
 
 Shaw, Uszkoreit & Vaswani (2018, [arxiv.org/abs/1803.02155](https://arxiv.org/abs/1803.02155)) made the relative-position idea explicit a year after the original transformer: instead of adding absolute PE to the input, modify attention to include *learned* relative-position offsets at each layer. The Shaw-style scheme was influential conceptually but never dominant in code; modern usage moved past it in favor of RoPE, which captures the relative-position property without learned parameters and without the per-attention-pair bookkeeping Shaw's formulation required.
 
 <Callout type="warning">
-"Sinusoidal PE encodes only absolute position" is half right and half wrong. It is encoded *as* absolute position — each row is labeled with the integer $p$, and there is no offset arithmetic in the formula. But the linear-transformation property above means relative-position information is *recoverable* from the sinusoidal PE if the model learns the right linear projections. Whether it does is empirical. The cleaner statement: sinusoidal PE makes relative position *available* but does not make it *the default*. RoPE, the next two sections, makes relative position the default.
+"Sinusoidal PE encodes only absolute position" is half right and half wrong. It is encoded *as* absolute position, each row is labeled with the integer $p$, and there is no offset arithmetic in the formula. But the linear-transformation property above means relative-position information is *recoverable* from the sinusoidal PE if the model learns the right linear projections. Whether it does is empirical. The cleaner statement: sinusoidal PE makes relative position *available* but does not make it *the default*. RoPE, the next two sections, makes relative position the default.
 </Callout>
 
 The next section steps sideways to the simplest possible alternative: just learn the position encoding instead of computing it.
 
 ## Learned positional embeddings
 
-A simpler approach drops the sinusoidal formula entirely and treats position 0, position 1, position 2, all the way up to position $M-1$, as a vocabulary. Each "position word" gets its own embedding vector — a learnable parameter of the model, initialized small and updated by gradient descent like any other embedding. The input to the first block is, as before, the sum of a token embedding and a position embedding, but the position embedding is now looked up from a table instead of computed.
+A simpler approach drops the sinusoidal formula entirely and treats position 0, position 1, position 2, all the way up to position $M-1$, as a vocabulary. Each "position word" gets its own embedding vector, a learnable parameter of the model, initialized small and updated by gradient descent like any other embedding. The input to the first block is, as before, the sum of a token embedding and a position embedding, but the position embedding is now looked up from a table instead of computed.
 
-The approach was used by BERT, GPT-2, and GPT-3 (the original GPT-3 paper used learned positional embeddings, though variants since have moved to other schemes). Mechanically it is identical to token embeddings — a $(M, d_{\text{model}})$ matrix of learnable parameters, with $M$ the maximum sequence length the model will ever process. To embed a sequence of length $n \le M$, you slice rows $0$ through $n-1$ out of the table.
+The approach was used by BERT, GPT-2, and GPT-3 (the original GPT-3 paper used learned positional embeddings, though variants since have moved to other schemes). Mechanically it is identical to token embeddings, a $(M, d_{\text{model}})$ matrix of learnable parameters, with $M$ the maximum sequence length the model will ever process. To embed a sequence of length $n \le M$, you slice rows $0$ through $n-1$ out of the table.
 
-Two things stand out about the design. First, it adds parameters: $M \cdot d_{\text{model}}$ per model. For GPT-2 small ($M = 1024$, $d_{\text{model}} = 768$), that is about $800{,}000$ parameters — small next to the $\sim 124$M total, but nonzero. Second, and more importantly, it does not extrapolate. If you train at $M = 2048$, there is no embedding for position $2049$; the embedding table simply does not have that row. The model cannot process longer sequences without either retraining or replacing the position-embedding mechanism.
+Two things stand out about the design. First, it adds parameters: $M \cdot d_{\text{model}}$ per model. For GPT-2 small ($M = 1024$, $d_{\text{model}} = 768$), that is about $800{,}000$ parameters, small next to the $\sim 124$M total, but nonzero. Second, and more importantly, it does not extrapolate. If you train at $M = 2048$, there is no embedding for position $2049$; the embedding table simply does not have that row. The model cannot process longer sequences without either retraining or replacing the position-embedding mechanism.
 
-The structural inductive bias is also weak. Sinusoidal PE has continuity built in — neighboring positions have similar encodings because the underlying functions are continuous. Learned PE has no such guarantee. Two adjacent positions get two adjacent rows in the table, but those rows are initialized independently and updated independently. Whether the trained embeddings end up smooth in position space is a function of what gradients happened to do during training, not of the architecture.
+The structural inductive bias is also weak. Sinusoidal PE has continuity built in: neighboring positions have similar encodings because the underlying functions are continuous. Learned PE has no such guarantee. Two adjacent positions get two adjacent rows in the table, but those rows are initialized independently and updated independently. Whether the trained embeddings end up smooth in position space is a function of what gradients happened to do during training, not of the architecture.
 
 <RunnableCode
   client:visible
@@ -184,21 +184,21 @@ except ValueError as e:
   height={400}
 />
 
-The trade-off is straightforward. Learned PE has the most flexibility — the model can learn whatever positional representation works best for the task — and the least structure. It performs well in distribution and fails completely out of distribution. Sinusoidal PE has more structure (the multi-scale frequency design) and somewhat better extrapolation, at the cost of being less expressive when the model has plenty of training data at every position it will see. The two schemes pick different points on the same trade-off curve.
+The trade-off is straightforward. Learned PE has the most flexibility (the model can learn whatever positional representation works best for the task) and the least structure. It performs well in distribution and fails completely out of distribution. Sinusoidal PE has more structure (the multi-scale frequency design) and somewhat better extrapolation, at the cost of being less expressive when the model has plenty of training data at every position it will see. The two schemes pick different points on the same trade-off curve.
 
 <Callout type="warning">
-"Learned PE is always better than sinusoidal" is a claim you will see in older textbooks and survey papers, and it is wrong on the dimension that came to matter most. Learned PE is often better *within the training context length*. It does not generalize to longer sequences. If you trained a model at $M = 2048$ and want to evaluate at $4096$, learned PE has no answer — the embeddings simply do not exist. Sinusoidal PE keeps producing values, though quality degrades. RoPE and ALiBi (the next two sections) extrapolate better still. The "always better" framing is from a regime where context-length extension was not a research priority; today it is, and the framing has not aged well.
+"Learned PE is always better than sinusoidal" is a claim you will see in older textbooks and survey papers, and it is wrong on the dimension that came to matter most. Learned PE is often better *within the training context length*. It does not generalize to longer sequences. If you trained a model at $M = 2048$ and want to evaluate at $4096$, learned PE has no answer: the embeddings simply do not exist. Sinusoidal PE keeps producing values, though quality degrades. RoPE and ALiBi (the next two sections) extrapolate better still. The "always better" framing is from a regime where context-length extension was not a research priority; today it is, and the framing has not aged well.
 </Callout>
 
-That regime — context-length extension and clean relative-position structure — is exactly what RoPE was designed for. The next section is the chapter's destination.
+That regime, context-length extension and clean relative-position structure, is exactly what RoPE was designed for. The next section is the chapter's destination.
 
-## Rotary Positional Embedding (RoPE) — the modern default
+## Rotary Positional Embedding (RoPE): the modern default
 
 ### The setup
 
-Sinusoidal and learned PE share an architectural assumption: position is injected *at the input*, once, before the first transformer block. The injection propagates through the network via the residual stream — every block sees a mix of token content and position content, and is free to use either. The choice is parsimonious: one injection, downstream effects everywhere.
+Sinusoidal and learned PE share an architectural assumption: position is injected *at the input*, once, before the first transformer block. The injection propagates through the network via the residual stream, every block sees a mix of token content and position content, and is free to use either. The choice is parsimonious: one injection, downstream effects everywhere.
 
-RoPE (Su et al. 2021, [arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)) rejects this. Instead of adding position to the input, it modifies the Q and K vectors *inside* every attention layer. The token embeddings are not touched. The V vectors are not touched. Only Q and K — and only at the moment they enter the attention computation — get rotated by an angle that depends on their position.
+RoPE (Su et al. 2021, [arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)) rejects this. Instead of adding position to the input, it modifies the Q and K vectors *inside* every attention layer. The token embeddings are not touched. The V vectors are not touched. Only Q and K, and only at the moment they enter the attention computation, get rotated by an angle that depends on their position.
 
 The motivation is direct. Sinusoidal PE allows the model to learn relative-position attention (Section 3) but does not enforce it. The trained model has to discover the relative-position structure through the gradients. RoPE asks: can we *build* the relative-position property into the attention computation itself, so the model gets it for free regardless of how training goes?
 
@@ -212,7 +212,7 @@ For position $p$ and pair index $k$, the rotation angle is
 
 $$\theta_k(p) = p \cdot \omega_k, \qquad \omega_k = \frac{1}{10000^{2k/d_k}}.$$
 
-The frequency schedule is identical to sinusoidal PE — same $1/10000^{2k/d}$ progression — but the role is different. In sinusoidal PE, $\omega_k$ controlled the period of an additive sine. In RoPE, $\omega_k$ controls the angular speed of a rotation. At pair $k = 0$ the rotation is fast (large angle per position); at the highest pair the rotation is slow (small angle per position).
+The frequency schedule is identical to sinusoidal PE, same $1/10000^{2k/d}$ progression, but the role is different. In sinusoidal PE, $\omega_k$ controlled the period of an additive sine. In RoPE, $\omega_k$ controls the angular speed of a rotation. At pair $k = 0$ the rotation is fast (large angle per position); at the highest pair the rotation is slow (small angle per position).
 
 The 2D rotation matrix at angle $\theta$ is the standard
 
@@ -231,21 +231,21 @@ where $m$ and $n$ are the absolute positions of the query and the key. The first
 
 Read the second line of <EqRef id="6.rope" /> carefully. The dot product of the rotated query at position $m$ and the rotated key at position $n$ equals the dot product of the *unrotated* query and a key rotated by angle $(n - m)\omega_k$. The dependence on $m$ and $n$ separately has collapsed; only the *difference* $n - m$ matters.
 
-Why this is true: rotation matrices compose. $R(\alpha)^\top R(\beta) = R(\beta - \alpha)$, because the transpose of a rotation is its inverse. So $\langle R(m\omega) q, R(n\omega) k \rangle = q^\top R(m\omega)^\top R(n\omega) k = q^\top R((n - m)\omega) k$. Rotating both vectors by the same amount cancels out — what remains is the rotation by the difference of the two amounts.
+Why this is true: rotation matrices compose. $R(\alpha)^\top R(\beta) = R(\beta - \alpha)$, because the transpose of a rotation is its inverse. So $\langle R(m\omega) q, R(n\omega) k \rangle = q^\top R(m\omega)^\top R(n\omega) k = q^\top R((n - m)\omega) k$. Rotating both vectors by the same amount cancels out, what remains is the rotation by the difference of the two amounts.
 
 The consequence: attention scores in a RoPE-equipped layer depend only on the relative position of the query and the key, not on their absolute positions. The same query-key pair will produce the same attention score whether it sits at positions $(0, 5)$, $(50, 55)$, or $(1000, 1005)$. Translation invariance is built into the operation, exactly the property the sinusoidal scheme had to hope the model would learn.
 
-A useful framing: in attention, the query at position $m$ asks a question and the key at position $n$ provides a partial answer. RoPE rotates the query by an angle proportional to $m$ and the key by an angle proportional to $n$. When the dot product is computed, the absolute rotations cancel and only the *difference* matters — as if both the question and the answer were rotated by the same amount, leaving the relative orientation between them unchanged. Position $m$'s query at offset $\Delta$ sees the same content as position $0$'s query at offset $\Delta$. The model is forced to think in terms of offsets, not positions.
+A useful framing: in attention, the query at position $m$ asks a question and the key at position $n$ provides a partial answer. RoPE rotates the query by an angle proportional to $m$ and the key by an angle proportional to $n$. When the dot product is computed, the absolute rotations cancel and only the *difference* matters, as if both the question and the answer were rotated by the same amount, leaving the relative orientation between them unchanged. Position $m$'s query at offset $\Delta$ sees the same content as position $0$'s query at offset $\Delta$. The model is forced to think in terms of offsets, not positions.
 
 ### Implementation
 
 The implementation is short and mostly about getting the dimension pairing right. The standard convention pairs adjacent dimensions: dimensions $0$ and $1$ form one 2D pair, dimensions $2$ and $3$ form another, and so on. The rotation is applied independently to each pair.
 
-<WidgetFrame title="RoPE rotation" caption="RoPE rotates each pair of adjacent dimensions in Q (and K) by an angle proportional to position × frequency. Drag the position slider to see all 4 pairs rotate at their own rate — low pairs rotate quickly, high pairs slowly. The rotation has no learned parameters; angles are determined by position and pair index.">
+<WidgetFrame title="RoPE rotation" caption="RoPE rotates each pair of adjacent dimensions in Q (and K) by an angle proportional to position × frequency. Drag the position slider to see all 4 pairs rotate at their own rate, low pairs rotate quickly, high pairs slowly. The rotation has no learned parameters; angles are determined by position and pair index.">
   <RoPERotation client:visible />
 </WidgetFrame>
 
-The same demo serves a second purpose. The numerical check at the end verifies the relative-position property directly — for several $(m, n)$ pairs with the same offset, the dot product after rotation comes out to the same value.
+The same demo serves a second purpose. The numerical check at the end verifies the relative-position property directly: for several $(m, n)$ pairs with the same offset, the dot product after rotation comes out to the same value.
 
 <RunnableCode
   client:visible
@@ -254,8 +254,8 @@ The same demo serves a second purpose. The numerical check at the end verifies t
 def rope(x, position_ids, base=10000.0):
     """
     Apply Rotary Positional Embedding to a Q or K matrix.
-    x:            (seq_len, d_k) — Q or K vectors, d_k even
-    position_ids: (seq_len,)     — integer positions for each row
+    x:            (seq_len, d_k), Q or K vectors, d_k even
+    position_ids: (seq_len,)    , integer positions for each row
     """
     seq_len, d_k = x.shape
     assert d_k % 2 == 0, "RoPE requires d_k to be even"
@@ -303,16 +303,16 @@ print("Absolute positions changed; the dot product did not.")
 Four query-key pairs at four different absolute-position pairs, all with offset $5$. The four dot products come out to the same number. That is the relative-position property in numerical form: the model's attention score for "this query, that key, five positions apart" is a single number, regardless of where in the sequence the pair sits.
 
 <Callout type="insight">
-RoPE has *zero* learnable parameters. The rotation angles are fully determined by the position $p$, the pair index $k$, and the constant base $10000$. There is no $W^{\text{pos}}$ matrix, no rotation table to learn, no extra biases. A RoPE-equipped transformer has the same parameter count as the same architecture without any positional encoding. The cost at inference is one $\cos$ and one $\sin$ per dimension pair per position — and these can be precomputed and cached. This is a major part of why RoPE has been adopted so broadly: it improves the model's positional behavior without changing the parameter count or measurably affecting compute.
+RoPE has *zero* learnable parameters. The rotation angles are fully determined by the position $p$, the pair index $k$, and the constant base $10000$. There is no $W^{\text{pos}}$ matrix, no rotation table to learn, no extra biases. A RoPE-equipped transformer has the same parameter count as the same architecture without any positional encoding. The cost at inference is one $\cos$ and one $\sin$ per dimension pair per position, and these can be precomputed and cached. This is a major part of why RoPE has been adopted so broadly: it improves the model's positional behavior without changing the parameter count or measurably affecting compute.
 </Callout>
 
 <Callout type="warning">
-"RoPE replaces sinusoidal PE — they do the same thing" misreads where in the network the two schemes act. Sinusoidal PE adds a position-dependent vector to the *input embeddings*, once, before the first block. RoPE rotates the *Q and K vectors inside each attention layer*, every layer, every block. The two schemes operate at different points in the architecture. RoPE's per-layer application is part of why it works better — position is re-asserted at every attention computation, rather than relying on one initial injection to propagate cleanly through the residual stream across dozens of blocks.
+"RoPE replaces sinusoidal PE, they do the same thing" misreads where in the network the two schemes act. Sinusoidal PE adds a position-dependent vector to the *input embeddings*, once, before the first block. RoPE rotates the *Q and K vectors inside each attention layer*, every layer, every block. The two schemes operate at different points in the architecture. RoPE's per-layer application is part of why it works better: position is re-asserted at every attention computation, rather than relying on one initial injection to propagate cleanly through the residual stream across dozens of blocks.
 </Callout>
 
-RoPE has effectively won. Llama (all generations), Mistral, Qwen, PaLM, GPT-NeoX, and most open-source LLMs released since 2022 use RoPE. Production code wraps the rotation into the attention kernel; the math is the same as the numpy implementation above. Anyone building a transformer from scratch today picks RoPE by default. The remaining variants are mostly there for special cases — and ALiBi, the next section, is the most useful of those special cases.
+RoPE has effectively won. Llama (all generations), Mistral, Qwen, PaLM, GPT-NeoX, and most open-source LLMs released since 2022 use RoPE. Production code wraps the rotation into the attention kernel; the math is the same as the numpy implementation above. Anyone building a transformer from scratch today picks RoPE by default. The remaining variants are mostly there for special cases, and ALiBi, the next section, is the most useful of those special cases.
 
-## ALiBi — linear attention biases
+## ALiBi: linear attention biases
 
 ALiBi (Press, Smith & Lewis 2021, [arxiv.org/abs/2108.12409](https://arxiv.org/abs/2108.12409)) takes a different route. Instead of adding positional information to the inputs or rotating the Q and K vectors, it adds a *linear bias* to the attention scores, with the bias proportional to the distance between the query and the key. Tokens close to the query keep their unbiased scores; tokens far from the query have their scores reduced by an amount that grows linearly with the distance.
 
@@ -320,11 +320,11 @@ The formula is short. For a query at position $m$ and a key at position $n$,
 
 $$\text{scores}_{mn} = \frac{q_m \cdot k_n}{\sqrt{d_k}} - m_h \cdot |m - n|,$$
 
-where $m_h$ is a head-specific slope. The first term is the standard attention score from Chapter 4. The second term — the ALiBi correction — subtracts a positive quantity proportional to the distance between the two positions. The further apart the query and the key, the smaller the (post-bias) attention score, the lower the weight the softmax assigns.
+where $m_h$ is a head-specific slope. The first term is the standard attention score from Chapter 4. The second term, the ALiBi correction, subtracts a positive quantity proportional to the distance between the two positions. The further apart the query and the key, the smaller the (post-bias) attention score, the lower the weight the softmax assigns.
 
-The head-specific slopes are chosen so different heads decay at different rates. For a model with $H$ heads, the slopes are $m_h = 2^{-8h/H}$ for $h = 1, 2, \ldots, H$. The first head ($h = 1$) gets the largest slope and decays the fastest — its attention is concentrated near the query. The last head ($h = H$) gets the smallest slope and decays the slowest — its attention spans long distances. Different heads end up with different "receptive fields," set by the slopes rather than learned by the model.
+The head-specific slopes are chosen so different heads decay at different rates. For a model with $H$ heads, the slopes are $m_h = 2^{-8h/H}$ for $h = 1, 2, \ldots, H$. The first head ($h = 1$) gets the largest slope and decays the fastest, its attention is concentrated near the query. The last head ($h = H$) gets the smallest slope and decays the slowest, its attention spans long distances. Different heads end up with different "receptive fields," set by the slopes rather than learned by the model.
 
-The key property of ALiBi is the one its paper title advertises: "train short, test long." The bias is a function of *distance*, computed at inference time, with no learned per-position parameters. At evaluation time, even if you are processing sequences longer than anything seen during training, the bias formula keeps working. Position $3000$ at offset $5$ from the query gets a bias of $-5 m_h$, exactly the same bias position $3$ at offset $5$ would have gotten. ALiBi-trained models can be evaluated at context lengths several times longer than their training length with minimal quality loss — a property neither learned PE nor (untreated) sinusoidal PE shares.
+The key property of ALiBi is the one its paper title advertises: "train short, test long." The bias is a function of *distance*, computed at inference time, with no learned per-position parameters. At evaluation time, even if you are processing sequences longer than anything seen during training, the bias formula keeps working. Position $3000$ at offset $5$ from the query gets a bias of $-5 m_h$, exactly the same bias position $3$ at offset $5$ would have gotten. ALiBi-trained models can be evaluated at context lengths several times longer than their training length with minimal quality loss, a property neither learned PE nor (untreated) sinusoidal PE shares.
 
 <RunnableCode
   client:visible
@@ -346,9 +346,9 @@ n_heads = 4
 bias = alibi_bias(seq_len, n_heads)
 
 print(f"Bias tensor shape: {bias.shape}")
-print(f"\\nHead 0 — slope = {2 ** (-8 * 1 / n_heads):.4f}  (gentlest decay):")
+print(f"\\nHead 0, slope = {2 ** (-8 * 1 / n_heads):.4f}  (gentlest decay):")
 print(bias[0].round(2))
-print(f"\\nHead 3 — slope = {2 ** (-8 * 4 / n_heads):.4f}  (steepest decay):")
+print(f"\\nHead 3, slope = {2 ** (-8 * 4 / n_heads):.4f}  (steepest decay):")
 print(bias[3].round(2))
 print(f"\\nNotice: distant positions get strongly negative bias (head 3),")
 print(f"while head 0 lets them through with minimal penalty.")
@@ -357,46 +357,46 @@ print(f"while head 0 lets them through with minimal penalty.")
   height={460}
 />
 
-The trade-off with RoPE is real but narrow. RoPE is somewhat more expressive in-distribution — it lets the model use the full relative-position information rather than just distance — and matches or beats ALiBi on most standard benchmarks. ALiBi is simpler, has cleaner length-extrapolation behavior out of the box, and works without the position-interpolation gymnastics RoPE requires for very long contexts. Modern open-source LLMs are dominated by RoPE; ALiBi has found a niche in BLOOM, some MosaicML models, and projects where long-context extrapolation without retraining is the explicit goal.
+The trade-off with RoPE is real but narrow. RoPE is somewhat more expressive in-distribution (it lets the model use the full relative-position information rather than just distance) and matches or beats ALiBi on most standard benchmarks. ALiBi is simpler, has cleaner length-extrapolation behavior out of the box, and works without the position-interpolation gymnastics RoPE requires for very long contexts. Modern open-source LLMs are dominated by RoPE; ALiBi has found a niche in BLOOM, some MosaicML models, and projects where long-context extrapolation without retraining is the explicit goal.
 
-ALiBi's existence is the proof that "position encoding" need not mean "position embedding." The model can be made position-aware by modifying its attention scores rather than by modifying its inputs or its Q/K projections. RoPE and ALiBi together demonstrate that the right level to inject position is inside the attention computation, not at the input layer. They disagree about *how* — rotation versus bias — but they agree that's *where*.
+ALiBi's existence is the proof that "position encoding" need not mean "position embedding." The model can be made position-aware by modifying its attention scores rather than by modifying its inputs or its Q/K projections. RoPE and ALiBi together demonstrate that the right level to inject position is inside the attention computation, not at the input layer. They disagree about *how*, rotation versus bias, but they agree that's *where*.
 
-## Length extrapolation — extending context at inference time
+## Length extrapolation: extending context at inference time
 
 A recurring theme across the chapter has been *what each PE scheme does to sequences longer than the training context*. The point deserves its own section, because the choice of PE is increasingly the most consequential architectural decision for production LLMs targeting long contexts.
 
 The problem: a model trained at context length $L$ usually struggles to process sequences longer than $L$. The exact failure mode depends on which PE scheme the model used:
 
 - **Learned PE** fails immediately and completely. There is no embedding row for position $L+1$; the lookup throws an error. Without retraining, the model cannot process anything past its trained range.
-- **Sinusoidal PE** keeps producing values for any position — the formula has no cutoff — but the model has only *seen* certain ranges of those values during training. Sequences beyond the trained length produce PE values that look unfamiliar to the network, and empirical quality degrades fairly quickly.
+- **Sinusoidal PE** keeps producing values for any position, the formula has no cutoff, but the model has only *seen* certain ranges of those values during training. Sequences beyond the trained length produce PE values that look unfamiliar to the network, and empirical quality degrades fairly quickly.
 - **ALiBi** extrapolates cleanly out of the box. The linear-distance bias is meaningful at any length; the model trained at $L = 2048$ generalizes to $L = 8192$ with minimal quality loss, as the original paper demonstrated.
-- **RoPE** sits in between. The rotation angles are well-defined for any position, but for positions far outside the training range the rotation patterns are unfamiliar. Quality degrades — but RoPE-trained models can be *extended* through inference-time tricks that no other scheme supports as cleanly.
+- **RoPE** sits in between. The rotation angles are well-defined for any position, but for positions far outside the training range the rotation patterns are unfamiliar. Quality degrades, but RoPE-trained models can be *extended* through inference-time tricks that no other scheme supports as cleanly.
 
-The extension techniques for RoPE are what made the 100K+ context LLMs possible. *Position Interpolation* (Chen et al. 2023, [arxiv.org/abs/2306.15595](https://arxiv.org/abs/2306.15595)) was the first widely-used method: at inference time, divide all position indices by some factor before applying RoPE. A model trained at $L = 4096$ and evaluated at $L = 32{,}768$ uses position indices divided by $8$, so the rotation angles stay in the same range the model saw during training. The model "sees" compressed position information, but in a familiar range, and quality holds up well with a short fine-tuning pass on the longer context. *NTK-aware scaling* and *YaRN* (Peng et al. 2023) refine the idea further by interpolating different frequencies differently — the slow frequencies get compressed more, the fast frequencies less — and have become the standard for production long-context RoPE models.
+The extension techniques for RoPE are what made the 100K+ context LLMs possible. *Position Interpolation* (Chen et al. 2023, [arxiv.org/abs/2306.15595](https://arxiv.org/abs/2306.15595)) was the first widely-used method: at inference time, divide all position indices by some factor before applying RoPE. A model trained at $L = 4096$ and evaluated at $L = 32{,}768$ uses position indices divided by $8$, so the rotation angles stay in the same range the model saw during training. The model "sees" compressed position information, but in a familiar range, and quality holds up well with a short fine-tuning pass on the longer context. *NTK-aware scaling* and *YaRN* (Peng et al. 2023) refine the idea further by interpolating different frequencies differently (the slow frequencies get compressed more, the fast frequencies less) and have become the standard for production long-context RoPE models.
 
 The practical implication is direct. If you are designing a model that needs long context, the PE choice matters. RoPE plus position interpolation is the dominant pattern: train at a moderate context length (a few thousand to a few tens of thousands), then extend at inference time through PI or YaRN to reach 32K, 128K, or longer. Llama 3.1 trained at 8K and extended to 128K; many production models follow similar recipes. Sinusoidal PE and learned PE do not support these extensions, which is much of why RoPE has displaced both.
 
 <Callout type="warning">
-"Long-context support is automatic" is not true for any of the PE schemes in this chapter. Each fails differently when pushed past its training length: learned PE fails outright, sinusoidal degrades, ALiBi extrapolates passively, RoPE extrapolates with explicit techniques like position interpolation. Choosing a PE scheme without thinking about the context-length plan locks in a ceiling on what the model can do later. The pattern that has won — RoPE + PI + a short long-context fine-tune — is not free, but it is feasible. The other patterns either don't extend at all or require full retraining at the longer length.
+"Long-context support is automatic" is not true for any of the PE schemes in this chapter. Each fails differently when pushed past its training length: learned PE fails outright, sinusoidal degrades, ALiBi extrapolates passively, RoPE extrapolates with explicit techniques like position interpolation. Choosing a PE scheme without thinking about the context-length plan locks in a ceiling on what the model can do later. The pattern that has won, RoPE + PI + a short long-context fine-tune, is not free, but it is feasible. The other patterns either don't extend at all or require full retraining at the longer length.
 </Callout>
 
-The full story of position interpolation, NTK-aware scaling, and YaRN is more involved than this section can fit. The conceptual point is: extrapolation isn't a property of "good PE" — it's a property of specific PE schemes plus specific extension techniques. The pairing matters.
+The full story of position interpolation, NTK-aware scaling, and YaRN is more involved than this section can fit. The conceptual point is: extrapolation isn't a property of "good PE", it's a property of specific PE schemes plus specific extension techniques. The pairing matters.
 
-## What we have — everything except training
+## What we have: everything except training
 
 Six chapters in, the architectural picture is complete.
 
-Chapter 1 introduced the neural network primitives — forward pass, gradients, autograd. Chapter 2 covered embeddings: how discrete tokens become continuous vectors. Chapter 3 covered tokenization: how text becomes tokens. Chapter 4 derived scaled dot-product attention from first principles. Chapter 5 generalized attention to multi-head and wrapped it in the transformer block — multi-head attention, FFN, residuals, layer norms — the unit that stacks $N$ times. This chapter, Chapter 6, fills in the last piece of the architecture: position. The block as written in Chapter 5 is position-blind; sinusoidal, learned, RoPE, or ALiBi inject the information the block needs to distinguish "dog bites man" from "man bites dog."
+Chapter 1 introduced the neural network primitives, forward pass, gradients, autograd. Chapter 2 covered embeddings: how discrete tokens become continuous vectors. Chapter 3 covered tokenization: how text becomes tokens. Chapter 4 derived scaled dot-product attention from first principles. Chapter 5 generalized attention to multi-head and wrapped it in the transformer block, multi-head attention, FFN, residuals, layer norms, the unit that stacks $N$ times. This chapter, Chapter 6, fills in the last piece of the architecture: position. The block as written in Chapter 5 is position-blind; sinusoidal, learned, RoPE, or ALiBi inject the information the block needs to distinguish "dog bites man" from "man bites dog."
 
-Tokens in. Embedded. Position-encoded. Passed through twelve or twenty-four or ninety-six transformer blocks, each block doing multi-head attention then FFN with residuals and layer norms keeping training stable. The last block's output projected back into vocabulary space and softmaxed to produce a probability distribution over the next token. Sample, append, repeat. That is the architecture of every modern decoder-only LLM. It is also, modulo specific component choices — RMSNorm versus LayerNorm, SwiGLU versus GELU, RoPE versus sinusoidal — what GPT, Llama, Mistral, and Claude do at the level of the forward pass.
+Tokens in. Embedded. Position-encoded. Passed through twelve or twenty-four or ninety-six transformer blocks, each block doing multi-head attention then FFN with residuals and layer norms keeping training stable. The last block's output projected back into vocabulary space and softmaxed to produce a probability distribution over the next token. Sample, append, repeat. That is the architecture of every modern decoder-only LLM. It is also, modulo specific component choices, RMSNorm versus LayerNorm, SwiGLU versus GELU, RoPE versus sinusoidal, what GPT, Llama, Mistral, and Claude do at the level of the forward pass.
 
-The architecture is defined. The weights start as random noise. What remains is *training* — the process that turns those random weights into something that can write, reason, and converse. Loss functions, optimizers, data pipelines, distributed training, scaling laws, the engineering of taking 175 billion parameters from random initialization to a model that knows the periodic table and can explain it. The next several chapters are about that process.
+The architecture is defined. The weights start as random noise. What remains is *training*, the process that turns those random weights into something that can write, reason, and converse. Loss functions, optimizers, data pipelines, distributed training, scaling laws, the engineering of taking 175 billion parameters from random initialization to a model that knows the periodic table and can explain it. The next several chapters are about that process.
 
 ## Exercises
 
-The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — Compute sinusoidal PE and verify the structure
+### Exercise 1 (easy): Compute sinusoidal PE and verify the structure
 
 Compute sinusoidal positional encoding for several positions. Verify that (a) PE values are in [-1, 1], (b) adjacent dimensions form sin/cos pairs at the same frequency, (c) the leftmost dimensions oscillate quickly and the rightmost slowly.
 
@@ -431,14 +431,14 @@ PE = sinusoidal_pe(max_len=100, d_model=64)
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — Why learned PE doesn't extrapolate
+### Exercise 2 (medium): Why learned PE doesn't extrapolate
 
-Train a tiny learned PE (random init) on positions 0-31 and try to use it at position 64. Demonstrate that there's no meaningful "position 64 embedding"; the model has no information about positions it wasn't trained on. Then compare to sinusoidal PE at the same position — sinusoidal gives a well-defined value, even though it wasn't seen during "training" (a learned PE wasn't trained on it).
+Train a tiny learned PE (random init) on positions 0-31 and try to use it at position 64. Demonstrate that there's no meaningful "position 64 embedding"; the model has no information about positions it wasn't trained on. Then compare to sinusoidal PE at the same position, sinusoidal gives a well-defined value, even though it wasn't seen during "training" (a learned PE wasn't trained on it).
 
 <details>
 <summary>Hint</summary>
 
-For learned PE, position 64 has no entry in the 32-position embedding table. Any value you put there is arbitrary (typically: out-of-bounds error, or zero-padded, or random). For sinusoidal PE, the formula gives a value for position 64 even if you never used it during a hypothetical training pass — the formula is deterministic.
+For learned PE, position 64 has no entry in the 32-position embedding table. Any value you put there is arbitrary (typically: out-of-bounds error, or zero-padded, or random). For sinusoidal PE, the formula gives a value for position 64 even if you never used it during a hypothetical training pass, the formula is deterministic.
 
 </details>
 
@@ -449,11 +449,11 @@ For learned PE, position 64 has no entry in the 32-position embedding table. Any
 d_model = 32
 trained_len = 32
 
-# Learned PE — random init for the "trained" range
+# Learned PE: random init for the "trained" range
 rng = np.random.default_rng(42)
 learned_pe = rng.normal(0, 0.02, (trained_len, d_model))
 
-# Sinusoidal PE — formula-based, well-defined for any position
+# Sinusoidal PE: formula-based, well-defined for any position
 def sinusoidal_pe_at(p, d_model, base=10000.0):
     pe = np.zeros(d_model)
     k_indices = np.arange(0, d_model, 2)
@@ -467,8 +467,8 @@ def sinusoidal_pe_at(p, d_model, base=10000.0):
 # print(f"Sinusoidal PE at p=16: {sinusoidal_pe_at(16, d_model)[:5].round(3)} ...")
 
 # Position 64 (out-of-range for learned PE)
-# TODO: try to access learned_pe[64] — what happens?
-# TODO: compute sinusoidal PE at p=64 — what's the result?
+# TODO: try to access learned_pe[64]: what happens?
+# TODO: compute sinusoidal PE at p=64: what's the result?
 
 # Conclusion: sinusoidal extrapolates by formula; learned PE doesn't have any
 # value for unseen positions.
@@ -476,14 +476,14 @@ def sinusoidal_pe_at(p, d_model, base=10000.0):
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Implement RoPE and verify the relative-position property
+### Exercise 3 (medium): Implement RoPE and verify the relative-position property
 
 Implement RoPE: rotate Q and K vectors by position-dependent angles before computing attention scores. Verify the key property: for fixed offset n - m, the dot product `RoPE(q, m) · RoPE(k, n)` is the same regardless of m.
 
 <details>
 <summary>Hint</summary>
 
-Treat the d_k-dimensional Q vector as d_k/2 pairs of 2D vectors. For position p and pair k, rotate the k-th pair by angle p × omega_k where omega_k = 1 / 10000^(2k/d_k). Apply the same to K. Then compute the dot product. Test at offsets (0, 5), (3, 8), (10, 15) — all have relative offset 5, so dot products should be equal.
+Treat the d_k-dimensional Q vector as d_k/2 pairs of 2D vectors. For position p and pair k, rotate the k-th pair by angle p × omega_k where omega_k = 1 / 10000^(2k/d_k). Apply the same to K. Then compute the dot product. Test at offsets (0, 5), (3, 8), (10, 15), all have relative offset 5, so dot products should be equal.
 
 </details>
 
@@ -519,9 +519,9 @@ for m, n in pairs:
   packages={["numpy"]}
 />
 
-### Exercise 4 (hard) — ALiBi and length extrapolation
+### Exercise 4 (hard): ALiBi and length extrapolation
 
-Implement ALiBi attention scores: standard scaled dot-product attention plus a linear-distance bias. Demonstrate that the bias pattern is well-defined at any sequence length — even lengths far beyond training. Compute the attention pattern on a 16-position sequence with the bias; verify the bias is monotonically negative with distance.
+Implement ALiBi attention scores: standard scaled dot-product attention plus a linear-distance bias. Demonstrate that the bias pattern is well-defined at any sequence length, even lengths far beyond training. Compute the attention pattern on a 16-position sequence with the bias; verify the bias is monotonically negative with distance.
 
 <details>
 <summary>Hint</summary>
@@ -558,7 +558,7 @@ bias = alibi_bias(seq_len, n_heads)
 # print(f"Bias shape: {bias.shape}")
 # print(f"Head 0 row 8 (distance from position 8 to each other position):")
 # print(bias[0, 8].round(3))
-# Expect: a V-shape — 0 at position 8, monotonically decreasing as you move away
+# Expect: a V-shape: 0 at position 8, monotonically decreasing as you move away
 
 # Verify length-extrapolation safety: bias formula works at seq_len = 1024
 # bias_long = alibi_bias(1024, n_heads)
