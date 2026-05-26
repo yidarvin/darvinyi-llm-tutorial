@@ -159,7 +159,11 @@ export default defineConfig({
   ],
   markdown: {
     shikiConfig: {
-      theme: 'github-dark-dimmed',
+      // Custom darvinyi-cyan theme defined inline; tokens map to the
+      // design-system palette (see context/DESIGN_SYSTEM.md → Code
+      // rendering). The same hex values live in the CodeMirror
+      // HighlightStyle in src/components/code/RunnableCode.tsx.
+      theme: { /* darvinyi-cyan inline theme object — see actual config */ },
       wrap: false,
     },
   },

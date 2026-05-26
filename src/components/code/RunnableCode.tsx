@@ -9,45 +9,45 @@ import { tags as t } from '@lezer/highlight';
 import { runPython } from '@lib/pyodide';
 import styles from './RunnableCode.module.css';
 
-/* Token colors mirror Shiki's github-dark-dimmed output so RunnableCode
- * widgets read identically to the static fenced code blocks Shiki renders
- * server-side. Hex values are taken from observed Shiki output, not the
- * design-system palette — keeping the two code surfaces visually identical
- * across the site. */
-const shikiDimmedHighlight = HighlightStyle.define([
-  { tag: t.comment, color: '#768390', fontStyle: 'italic' },
-  { tag: t.lineComment, color: '#768390', fontStyle: 'italic' },
-  { tag: t.blockComment, color: '#768390', fontStyle: 'italic' },
-  { tag: t.docString, color: '#96D0FF' },
-  { tag: t.string, color: '#96D0FF' },
-  { tag: t.special(t.string), color: '#96D0FF' },
-  { tag: t.regexp, color: '#96D0FF' },
-  { tag: t.escape, color: '#F69D50' },
-  { tag: t.number, color: '#6CB6FF' },
-  { tag: t.bool, color: '#6CB6FF' },
-  { tag: t.null, color: '#6CB6FF' },
-  { tag: t.atom, color: '#6CB6FF' },
-  { tag: t.keyword, color: '#F47067' },
-  { tag: t.controlKeyword, color: '#F47067' },
-  { tag: t.definitionKeyword, color: '#F47067' },
-  { tag: t.moduleKeyword, color: '#F47067' },
-  { tag: t.modifier, color: '#F47067' },
-  { tag: t.operator, color: '#F47067' },
-  { tag: t.operatorKeyword, color: '#F47067' },
-  { tag: t.self, color: '#F47067', fontStyle: 'italic' },
-  { tag: t.function(t.variableName), color: '#6CB6FF' },
-  { tag: t.function(t.propertyName), color: '#6CB6FF' },
-  { tag: t.className, color: '#F69D50' },
-  { tag: t.typeName, color: '#6CB6FF' },
-  { tag: t.namespace, color: '#ADBAC7' },
-  { tag: t.definition(t.variableName), color: '#ADBAC7' },
-  { tag: t.variableName, color: '#ADBAC7' },
-  { tag: t.propertyName, color: '#ADBAC7' },
-  { tag: t.punctuation, color: '#ADBAC7' },
-  { tag: t.bracket, color: '#ADBAC7' },
-  { tag: t.derefOperator, color: '#ADBAC7' },
-  { tag: t.meta, color: '#DCBDFB' },
-  { tag: t.invalid, color: '#FF938A' },
+/* darvinyi-cyan palette — design-system tokens.
+ * Mirrors the custom Shiki theme defined inline in astro.config.mjs so
+ * static fenced code blocks (Shiki, build-time) and RunnableCode editors
+ * (CodeMirror, runtime) render identically. Keep these in sync with the
+ * tokenColors block in astro.config.mjs. */
+const darvinHighlight = HighlightStyle.define([
+  { tag: t.comment, color: '#737373', fontStyle: 'italic' },          /* text-tertiary */
+  { tag: t.lineComment, color: '#737373', fontStyle: 'italic' },
+  { tag: t.blockComment, color: '#737373', fontStyle: 'italic' },
+  { tag: t.docString, color: '#10b981' },                             /* emerald-500 */
+  { tag: t.string, color: '#10b981' },
+  { tag: t.special(t.string), color: '#10b981' },
+  { tag: t.regexp, color: '#10b981' },
+  { tag: t.escape, color: '#f59e0b' },                                /* amber-500 */
+  { tag: t.number, color: '#f59e0b' },
+  { tag: t.bool, color: '#f59e0b' },
+  { tag: t.null, color: '#f59e0b' },
+  { tag: t.atom, color: '#f59e0b' },
+  { tag: t.keyword, color: '#22d3ee' },                               /* cyan-400 */
+  { tag: t.controlKeyword, color: '#22d3ee' },
+  { tag: t.definitionKeyword, color: '#22d3ee' },
+  { tag: t.moduleKeyword, color: '#22d3ee' },
+  { tag: t.modifier, color: '#22d3ee' },
+  { tag: t.operator, color: '#a3a3a3' },                              /* text-secondary */
+  { tag: t.operatorKeyword, color: '#22d3ee' },
+  { tag: t.self, color: '#22d3ee', fontStyle: 'italic' },
+  { tag: t.function(t.variableName), color: '#67e8f9' },              /* cyan-300 */
+  { tag: t.function(t.propertyName), color: '#67e8f9' },
+  { tag: t.className, color: '#67e8f9' },
+  { tag: t.typeName, color: '#67e8f9' },
+  { tag: t.namespace, color: '#f5f5f5' },                             /* text-primary */
+  { tag: t.definition(t.variableName), color: '#f5f5f5' },
+  { tag: t.variableName, color: '#f5f5f5' },
+  { tag: t.propertyName, color: '#f5f5f5' },
+  { tag: t.punctuation, color: '#a3a3a3' },
+  { tag: t.bracket, color: '#a3a3a3' },
+  { tag: t.derefOperator, color: '#a3a3a3' },
+  { tag: t.meta, color: '#22d3ee', fontStyle: 'italic' },             /* decorators */
+  { tag: t.invalid, color: '#f43f5e' },                               /* rose-500 */
 ]);
 
 export interface RunnableCodeProps {
@@ -86,7 +86,7 @@ export default function RunnableCode({
         lineNumbers(),
         history(),
         python(),
-        syntaxHighlighting(shikiDimmedHighlight),
+        syntaxHighlighting(darvinHighlight),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         EditorView.editable.of(!readonly),
         EditorView.theme(

@@ -302,7 +302,7 @@ Reference inline with `<EqRef id="4.1" />` — renders as `(4.1)` in cyan, links
 
 ### Static code blocks (Shiki)
 
-Shiki theme: `github-dark-dimmed`, dimmed enough to feel quiet on the dark canvas.
+Shiki theme: custom `darvinyi-cyan` defined inline in `astro.config.mjs`. Token colors map to design-system tokens: cyan-400 for keywords/control flow, cyan-300 for function and class names (matching inline code), emerald-500 for strings and docstrings, amber-500 for numbers and booleans, text-tertiary italic for comments, text-secondary for operators and punctuation, text-primary for identifiers. The same hex values are mirrored in the CodeMirror HighlightStyle in `src/components/code/RunnableCode.tsx` so RunnableCode editors render identically to Shiki-rendered fenced blocks.
 
 Use markdown fences with optional language and metadata:
 
