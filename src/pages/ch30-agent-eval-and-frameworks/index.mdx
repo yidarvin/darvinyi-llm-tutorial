@@ -12,7 +12,7 @@ Chapter 26 made evaluation a discipline. Phase 14 closed by establishing that ca
 
 The chapter's argument is structural. **Agent evaluation is harder than LLM evaluation**, harder in kind, not just in degree. Tasks are multi-step; success is multi-dimensional; benchmarks are slow to develop; production-readiness includes observability and deployment patterns the model-eval world rarely confronts. We cover the $2025$ agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, $\tau$-bench, BrowseComp), the methodologies that actually catch failures (pass$^k$ for reliability, cost-quality Pareto for production tradeoffs), the production observability frameworks (LangSmith, Helicone, Braintrust, OpenTelemetry), and the deployment patterns plus readiness checklist that mark the boundary between prototype and production.
 
-**And then the curriculum closes.** Section 8 looks back at the thirty chapters, from numpy primitives in Ch 1 to agent systems in production in this chapter, and takes stock of what the reader can now do. **Honest about what's not covered. Forward-looking without predicting.** The closing thought sends the reader off well. **By the end of this chapter you'll have the full stack of an LLM systems engineer**, the discipline to evaluate what you build, and, equally important, the perspective to follow the field as it keeps moving. **Now let's finish.**
+**And then the curriculum closes.** Section 8 looks back at the thirty chapters, from numpy primitives in Ch 1 to agent systems in production in this chapter, and takes stock of what the reader can now do. **Honest about what's not covered. Forward-looking without predicting.** The closing thought sends the reader off well. **By the end of this chapter you'll have the full stack of an LLM systems engineer**: the discipline to evaluate what you build, and, equally important, the perspective to follow the field as it keeps moving. **Now let's finish.**
 
 ## Why agent evaluation is harder
 
@@ -25,11 +25,11 @@ The chapter's argument is structural. **Agent evaluation is harder than LLM eval
 **Two. Success is multi-dimensional.** No single number captures all of these.
 
 - **Task success**: did the agent complete?
-- **Cost**, LLM calls plus tool calls plus total dollars
-- **Latency**, time to completion
-- **Safety**, no harmful actions taken
-- **Robustness**, pass$^k$, success across $k$ attempts
-- **Cost-quality tradeoff**, the Pareto frontier across configurations
+- **Cost**: LLM calls plus tool calls plus total dollars
+- **Latency**: time to completion
+- **Safety**: no harmful actions taken
+- **Robustness**: pass$^k$, success across $k$ attempts
+- **Cost-quality tradeoff**: the Pareto frontier across configurations
 
 **Three. Verifying success is harder.** LLM eval has labeled answers; agent eval often requires running the agent's output (does the produced code compile? do tests pass?), replicating environment state (was the email sent? the file created?), or human judgment (is the produced essay any good?). **Verification often requires running the world** that the agent acted on.
 
