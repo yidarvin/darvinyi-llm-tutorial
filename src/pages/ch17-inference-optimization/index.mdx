@@ -22,9 +22,9 @@ The naive way to generate text is the way the math is written down: at every ste
 
 ### Why this matters
 
-The same model, same hardware, with a fully optimized inference stack: $200$ to $500$ tokens per second. **A $5$ to $50\times$ throughput gap that has nothing to do with model architecture and nothing to do with hardware.** It is purely the difference between running the math as written and running the system as designed for serving. The economic consequence is decisive. A service handling one billion tokens per day on naive inference might need a hundred A100s; on a production stack, five. Margin per request flips from impossible to comfortable. **Operational money matters**: and at LLM scale the savings are not marginal, they are the difference between a viable product and one that bleeds compute.
+The same model, same hardware, with a fully optimized inference stack: $200$ to $500$ tokens per second. **A $5$ to $50\times$ throughput gap that has nothing to do with model architecture and nothing to do with hardware.** It is purely the difference between running the math as written and running the system as designed for serving. The economic consequence is decisive. A service handling one billion tokens per day on naive inference might need a hundred A100s; on a production stack, five. Margin per request flips from impossible to comfortable. **Operational money matters**: at LLM scale the savings are not marginal; they are the difference between a viable product and one that bleeds compute.
 
-These optimizations are not exotic research. Every major open-source serving system, vLLM, TGI, SGLang, TensorRT-LLM, uses some combination of them, and most managed APIs (Together, Anyscale, Fireworks, the model-provider endpoints) layer additional proprietary tuning on top. The pattern is industry standard, and the patterns are the topic of this chapter.
+These optimizations are not exotic research. Every major open-source serving system (vLLM, TGI, SGLang, TensorRT-LLM) uses some combination of them, and most managed APIs (Together, Anyscale, Fireworks, the model-provider endpoints) layer additional proprietary tuning on top. The pattern is industry standard, and the patterns are the topic of this chapter.
 
 <Callout type="note">
 This chapter is the *engineering* counterpart to Phase 11's training-method content. **Distillation (Ch 16) reduces parameter count; quantization (Ch 18) reduces bits per parameter; inference optimization (this chapter) reduces wasted computation.** All three compose multiplicatively. A production $70$B serving stack might run $20\times$ faster than a naive baseline just from stacking these three categories, before any architectural changes.
@@ -68,7 +68,7 @@ For every layer, the cache stores the keys and values for every previous positio
 2. Appends the new K and V into the cache slot at position $\text{seq\_len}$,
 3. Computes attention between the new Q and the *full* cache of K and V.
 
-The Q for the new token is the only fresh query in the layer; the keys and values for everything else were paid for once, on the step they were produced. **The KV cache is the model's working memory**, the snapshot of what has been said and how it has been encoded, and after prefill, decode is just lookups against that snapshot plus a small new write each step.
+The Q for the new token is the only fresh query in the layer; the keys and values for everything else were paid for once, on the step they were produced. **The KV cache is the model's working memory**: the snapshot of what has been said and how it has been encoded. After prefill, decode is just lookups against that snapshot plus a small new write each step.
 
 ### The memory cost
 
