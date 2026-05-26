@@ -58,13 +58,13 @@ The capability-benchmark landscape in early $2025$ is built around a handful of 
 
 The pattern is consistent. **Most benchmarks saturate in $12$ to $36$ months.** GPQA (Rein $2023$) is the modern hard benchmark; new ones are released as old ones max out. The cycle is now structural, frontier capability outruns benchmark design, and the response is *another* benchmark rather than a new capability claim.
 
-What capability benchmarks measure well is narrow but real. **Knowledge breadth**, MMLU spans $57$ subjects across STEM, humanities, social sciences. **Code synthesis**, HumanEval is a clean signal of "can produce working code under hidden test cases." **Math reasoning**, MATH stress-tests step-by-step computation on competition problems. **Logical and scientific reasoning**, GPQA pushes graduate-level questions that are "Google-proof," meaning humans with web access still score around $34\%$.
+What capability benchmarks measure well is narrow but real. **Knowledge breadth**: MMLU spans $57$ subjects across STEM, humanities, social sciences. **Code synthesis**: HumanEval is a clean signal of "can produce working code under hidden test cases." **Math reasoning**: MATH stress-tests step-by-step computation on competition problems. **Logical and scientific reasoning**: GPQA pushes graduate-level questions that are "Google-proof," meaning humans with web access still score around $34\%$.
 
-What they measure poorly is also real. **Open-ended generation quality**, no clean metric exists. **Conversational ability**, single-turn evals miss conversational drift across turns. **Long-context reasoning**, most benchmarks are short. **Real-world tasks**, everything in a benchmark is a stylized version of work, not work itself.
+What they measure poorly is also real. **Open-ended generation quality**: no clean metric exists. **Conversational ability**: single-turn evals miss conversational drift across turns. **Long-context reasoning**: most benchmarks are short. **Real-world tasks**: everything in a benchmark is a stylized version of work, not work itself.
 
 ### Methodology
 
-Three formats carry most capability benchmarks. **Multi-choice format** (MMLU, GPQA), easy to score, fast to run, vulnerable to surface heuristics like "always pick C." **Open-ended format with hidden tests** (HumanEval, MATH), test-case verification gives a cleaner signal but costs more compute. **Chain-of-thought variants**, most modern benchmarks now report CoT-allowed and CoT-restricted scores separately because the gap is large enough to matter.
+Three formats carry most capability benchmarks. **Multi-choice format** (MMLU, GPQA): easy to score, fast to run, vulnerable to surface heuristics like "always pick C." **Open-ended format with hidden tests** (HumanEval, MATH): test-case verification gives a cleaner signal but costs more compute. **Chain-of-thought variants**: most modern benchmarks now report CoT-allowed and CoT-restricted scores separately because the gap is large enough to matter.
 
 ### Score interpretation
 
