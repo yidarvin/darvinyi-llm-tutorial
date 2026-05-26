@@ -1,24 +1,24 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch28-agent-from-scratch
-description: Agents from scratch — the engineering chapter of Phase 15. From the 80/20 framing of agent engineering (LLM is 20%; everything else is 80%) through tool design principles, tool implementation patterns, schemas and structured calls (function calling, MCP), error handling and recovery (retries, circuit breakers, fallback tools), observability and trace debugging, and agent scaffolding (system prompts, tool descriptions, few-shot examples). The chapter that turns conceptual agent knowledge into working production code.
+description: Agents from scratch, the engineering chapter of Phase 15. From the 80/20 framing of agent engineering (LLM is 20%; everything else is 80%) through tool design principles, tool implementation patterns, schemas and structured calls (function calling, MCP), error handling and recovery (retries, circuit breakers, fallback tools), observability and trace debugging, and agent scaffolding (system prompts, tool descriptions, few-shot examples). The chapter that turns conceptual agent knowledge into working production code.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { ToolSchemaBuilder, AgentTraceInspector } from '@components/widgets';
 
-Chapter 27 covered what an agent *is*: an LLM acting as a controller in a loop with an environment. ReAct as the foundational pattern, AutoGPT as the cautionary tale, memory and patterns and the $2025$ stack. **All conceptual.** This chapter is engineering — how to take those concepts and assemble a working agent out of real code that survives real traffic. **Production agents are $80\%$ engineering, $20\%$ LLM.** The $20\%$ is the model and the basic loop. The $80\%$ is everything in this chapter: tools, schemas, error handling, observability, scaffolding.
+Chapter 27 covered what an agent *is*: an LLM acting as a controller in a loop with an environment. ReAct as the foundational pattern, AutoGPT as the cautionary tale, memory and patterns and the $2025$ stack. **All conceptual.** This chapter is engineering, how to take those concepts and assemble a working agent out of real code that survives real traffic. **Production agents are $80\%$ engineering, $20\%$ LLM.** The $20\%$ is the model and the basic loop. The $80\%$ is everything in this chapter: tools, schemas, error handling, observability, scaffolding.
 
-The work breaks into six concerns. **Tool design** — atomic, single-responsibility, clear-contract functions the LLM can call effectively. **Tool implementation** — sync vs async, timeouts, output truncation, sandboxing for anything dangerous. **Schemas** — JSON Schema, OpenAI function calling, Anthropic MCP; how the LLM knows what tools exist and how to call them. **Error handling** — retries, circuit breakers, fallback tools, surfacing errors to the LLM. **Observability** — structured logging, distributed tracing, debugging from traces. **Scaffolding** — system prompts, tool descriptions, few-shot examples, output validation, cost budgets.
+The work breaks into six concerns. **Tool design**, atomic, single-responsibility, clear-contract functions the LLM can call effectively. **Tool implementation**: sync vs async, timeouts, output truncation, sandboxing for anything dangerous. **Schemas**, JSON Schema, OpenAI function calling, Anthropic MCP; how the LLM knows what tools exist and how to call them. **Error handling**, retries, circuit breakers, fallback tools, surfacing errors to the LLM. **Observability**, structured logging, distributed tracing, debugging from traces. **Scaffolding**, system prompts, tool descriptions, few-shot examples, output validation, cost budgets.
 
-The tonal frame is engineering with empathy for the LLM. **Tools should be designed so the LLM can use them effectively** — not so you feel clever. A minimal ReAct agent is fifty lines; a production agent is $500$ – $5{,}000$. **The difference is everything in this chapter.** By the end, you'll have the operational toolkit to build agents that hold up in production. **Ch 29 then composes multiple agents; Ch 30 evaluates them and closes the curriculum.** Three chapters from the end.
+The tonal frame is engineering with empathy for the LLM. **Tools should be designed so the LLM can use them effectively**, not so you feel clever. A minimal ReAct agent is fifty lines; a production agent is $500$ – $5{,}000$. **The difference is everything in this chapter.** By the end, you'll have the operational toolkit to build agents that hold up in production. **Ch 29 then composes multiple agents; Ch 30 evaluates them and closes the curriculum.** Three chapters from the end.
 
 ## From concept to code
 
 ### The 80/20
 
-Production agents are $80\%$ engineering on top of $20\%$ LLM. **The $20\%$** is the model itself, the prompt, and the basic loop — all covered in Ch 27. **The $80\%$** is everything else: tools, schemas, error handling, observability, scaffolding. Most engineers leaving a conceptual chapter on agents intuit that the LLM is the hard part. Ch 28 wants to correct that intuition. The LLM is the easy part — pick a frontier model, write a competent prompt, run a ReAct loop. The engineering around it is where the months of work live.
+Production agents are $80\%$ engineering on top of $20\%$ LLM. **The $20\%$** is the model itself, the prompt, and the basic loop, all covered in Ch 27. **The $80\%$** is everything else: tools, schemas, error handling, observability, scaffolding. Most engineers leaving a conceptual chapter on agents intuit that the LLM is the hard part. Ch 28 wants to correct that intuition. The LLM is the easy part, pick a frontier model, write a competent prompt, run a ReAct loop. The engineering around it is where the months of work live.
 
 ### What goes into a real agent
 
@@ -28,12 +28,12 @@ The composition is short to state and long to build.
 $$\text{production agent} \;=\; \text{ReAct loop} \;+\; \text{tools} \;+\; \text{schemas} \;+\; \text{error handling} \;+\; \text{observability} \;+\; \text{scaffolding}$$
 </Equation>
 
-Each addend requires deliberate design. **Skip one and the agent is fragile.** Skip two and it never gets to production. The empirical anchors as of early $2025$: a minimal ReAct agent runs in ~$50$ lines of Python; a production agent runs $500$ – $5{,}000$. Production agents typically expose $5$ – $50$ well-designed tools, not hundreds. Per-turn latency sits in the $1$ – $10$ second range; total task latency for non-trivial tasks is $10$ – $300$ seconds. Per-task cost runs $\$0.01$ – $\$10$ depending on model and complexity. The reliability bar for production deployment is ~$95\%$+ task completion — anything lower and operators stop trusting the agent.
+Each addend requires deliberate design. **Skip one and the agent is fragile.** Skip two and it never gets to production. The empirical anchors as of early $2025$: a minimal ReAct agent runs in ~$50$ lines of Python; a production agent runs $500$ – $5{,}000$. Production agents typically expose $5$ – $50$ well-designed tools, not hundreds. Per-turn latency sits in the $1$ – $10$ second range; total task latency for non-trivial tasks is $10$ – $300$ seconds. Per-task cost runs $\$0.01$ – $\$10$ depending on model and complexity. The reliability bar for production deployment is ~$95\%$+ task completion, anything lower and operators stop trusting the agent.
 
 The chapter's tonal frame is **engineering with empathy for the LLM**. Tools should be designed so the LLM can use them effectively. Schemas should be obvious to anyone reading them, including the model. Errors should be informative enough that the agent can plan its next move. Traces should be readable by humans debugging at $3$ AM. **The agent is a system; this chapter is its system design.**
 
 <Callout type="aside">
-Most production agents fail not because the LLM is bad but because the surrounding engineering is incomplete. **The $80\%$ engineering reality** is the central operational claim of this chapter. **Skip the engineering and the agent does not survive production traffic** — no matter how capable the underlying model is. A frontier model wrapped in shoddy tools, sloppy schemas, and no observability will be outperformed by a weaker model with deliberate engineering around it.
+Most production agents fail not because the LLM is bad but because the surrounding engineering is incomplete. **The $80\%$ engineering reality** is the central operational claim of this chapter. **Skip the engineering and the agent does not survive production traffic**: no matter how capable the underlying model is. A frontier model wrapped in shoddy tools, sloppy schemas, and no observability will be outperformed by a weaker model with deliberate engineering around it.
 </Callout>
 
 Section 2 starts the engineering with the most important non-LLM skill: tool design.
@@ -42,15 +42,15 @@ Section 2 starts the engineering with the most important non-LLM skill: tool des
 
 ### Six principles
 
-A tool is a function the agent can call. Designing good tools is the most important non-LLM skill in agent engineering — and the place engineers most consistently underinvest.
+A tool is a function the agent can call. Designing good tools is the most important non-LLM skill in agent engineering, and the place engineers most consistently underinvest.
 
-**Single responsibility.** Each tool does one thing. **Avoid grab-bag utilities** like a `file_operations` tool that reads, writes, lists, copies, and chmods. Split it: `read_file`, `write_file`, `list_directory`, `copy_file`. **The LLM picks tools by name** — clear names beat clever abstractions.
+**Single responsibility.** Each tool does one thing. **Avoid grab-bag utilities** like a `file_operations` tool that reads, writes, lists, copies, and chmods. Split it: `read_file`, `write_file`, `list_directory`, `copy_file`. **The LLM picks tools by name**, clear names beat clever abstractions.
 
 **Atomic operations.** Tools should complete fully or fail cleanly. **Avoid partial-completion semantics** that the LLM has to reason about. A tool that writes half a file before erroring forces the agent to model the world in finer detail than it can reliably handle.
 
 **Clear contracts.** Every tool has five parts: a name in verb-noun form (`read_file`, `search_web`, `send_email`); a one-to-three-sentence description; parameters with types and per-parameter descriptions; a return value with predictable structure; and documented error modes. Skip any of the five and the LLM has to guess.
 
-**Idempotency where possible.** Calling twice has the same effect as calling once. **This is critical for retry logic.** Reads are naturally idempotent; writes often aren't. When you can't make a tool idempotent, make the non-idempotency visible — an explicit `force=True` parameter or a confirmation step.
+**Idempotency where possible.** Calling twice has the same effect as calling once. **This is critical for retry logic.** Reads are naturally idempotent; writes often aren't. When you can't make a tool idempotent, make the non-idempotency visible, an explicit `force=True` parameter or a confirmation step.
 
 **Bounded outputs.** Tools should return bounded amounts of data. A `search_web` that returns $100$ results blows up the context window in a single call. Limit, paginate, summarize. **The right output size is "enough for the LLM to make the next decision, not more."**
 
@@ -58,10 +58,10 @@ A tool is a function the agent can call. Designing good tools is the most import
 
 ### Design anti-patterns
 
-Four patterns that recur in production audits and need to be designed out. **Kitchen-sink tools** — one tool with twenty parameters and a dozen modes; impossible to describe; impossible for the LLM to use correctly. **Magic parameters** — parameter names that don't tell the LLM what they do (`flag`, `opts`, `mode`); the description is the only thing the model sees. **Silent failures** — tools that return empty strings or `null` on error instead of an explicit failure signal; the agent thinks the call succeeded and acts on garbage. **Unbounded outputs** — tools that dump entire databases into context; one call exhausts the window.
+Four patterns that recur in production audits and need to be designed out. **Kitchen-sink tools**, one tool with twenty parameters and a dozen modes; impossible to describe; impossible for the LLM to use correctly. **Magic parameters**: parameter names that don't tell the LLM what they do (`flag`, `opts`, `mode`); the description is the only thing the model sees. **Silent failures**: tools that return empty strings or `null` on error instead of an explicit failure signal; the agent thinks the call succeeded and acts on garbage. **Unbounded outputs**: tools that dump entire databases into context; one call exhausts the window.
 
 <Callout type="note">
-**"If I just give the LLM more tools, it'll figure it out."** False. **More tools without clear descriptions and good design hurt agent performance.** The LLM has to read every tool description on every call; it has to decide which tool to use; it has to remember each tool's constraints. **Five well-designed tools beat fifty sloppy ones.** Quality beats quantity, every time. The instinct to add tools to handle every conceivable case is exactly the wrong instinct — prune aggressively.
+**"If I just give the LLM more tools, it'll figure it out."** False. **More tools without clear descriptions and good design hurt agent performance.** The LLM has to read every tool description on every call; it has to decide which tool to use; it has to remember each tool's constraints. **Five well-designed tools beat fifty sloppy ones.** Quality beats quantity, every time. The instinct to add tools to handle every conceivable case is exactly the wrong instinct, prune aggressively.
 </Callout>
 
 Section 3 turns these principles into code.
@@ -74,9 +74,9 @@ The simplest implementation: a synchronous Python function that takes parameters
 
 ### Async, timeouts, and truncation
 
-For I/O-bound tools — anything that waits on a network or disk — async unlocks parallel execution. The cost is operational complexity: the agent loop has to be async-aware, debugging is harder, and error semantics get subtler. Use async when parallelism actually pays for itself; stay sync otherwise.
+For I/O-bound tools, anything that waits on a network or disk, async unlocks parallel execution. The cost is operational complexity: the agent loop has to be async-aware, debugging is harder, and error semantics get subtler. Use async when parallelism actually pays for itself; stay sync otherwise.
 
-**Timeouts on every tool**, always. Infinite hangs are an anti-pattern — they kill the agent loop without producing a useful error. Every network call gets a hard timeout, usually $5$ – $30$ seconds depending on the operation. **Output truncation**, always. Cap the size of every tool's return value; if the underlying call produces more, truncate and tell the LLM how much was hidden. **Side-effect tools with confirmation** — anything that mutates state (send email, delete file, run code, charge a card) should require explicit confirmation or run sandboxed. **The LLM might call them by mistake**, and the cost of a mistaken side effect can be much higher than a missing answer.
+**Timeouts on every tool**, always. Infinite hangs are an anti-pattern, they kill the agent loop without producing a useful error. Every network call gets a hard timeout, usually $5$ – $30$ seconds depending on the operation. **Output truncation**, always. Cap the size of every tool's return value; if the underlying call produces more, truncate and tell the LLM how much was hidden. **Side-effect tools with confirmation**, anything that mutates state (send email, delete file, run code, charge a card) should require explicit confirmation or run sandboxed. **The LLM might call them by mistake**, and the cost of a mistaken side effect can be much higher than a missing answer.
 
 ### Tool registries
 
@@ -165,7 +165,7 @@ print(TOOLS['calculate'].execute({'expression': '1/0'}))   # error case
 ```
 </RunnableCode>
 
-Section 4 covers how the LLM sees these tools — schemas.
+Section 4 covers how the LLM sees these tools, schemas.
 
 ## Tool schemas and structured calls
 
@@ -196,18 +196,18 @@ The LLM does not see Python types. It sees text. **Schemas tell the LLM how to c
 
 **Anthropic tool use** is conceptually identical (schemas plus structured tool-use blocks), with explicit parallel tool calls, reasoning tokens, and slightly different message formatting. **Model Context Protocol (MCP)** sits a layer above function calling. **MCP servers** expose tools; **MCP clients** (LLM applications) discover and invoke them. The protocol standardizes tool discovery, authentication, schemas, and error semantics across providers. **Tools become portable** between LLM applications without per-application integration work.
 
-**OpenAPI integration** is the third leg. Many existing REST APIs auto-convert to function-calling schemas via mature tooling. **An agent can use any documented REST API** with minimal glue code — point a converter at the OpenAPI spec, get tool schemas out, drop them in the registry.
+**OpenAPI integration** is the third leg. Many existing REST APIs auto-convert to function-calling schemas via mature tooling. **An agent can use any documented REST API** with minimal glue code, point a converter at the OpenAPI spec, get tool schemas out, drop them in the registry.
 
-<WidgetFrame title="Tool schema builder" caption="Six curated Python tool functions, each a different schema pattern: simple, optional params, side-effect, bounded output, sandboxed eval, complex shape. For each, see the Python source side by side with the OpenAI function-calling schema, the Anthropic tool-use schema, and a sample LLM tool-call response as JSON. Demonstrates the function → schema → invocation pipeline that every agent framework runs on. The schema is the contract between engineer and LLM — descriptions, type constraints, and required fields are what stops the LLM from passing malformed inputs.">
+<WidgetFrame title="Tool schema builder" caption="Six curated Python tool functions, each a different schema pattern: simple, optional params, side-effect, bounded output, sandboxed eval, complex shape. For each, see the Python source side by side with the OpenAI function-calling schema, the Anthropic tool-use schema, and a sample LLM tool-call response as JSON. Demonstrates the function → schema → invocation pipeline that every agent framework runs on. The schema is the contract between engineer and LLM, descriptions, type constraints, and required fields are what stops the LLM from passing malformed inputs.">
   <ToolSchemaBuilder client:visible />
 </WidgetFrame>
 
 ### Best practices
 
-Five practices separate schemas the LLM uses correctly from schemas it doesn't. **Descriptions matter** — the LLM picks tools by reading them; vague descriptions guarantee wrong choices. **Parameter examples in descriptions** — include sample values inline; the LLM mirrors them. **Required vs optional** — be explicit; ambiguity here triggers junk arguments. **Enums for constrained values** — if a parameter is one of five strings, declare it as an enum, not a free `string`. **Object types for complex inputs** — when an argument is structured, declare it as an object with its own schema, not a stringified JSON blob.
+Five practices separate schemas the LLM uses correctly from schemas it doesn't. **Descriptions matter**: the LLM picks tools by reading them; vague descriptions guarantee wrong choices. **Parameter examples in descriptions**: include sample values inline; the LLM mirrors them. **Required vs optional**: be explicit; ambiguity here triggers junk arguments. **Enums for constrained values**: if a parameter is one of five strings, declare it as an enum, not a free `string`. **Object types for complex inputs**: when an argument is structured, declare it as an object with its own schema, not a stringified JSON blob.
 
 <Callout type="note">
-**"MCP will replace function calling."** Debatable. **MCP adds standardization above function calling**, not replacement. The underlying mechanism (LLM produces structured tool calls; developer executes them) is the same in both. **MCP is plumbing, not a paradigm shift** — useful for interoperability and discovery, not a new agentic capability. Pick based on your stack: native function calling if you're single-provider, MCP if you need cross-provider portability. Don't predict the future; both will be around for years.
+**"MCP will replace function calling."** Debatable. **MCP adds standardization above function calling**, not replacement. The underlying mechanism (LLM produces structured tool calls; developer executes them) is the same in both. **MCP is plumbing, not a paradigm shift**, useful for interoperability and discovery, not a new agentic capability. Pick based on your stack: native function calling if you're single-provider, MCP if you need cross-provider portability. Don't predict the future; both will be around for years.
 </Callout>
 
 Section 5 covers what happens when tools fail.
@@ -220,11 +220,11 @@ Production tool calls fail constantly. Network failures. Services unavailable. R
 
 ### Six patterns
 
-**Retry with exponential backoff** for transient failures. Wait progressively longer between attempts — $1$ s, $2$ s, $4$ s — capped at a maximum delay. Categorize errors first: retry transient failures (network, rate-limit, timeout); don't retry permanent ones (invalid arguments, $4xx$ auth errors).
+**Retry with exponential backoff** for transient failures. Wait progressively longer between attempts, $1$ s, $2$ s, $4$ s, capped at a maximum delay. Categorize errors first: retry transient failures (network, rate-limit, timeout); don't retry permanent ones (invalid arguments, $4xx$ auth errors).
 
 **Circuit breakers** for cascading failures. If a tool fails repeatedly, stop calling it for a cooldown period. **Prevents one broken service from taking the whole agent down**: an agent that keeps trying a dead endpoint just burns iterations and cost.
 
-**Fallback tools** for redundancy. When one tool fails, try a backup — two web search providers, a cached lookup before a live API, a cheaper model when the expensive one rate-limits. Fallbacks need their own design (when does the fallback fire? what does the LLM see?), but for high-availability agents they're standard.
+**Fallback tools** for redundancy. When one tool fails, try a backup, two web search providers, a cached lookup before a live API, a cheaper model when the expensive one rate-limits. Fallbacks need their own design (when does the fallback fire? what does the LLM see?), but for high-availability agents they're standard.
 
 **Surface errors to the LLM**, never swallow them. The agent uses error messages to plan recovery. Return errors as structured observations the model can read.
 
@@ -232,7 +232,7 @@ Production tool calls fail constantly. Network failures. Services unavailable. R
 
 **Cost budgets.** Cap total cost per task. If an agent burns $\$10$ in inference without progress, something is wrong and the system should stop it.
 
-**Anti-patterns** that recur. Swallowing errors silently — the agent never sees them and never recovers. Retrying non-retryable errors — invalid arguments fail forever no matter how patiently you wait. Catching too broadly — `except Exception` hides bugs as readily as it hides transients. Infinite retry without backoff or cap — a denial-of-service against your own infrastructure.
+**Anti-patterns** that recur. Swallowing errors silently, the agent never sees them and never recovers. Retrying non-retryable errors, invalid arguments fail forever no matter how patiently you wait. Catching too broadly, `except Exception` hides bugs as readily as it hides transients. Infinite retry without backoff or cap, a denial-of-service against your own infrastructure.
 
 <RunnableCode client:visible>
 ```python
@@ -277,7 +277,7 @@ def with_retry(fn, *args, max_retries=3, base_wait=0.001, **kwargs):
     return None, f"Failed after {max_retries} attempts"
 
 
-# Mock flaky tool — fails 60% of the time
+# Mock flaky tool: fails 60% of the time
 def flaky_search(query):
     if random.random() < 0.6:
         raise ConnectionError("Service temporarily unavailable")
@@ -315,12 +315,12 @@ for i in range(6):
 </RunnableCode>
 
 <Callout type="warning">
-**"Tool errors should be hidden from the LLM."** False. **The LLM uses error messages to plan recovery.** Hiding errors means the model can't decide what to do next; it might retry the same broken tool indefinitely, or give up when a workaround was available. **Surface errors as structured observations.** *"Error: connection timeout after $30$ s. Retry or try a different tool"* is dramatically more useful than swallowed silence — and dramatically more useful than a raw stack trace, too.
+**"Tool errors should be hidden from the LLM."** False. **The LLM uses error messages to plan recovery.** Hiding errors means the model can't decide what to do next; it might retry the same broken tool indefinitely, or give up when a workaround was available. **Surface errors as structured observations.** *"Error: connection timeout after $30$ s. Retry or try a different tool"* is dramatically more useful than swallowed silence, and dramatically more useful than a raw stack trace, too.
 </Callout>
 
 Section 6 covers how to see what the agent is doing.
 
-## Observability — tracing and debugging
+## Observability: tracing and debugging
 
 ### The trace problem
 
@@ -332,9 +332,9 @@ A good trace shows every LLM call (model name, prompt tokens, completion tokens,
 
 The standard pattern, borrowed from distributed systems: **trace IDs** unique per task; **spans** as nested timed operations (LLM call → tool call → result processing); **parent-child** relationships so each span knows where it sits in the tree; **attributes** as structured metadata per span. Tools like OpenTelemetry standardize the data model; LangSmith, Helicone, and Braintrust render it.
 
-**Structured logging** as a baseline. Every event is JSON, not free-text — `{event: tool_call, task_id, iteration, tool, arguments, latency_ms, success}`. Structured logs are queryable; free-text isn't.
+**Structured logging** as a baseline. Every event is JSON, not free-text, `{event: tool_call, task_id, iteration, tool, arguments, latency_ms, success}`. Structured logs are queryable; free-text isn't.
 
-<WidgetFrame title="Agent trace inspector" caption="Four agent traces visualized as flame-graph-style nested spans: clean success, transient-failure retries, hallucinated tool call, cost-blown runaway. Each span shows timing, attributes (model, tokens, cost), and status. Click any span for full detail. Mirrors what production tools (LangSmith, Helicone, Braintrust) render at scale. Demonstrates that observability isn't optional — it's the only way to debug production agent failures.">
+<WidgetFrame title="Agent trace inspector" caption="Four agent traces visualized as flame-graph-style nested spans: clean success, transient-failure retries, hallucinated tool call, cost-blown runaway. Each span shows timing, attributes (model, tokens, cost), and status. Click any span for full detail. Mirrors what production tools (LangSmith, Helicone, Braintrust) render at scale. Demonstrates that observability isn't optional, it's the only way to debug production agent failures.">
   <AgentTraceInspector client:visible />
 </WidgetFrame>
 
@@ -427,13 +427,13 @@ tracer.report()
 
 ### Debugging from traces
 
-The mapping from failure mode to trace signature is short and worth memorizing. **Hung agent** — look for spans without end times. **Wrong answer** — look at the thought-action sequence for missteps. **Cost spike** — look for excessive iterations or oversized contexts. **Slow response** — look for slow tools or model-side latency. Most production debugging is pattern-matching from this list.
+The mapping from failure mode to trace signature is short and worth memorizing. **Hung agent**: look for spans without end times. **Wrong answer**: look at the thought-action sequence for missteps. **Cost spike**: look for excessive iterations or oversized contexts. **Slow response**: look for slow tools or model-side latency. Most production debugging is pattern-matching from this list.
 
 ## Scaffolding the agent
 
 ### What goes into scaffolding
 
-Scaffolding is everything that's not the loop or the tools — the supporting structure that the user never sees but that makes the agent work. **Seven components** earn their keep in production. **System prompt** — sets the agent's role, behavior, and constraints. **The most important single piece of agent code.** **Tool descriptions** — read by the LLM at every call; write them as if for a colleague who has to do the work. **Few-shot examples** — examples of correct agent behavior embedded in the system prompt. **The most-impactful single intervention** for many tasks: two or three good examples often outperform paragraphs of instructions. **Output validation** — after the LLM produces output, validate it; reject and retry on invalid output. **Memory layer** — what state does the agent preserve across turns and sessions? (Ch 27 §5.) **Conversation management** — for chat-style agents, the layer that maintains user identity, session state, and conversation history. **Cost and rate limits** — hard caps that prevent runaway spending.
+Scaffolding is everything that's not the loop or the tools, the supporting structure that the user never sees but that makes the agent work. **Seven components** earn their keep in production. **System prompt**: sets the agent's role, behavior, and constraints. **The most important single piece of agent code.** **Tool descriptions**: read by the LLM at every call; write them as if for a colleague who has to do the work. **Few-shot examples**, examples of correct agent behavior embedded in the system prompt. **The most-impactful single intervention** for many tasks: two or three good examples often outperform paragraphs of instructions. **Output validation**: after the LLM produces output, validate it; reject and retry on invalid output. **Memory layer**: what state does the agent preserve across turns and sessions? (Ch 27 §5.) **Conversation management**: for chat-style agents, the layer that maintains user identity, session state, and conversation history. **Cost and rate limits**: hard caps that prevent runaway spending.
 
 A sample production system prompt, drawn down to the irreducible:
 
@@ -458,23 +458,23 @@ Output format: ReAct (Thought/Action/Observation).
 
 ### Production patterns
 
-Five patterns recur across production agents. **System-prompt versioning** — prompts evolve; version them like code and record which version produced each task. **Dynamic few-shot retrieval** — for complex tasks, retrieve relevant examples per task instead of hard-coding the same ones (Ch 22's RAG patterns applied to the prompt itself). **Output validation with retry** — reject malformed JSON; ask the LLM to try again with the error as context. **Sanitized logging** — redact PII before traces leave the application. **Sandboxing dangerous tools** — Docker, VMs, or restricted environments for anything that runs code or modifies external state.
+Five patterns recur across production agents. **System-prompt versioning**, prompts evolve; version them like code and record which version produced each task. **Dynamic few-shot retrieval**, for complex tasks, retrieve relevant examples per task instead of hard-coding the same ones (Ch 22's RAG patterns applied to the prompt itself). **Output validation with retry**: reject malformed JSON; ask the LLM to try again with the error as context. **Sanitized logging**: redact PII before traces leave the application. **Sandboxing dangerous tools**, Docker, VMs, or restricted environments for anything that runs code or modifies external state.
 
-The anti-patterns are mirror images. **Massive system prompts** (>$2{,}000$ tokens) the LLM can't reliably follow. **Vague tool descriptions** that force the model to guess. **No few-shot examples** when the task is unusual enough to need them. **Skipping validation** because the LLM "usually gets it right" — usually isn't always, and the failures are silent.
+The anti-patterns are mirror images. **Massive system prompts** (>$2{,}000$ tokens) the LLM can't reliably follow. **Vague tool descriptions** that force the model to guess. **No few-shot examples** when the task is unusual enough to need them. **Skipping validation** because the LLM "usually gets it right", usually isn't always, and the failures are silent.
 
 <Callout type="note">
-**"Frontier models don't need much scaffolding."** Partially false. **Frontier models tolerate worse scaffolding** than older models — but the best-performing agents still invest heavily in system prompts, tool descriptions, and few-shot examples. **Scaffolding compounds the model's capability.** Skip it and you leave performance on the table that you cannot recover by upgrading the model. The right framing: the model sets the ceiling; scaffolding determines how close you get to it.
+**"Frontier models don't need much scaffolding."** Partially false. **Frontier models tolerate worse scaffolding** than older models, but the best-performing agents still invest heavily in system prompts, tool descriptions, and few-shot examples. **Scaffolding compounds the model's capability.** Skip it and you leave performance on the table that you cannot recover by upgrading the model. The right framing: the model sets the ceiling; scaffolding determines how close you get to it.
 </Callout>
 
 Section 8 takes stock of Phase 15's remaining trajectory.
 
 ## Exercises
 
-Four exercises that lock in the engineering toolkit. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+Four exercises that lock in the engineering toolkit. Each is a self-contained problem with a starting template; hints are collapsed by default; try the problem first.
 
 The exercises trace the chapter's arc: build a tool registry (Ex 1) → implement a retry pattern (Ex 2) → add structured tracing (Ex 3) → tie everything together in a complete agent harness (Ex 4). After these, the reader has all the components of a production agent.
 
-### Exercise 1 (easy) — Tool registry with execute()
+### Exercise 1 (easy): Tool registry with execute()
 
 Build a tool registry where tools are registered by name, schemas are generated from metadata, and execution is wrapped in structured error handling.
 
@@ -487,7 +487,7 @@ The pattern:
 3. Each tool's `execute(arguments)` method calls the function and wraps any exception in a structured `{'status': 'error', 'error_type': ..., 'message': ...}` response
 4. On success: `{'status': 'ok', 'result': ...}`
 
-The point is that the LLM never sees a Python exception — it sees a structured observation it can reason about.
+The point is that the LLM never sees a Python exception, it sees a structured observation it can reason about.
 
 </details>
 
@@ -601,13 +601,13 @@ def calculate(expression: str) -> float:
 #
 # # Observations:
 # # - Successful calls return {status:'ok', result:...}
-# # - All exceptions become {status:'error', ...} — never raised to the agent
+# # - All exceptions become {status:'error', ...}: never raised to the agent
 # # - Schema generation uses metadata only (no inspection); explicit is better
 # # - Real production: also generate Anthropic schema; add OpenAPI conversion
 ```
 </RunnableCode>
 
-### Exercise 2 (medium) — Retry with exponential backoff
+### Exercise 2 (medium): Retry with exponential backoff
 
 Implement a retry helper that re-executes a flaky function with exponential backoff, returning a structured `(result, error)` tuple after success or exhaustion.
 
@@ -618,7 +618,7 @@ The pattern:
 1. Attempt up to `max_retries` times
 2. On exception, sleep for `base_wait * 2^attempt` (exponential backoff)
 3. Return `(result, None)` on success, `(None, "error message")` on exhaustion
-4. The structured tuple lets the caller decide what to do — no exceptions raised
+4. The structured tuple lets the caller decide what to do, no exceptions raised
 
 Real production also adds: error categorization (retryable vs not), circuit breakers, jitter (small random offset to avoid thundering-herd retries).
 
@@ -675,7 +675,7 @@ def flaky_search(query):
 ```
 </RunnableCode>
 
-### Exercise 3 (medium) — Structured tracing layer
+### Exercise 3 (medium): Structured tracing layer
 
 Add a `Tracer` class that records spans (timed operations) with attributes. Spans nest via Python's context-manager protocol. Use it to trace a mock agent loop.
 
@@ -773,7 +773,7 @@ class Tracer:
 ```
 </RunnableCode>
 
-### Exercise 4 (hard) — Complete agent harness
+### Exercise 4 (hard): Complete agent harness
 
 Tie everything together: build a complete agent harness that uses a tool registry (Ex 1), retry helper (Ex 2), and tracer (Ex 3) to execute a multi-turn ReAct task.
 
@@ -788,7 +788,7 @@ The harness:
 
 The point is that all the pieces compose: the tool registry executes safely; retry handles flakiness; the tracer records everything; the agent loop drives the iteration.
 
-For the LLM, you'll mock responses — focus on the orchestration, not the model.
+For the LLM, you'll mock responses, focus on the orchestration, not the model.
 
 </details>
 
@@ -947,10 +947,10 @@ class Agent:
 
 ### What's left
 
-**Ch 29 (Multi-agent systems)** covers the cases where a single-agent setup isn't enough: orchestration patterns, agent-to-agent communication, frameworks (CrewAI, AutoGen, OpenAI Swarm). The composition arc, in code. **Ch 30 (Agent eval and frameworks)** brings Phase 14's evaluation discipline back to bear on agent systems — how to quantitatively evaluate agents at scale (SWE-bench, GAIA, OSWorld), the production frameworks that wrap everything in this chapter, and the deployment patterns. **Ch 30 closes the curriculum.**
+**Ch 29 (Multi-agent systems)** covers the cases where a single-agent setup isn't enough: orchestration patterns, agent-to-agent communication, frameworks (CrewAI, AutoGen, OpenAI Swarm). The composition arc, in code. **Ch 30 (Agent eval and frameworks)** brings Phase 14's evaluation discipline back to bear on agent systems, how to quantitatively evaluate agents at scale (SWE-bench, GAIA, OSWorld), the production frameworks that wrap everything in this chapter, and the deployment patterns. **Ch 30 closes the curriculum.**
 
-The trajectory is short to state. **Ch 27 conceptual** → **Ch 28 engineering** (you are here) → **Ch 29 composition** → **Ch 30 evaluation**. Each chapter builds on the prior; each delivers a layer of the stack that the next one composes on top of. After Ch 30 the reader has the full picture — **from numpy primitives in Ch 1 through transformer internals (Ch 4-6), pretraining (Ch 7-10), alternative architectures (Ch 11-12), post-training (Ch 13-16), inference (Ch 17-19), modern capabilities (Ch 20-23), safety and interpretability and evaluation (Ch 24-26), and finally production agent systems (Ch 27-30).** Every layer covered, every layer with its own working code.
+The trajectory is short to state. **Ch 27 conceptual** → **Ch 28 engineering** (you are here) → **Ch 29 composition** → **Ch 30 evaluation**. Each chapter builds on the prior; each delivers a layer of the stack that the next one composes on top of. After Ch 30 the reader has the full picture, **from numpy primitives in Ch 1 through transformer internals (Ch 4-6), pretraining (Ch 7-10), alternative architectures (Ch 11-12), post-training (Ch 13-16), inference (Ch 17-19), modern capabilities (Ch 20-23), safety and interpretability and evaluation (Ch 24-26), and finally production agent systems (Ch 27-30).** Every layer covered, every layer with its own working code.
 
-Production agents are $80\%$ engineering on top of $20\%$ LLM. **This chapter covered the $80\%$.** Tool design — atomic, single-responsibility, clear-contract functions. Tool implementation — sync, async, timeouts, output bounds, sandboxing. Schemas — function calling, MCP, the structured-call pipeline. Error handling — retry, circuit breakers, fallback, surfacing errors to the LLM. Observability — structured logs, distributed traces, debugging from spans. Scaffolding — system prompts, tool descriptions, few-shot examples, output validation, cost budgets. **All of it is engineering you'd recognize from any production system — applied with the LLM in mind.**
+Production agents are $80\%$ engineering on top of $20\%$ LLM. **This chapter covered the $80\%$.** Tool design, atomic, single-responsibility, clear-contract functions. Tool implementation, sync, async, timeouts, output bounds, sandboxing. Schemas, function calling, MCP, the structured-call pipeline. Error handling, retry, circuit breakers, fallback, surfacing errors to the LLM. Observability, structured logs, distributed traces, debugging from spans. Scaffolding, system prompts, tool descriptions, few-shot examples, output validation, cost budgets. **All of it is engineering you'd recognize from any production system, applied with the LLM in mind.**
 
-**Three chapters remain.** Ch 29 composes multiple agents when a single agent doesn't fit and orchestration starts to matter. Ch 30 brings Phase 14's evaluation discipline back to bear on agent systems — and closes the curriculum. **You're now equipped to build a real agent.** The next chapters compose them, evaluate them, and bring the whole arc home.
+**Three chapters remain.** Ch 29 composes multiple agents when a single agent doesn't fit and orchestration starts to matter. Ch 30 brings Phase 14's evaluation discipline back to bear on agent systems, and closes the curriculum. **You're now equipped to build a real agent.** The next chapters compose them, evaluate them, and bring the whole arc home.

@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch30-agent-eval-and-frameworks
-description: "Agent evaluation and production frameworks — the final chapter. Why agent eval is structurally harder than LLM eval. The 2025 agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, τ-bench, BrowseComp). Evaluation methodologies (pass^k, partial credit, cost-quality Pareto, human-judged). Production observability frameworks (LangSmith, Helicone, Braintrust, OpenTelemetry). Deployment patterns and readiness checklists. And — finally — the curriculum's close: looking back at thirty chapters from numpy primitives to agent systems in production."
+description: "Agent evaluation and production frameworks, the final chapter. Why agent eval is structurally harder than LLM eval. The 2025 agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, τ-bench, BrowseComp). Evaluation methodologies (pass^k, partial credit, cost-quality Pareto, human-judged). Production observability frameworks (LangSmith, Helicone, Braintrust, OpenTelemetry). Deployment patterns and readiness checklists. And, finally, the curriculum's close: looking back at thirty chapters from numpy primitives to agent systems in production."
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { AgentBenchmarkExplorer, FrameworkPicker } from '@components/widgets';
 
-Chapter 26 made evaluation a discipline. Phase 14 closed by establishing that capable models without rigorous evaluation are research demos, not products. **Phase 15 then built the agent stack** — foundations (Ch 27), engineering (Ch 28), composition (Ch 29). **This chapter closes both arcs.** It brings Phase 14's evaluation discipline to bear on Phase 15's agent systems, and it closes the curriculum.
+Chapter 26 made evaluation a discipline. Phase 14 closed by establishing that capable models without rigorous evaluation are research demos, not products. **Phase 15 then built the agent stack**, foundations (Ch 27), engineering (Ch 28), composition (Ch 29). **This chapter closes both arcs.** It brings Phase 14's evaluation discipline to bear on Phase 15's agent systems, and it closes the curriculum.
 
-The chapter's argument is structural. **Agent evaluation is harder than LLM evaluation** — harder in kind, not just in degree. Tasks are multi-step; success is multi-dimensional; benchmarks are slow to develop; production-readiness includes observability and deployment patterns the model-eval world rarely confronts. We cover the $2025$ agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, $\tau$-bench, BrowseComp), the methodologies that actually catch failures (pass$^k$ for reliability, cost-quality Pareto for production tradeoffs), the production observability frameworks (LangSmith, Helicone, Braintrust, OpenTelemetry), and the deployment patterns plus readiness checklist that mark the boundary between prototype and production.
+The chapter's argument is structural. **Agent evaluation is harder than LLM evaluation**, harder in kind, not just in degree. Tasks are multi-step; success is multi-dimensional; benchmarks are slow to develop; production-readiness includes observability and deployment patterns the model-eval world rarely confronts. We cover the $2025$ agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, $\tau$-bench, BrowseComp), the methodologies that actually catch failures (pass$^k$ for reliability, cost-quality Pareto for production tradeoffs), the production observability frameworks (LangSmith, Helicone, Braintrust, OpenTelemetry), and the deployment patterns plus readiness checklist that mark the boundary between prototype and production.
 
-**And then the curriculum closes.** Section 8 looks back at the thirty chapters — from numpy primitives in Ch 1 to agent systems in production in this chapter — and takes stock of what the reader can now do. **Honest about what's not covered. Forward-looking without predicting.** The closing thought sends the reader off well. **By the end of this chapter you'll have the full stack of an LLM systems engineer**, the discipline to evaluate what you build, and — equally important — the perspective to follow the field as it keeps moving. **Now let's finish.**
+**And then the curriculum closes.** Section 8 looks back at the thirty chapters, from numpy primitives in Ch 1 to agent systems in production in this chapter, and takes stock of what the reader can now do. **Honest about what's not covered. Forward-looking without predicting.** The closing thought sends the reader off well. **By the end of this chapter you'll have the full stack of an LLM systems engineer**, the discipline to evaluate what you build, and, equally important, the perspective to follow the field as it keeps moving. **Now let's finish.**
 
 ## Why agent evaluation is harder
 
@@ -20,29 +20,29 @@ The chapter's argument is structural. **Agent evaluation is harder than LLM eval
 
 **LLM evaluation** (Ch 26) is challenging but bounded. A single prompt, a single response, a labeled dataset, a metric. **Agent evaluation** is structurally harder for five reasons.
 
-**One. Tasks are multi-step.** A single LLM eval has one prompt and one response; an agent eval has a multi-turn task — tool calls, retries, intermediate decisions. **Evaluation must cover the trajectory**, not just the final answer.
+**One. Tasks are multi-step.** A single LLM eval has one prompt and one response; an agent eval has a multi-turn task, tool calls, retries, intermediate decisions. **Evaluation must cover the trajectory**: not just the final answer.
 
 **Two. Success is multi-dimensional.** No single number captures all of these.
 
-- **Task success** — did the agent complete?
-- **Cost** — LLM calls plus tool calls plus total dollars
-- **Latency** — time to completion
-- **Safety** — no harmful actions taken
-- **Robustness** — pass$^k$, success across $k$ attempts
-- **Cost-quality tradeoff** — the Pareto frontier across configurations
+- **Task success**: did the agent complete?
+- **Cost**, LLM calls plus tool calls plus total dollars
+- **Latency**, time to completion
+- **Safety**, no harmful actions taken
+- **Robustness**, pass$^k$, success across $k$ attempts
+- **Cost-quality tradeoff**, the Pareto frontier across configurations
 
 **Three. Verifying success is harder.** LLM eval has labeled answers; agent eval often requires running the agent's output (does the produced code compile? do tests pass?), replicating environment state (was the email sent? the file created?), or human judgment (is the produced essay any good?). **Verification often requires running the world** that the agent acted on.
 
 **Four. Reliability matters more.** A $95\%$-accurate LLM is great; **a $95\%$-reliable agent fails $1$ in $20$ production tasks.** pass$^k$ surfaces what single-trial accuracy hides.
 
-**Five. Benchmarks are slow to develop.** LLM benchmarks (MMLU, HumanEval) can be assembled in months. **Agent benchmarks need realistic environments** — real GitHub repos, real desktop OS, real web pages — and these take years. SWE-bench took about a year to build; OSWorld required custom VM infrastructure.
+**Five. Benchmarks are slow to develop.** LLM benchmarks (MMLU, HumanEval) can be assembled in months. **Agent benchmarks need realistic environments**: real GitHub repos, real desktop OS, real web pages, and these take years. SWE-bench took about a year to build; OSWorld required custom VM infrastructure.
 
 ### The framing
 
-**Agent eval is LLM eval $\times$ system complexity $\times$ environmental verification.** It's not just harder in degree — it's harder in kind. The discipline that made LLM eval rigorous (Ch 26) has to extend to cover trajectories, dimensions, and environments. **This chapter is that extension.**
+**Agent eval is LLM eval $\times$ system complexity $\times$ environmental verification.** It's not just harder in degree, it's harder in kind. The discipline that made LLM eval rigorous (Ch 26) has to extend to cover trajectories, dimensions, and environments. **This chapter is that extension.**
 
 <Callout type="aside">
-**Mirror to Ch 26.** Chapter 26 was discipline applied to capability — turning impressive LLM capabilities into trustworthy ones via evaluation. **This chapter is discipline applied to composition** — turning impressive agent systems into trustworthy ones. **The same intellectual move, one level up the stack.** A reader who internalized Ch 26 will recognize the structural symmetry here.
+**Mirror to Ch 26.** Chapter 26 was discipline applied to capability, turning impressive LLM capabilities into trustworthy ones via evaluation. **This chapter is discipline applied to composition**: turning impressive agent systems into trustworthy ones. **The same intellectual move, one level up the stack.** A reader who internalized Ch 26 will recognize the structural symmetry here.
 </Callout>
 
 Section 2 covers the benchmark landscape that the $2025$ agent ecosystem actually uses.
@@ -51,30 +51,30 @@ Section 2 covers the benchmark landscape that the $2025$ agent ecosystem actuall
 
 ### The 2025 landscape
 
-Five benchmarks dominate the $2025$ agent landscape. Each has a clear scope and a clear set of state-of-the-art numbers — which together paint an honest picture of where agent capability stands.
+Five benchmarks dominate the $2025$ agent landscape. Each has a clear scope and a clear set of state-of-the-art numbers, which together paint an honest picture of where agent capability stands.
 
-**SWE-bench Verified — coding agents.** $500$ real GitHub issues from popular Python projects, curated for solvability. Success criterion: the agent's PR passes the original tests. **Frontier agents reach around $50\%$ as of early $2025$; humans hit roughly $85\%$.** It is the de facto coding-agent standard — every coding-agent vendor reports it. The Verified subset (~$500$) was the response to noise in the full $2{,}294$-problem benchmark; cleaner problems, cleaner signal.
+**SWE-bench Verified, coding agents.** $500$ real GitHub issues from popular Python projects, curated for solvability. Success criterion: the agent's PR passes the original tests. **Frontier agents reach around $50\%$ as of early $2025$; humans hit roughly $85\%$.** It is the de facto coding-agent standard, every coding-agent vendor reports it. The Verified subset (~$500$) was the response to noise in the full $2{,}294$-problem benchmark; cleaner problems, cleaner signal.
 
-**GAIA — general AI assistants.** $466$ multi-step real-world tasks requiring tool use, browsing, and file reading. Three difficulty levels. **Frontier agents hit $60$–$75\%$ on Level 1; humans hit roughly $92\%$.** The full-stack test — planning, tool use, retrieval — for general assistants.
+**GAIA, general AI assistants.** $466$ multi-step real-world tasks requiring tool use, browsing, and file reading. Three difficulty levels. **Frontier agents hit $60$–$75\%$ on Level 1; humans hit roughly $92\%$.** The full-stack test, planning, tool use, retrieval, for general assistants.
 
-**OSWorld — computer-use agents.** $369$ desktop tasks executed in Ubuntu and Windows VMs. State-based success criterion: was the file saved? the form submitted? **Frontier agents reach roughly $12$–$15\%$** — significantly harder than text-only benchmarks. The embodied regime is still developing.
+**OSWorld, computer-use agents.** $369$ desktop tasks executed in Ubuntu and Windows VMs. State-based success criterion: was the file saved? the form submitted? **Frontier agents reach roughly $12$–$15\%$**, significantly harder than text-only benchmarks. The embodied regime is still developing.
 
-**$\tau$-bench (TauBench) — tool-use reliability.** Customer-service scenarios (retail, airline) with multi-turn tool use. The headline metric is **pass$^k$**: does the agent succeed across $k$ independent runs of the same task? **Frontier pass$^4$ sits around $50\%$** — surfacing reliability gaps that single-trial accuracy hides entirely.
+**$\tau$-bench (TauBench), tool-use reliability.** Customer-service scenarios (retail, airline) with multi-turn tool use. The headline metric is **pass$^k$**: does the agent succeed across $k$ independent runs of the same task? **Frontier pass$^4$ sits around $50\%$**, surfacing reliability gaps that single-trial accuracy hides entirely.
 
-**BrowseComp — web research agents.** Complex web research questions requiring multiple sources. **Frontier agents hit $30$–$50\%$.** Designed to be hard for humans too — questions where the answer requires substantial research, not a single lookup.
+**BrowseComp, web research agents.** Complex web research questions requiring multiple sources. **Frontier agents hit $30$–$50\%$.** Designed to be hard for humans too, questions where the answer requires substantial research, not a single lookup.
 
-<WidgetFrame title="Agent benchmark explorer" caption="Five 2025 agent benchmarks visualized side-by-side: SWE-bench Verified (coding), GAIA (general assistants), OSWorld (computer use), τ-bench (tool reliability), BrowseComp (web research). Each shows state-of-the-art numbers, the frontier-vs-human gap, task structure, paraphrased example tasks, and characteristics. The discipline of Ch 26 extended to the agent layer — and a snapshot of where agent capability sits in early 2025.">
+<WidgetFrame title="Agent benchmark explorer" caption="Five 2025 agent benchmarks visualized side-by-side: SWE-bench Verified (coding), GAIA (general assistants), OSWorld (computer use), τ-bench (tool reliability), BrowseComp (web research). Each shows state-of-the-art numbers, the frontier-vs-human gap, task structure, paraphrased example tasks, and characteristics. The discipline of Ch 26 extended to the agent layer, and a snapshot of where agent capability sits in early 2025.">
   <AgentBenchmarkExplorer client:visible />
 </WidgetFrame>
 
-**Benchmark hygiene matters.** Test problems must not have leaked into training data. Environments need to be realistic — real repos, real OS, real web. Execution should be reproducible where possible. Multiple difficulty levels are useful for tracking progress across the capability range.
+**Benchmark hygiene matters.** Test problems must not have leaked into training data. Environments need to be realistic, real repos, real OS, real web. Execution should be reproducible where possible. Multiple difficulty levels are useful for tracking progress across the capability range.
 
 ### What benchmarks don't capture
 
-No benchmark captures everything. **Subjective quality** (was the email well-written?) and **user satisfaction** (did the user like the result?) stay outside the benchmark frame. **Long-term impact** (did the agent's action cause downstream problems three days later?) is invisible to any single-task eval. **Cost-effectiveness in deployment** — where a $50\%$ benchmark score may be entirely acceptable at $1/10$ the cost of alternatives — depends on use case and volume, not the headline number.
+No benchmark captures everything. **Subjective quality** (was the email well-written?) and **user satisfaction** (did the user like the result?) stay outside the benchmark frame. **Long-term impact** (did the agent's action cause downstream problems three days later?) is invisible to any single-task eval. **Cost-effectiveness in deployment**, where a $50\%$ benchmark score may be entirely acceptable at $1/10$ the cost of alternatives, depends on use case and volume, not the headline number.
 
 <Callout type="note">
-**"If the benchmark score is high, the agent is ready for production."** False. **Benchmarks measure narrow things; production requires the whole stack** — observability, safety, cost monitoring, deployment patterns, regression detection. **A $70\%$ SWE-bench score doesn't mean ready for prod**; it means a starting point. The benchmark is a useful checkpoint, not a production signal.
+**"If the benchmark score is high, the agent is ready for production."** False. **Benchmarks measure narrow things; production requires the whole stack**, observability, safety, cost monitoring, deployment patterns, regression detection. **A $70\%$ SWE-bench score doesn't mean ready for prod**; it means a starting point. The benchmark is a useful checkpoint, not a production signal.
 </Callout>
 
 Section 3 covers the methodologies that catch what benchmark scores miss.
@@ -83,9 +83,9 @@ Section 3 covers the methodologies that catch what benchmark scores miss.
 
 ### Seven methodologies
 
-**Beyond benchmark scores**, real agent evaluation uses several methodologies. Each catches a different class of failure; production teams typically run several in combination.
+**Beyond benchmark scores**: real agent evaluation uses several methodologies. Each catches a different class of failure; production teams typically run several in combination.
 
-**One. Task success rate.** Binary — did the agent complete? The most common single metric. Easy to compute; hides everything else.
+**One. Task success rate.** Binary, did the agent complete? The most common single metric. Easy to compute; hides everything else.
 
 **Two. Partial-credit scoring.** Sub-task milestones; score based on how many were completed. More informative than binary success. SWE-bench could score on (files touched correctly, tests modified appropriately, tests passing). More work to design; rubrics drift if unmaintained.
 
@@ -95,9 +95,9 @@ Section 3 covers the methodologies that catch what benchmark scores miss.
 
 **Five. Human-judged evaluation.** Have humans score outputs on a rubric. Necessary for subjective tasks like "write a good essay." Expensive but irreplaceable for high-stakes decisions.
 
-**Six. LLM-as-judge** (Ch 26 cross-reference). Use another LLM to score outputs. Cheaper than human eval; catches obvious failures; has known biases — verbosity, position, recency (all covered in Ch 26). Useful at scale; not a replacement for human judgment on important decisions.
+**Six. LLM-as-judge** (Ch 26 cross-reference). Use another LLM to score outputs. Cheaper than human eval; catches obvious failures; has known biases, verbosity, position, recency (all covered in Ch 26). Useful at scale; not a replacement for human judgment on important decisions.
 
-**Seven. Regression monitoring.** Score outputs on a fixed dataset across model and prompt versions; detect regressions when changes degrade quality. **The production-eval workhorse** — covered in code in section 6.
+**Seven. Regression monitoring.** Score outputs on a fixed dataset across model and prompt versions; detect regressions when changes degrade quality. **The production-eval workhorse**, covered in code in section 6.
 
 <RunnableCode client:visible>
 ```python
@@ -134,8 +134,8 @@ for k in [1, 4, 8]:
 
 # Observations:
 # - pass^1 captures single-trial accuracy (~75% in this mock)
-# - pass^4 drops to ~32% — the agent fails 2 in 3 production sessions
-# - pass^8 drops further — long-running deployments expose reliability issues
+# - pass^4 drops to ~32%: the agent fails 2 in 3 production sessions
+# - pass^8 drops further: long-running deployments expose reliability issues
 # - The gap between pass^1 and pass^k is what production cares about
 # - tau-bench uses pass^4 as the headline metric
 ```
@@ -143,10 +143,10 @@ for k in [1, 4, 8]:
 
 ### Methodology selection
 
-Methodologies pair to task type. **Coding tasks** want benchmark scores (SWE-bench) plus regression monitoring. **Customer service** wants pass$^k$ plus human judgment on a sample. **Research and writing** want human judgment plus LLM-as-judge for scale. **Production deployment** wants all of the above — the cost of running multiple evaluation methodologies is small compared to the cost of shipping an unreliable system.
+Methodologies pair to task type. **Coding tasks** want benchmark scores (SWE-bench) plus regression monitoring. **Customer service** wants pass$^k$ plus human judgment on a sample. **Research and writing** want human judgment plus LLM-as-judge for scale. **Production deployment** wants all of the above, the cost of running multiple evaluation methodologies is small compared to the cost of shipping an unreliable system.
 
 <Callout type="warning">
-**"Single-trial accuracy tells you reliability."** False. **Reliability is pass$^k$**, not pass$^1$. An $80\%$ pass$^1$ agent may have a $40\%$ pass$^4$ — meaning the agent fails more than half of $4$-attempt sessions. **$\tau$-bench surfaced this gap empirically; ignore it at your peril.** Production traffic runs every task many times; single-trial numbers describe lab behavior, not deployed behavior.
+**"Single-trial accuracy tells you reliability."** False. **Reliability is pass$^k$**, not pass$^1$. An $80\%$ pass$^1$ agent may have a $40\%$ pass$^4$, meaning the agent fails more than half of $4$-attempt sessions. **$\tau$-bench surfaced this gap empirically; ignore it at your peril.** Production traffic runs every task many times; single-trial numbers describe lab behavior, not deployed behavior.
 </Callout>
 
 Section 4 covers the dimension that benchmark scores alone always miss: cost.
@@ -155,15 +155,15 @@ Section 4 covers the dimension that benchmark scores alone always miss: cost.
 
 ### The Pareto frontier
 
-**Cost matters in production.** A $90\%$-accurate agent at $\$0.50$ per task may be worse than an $85\%$-accurate agent at $\$0.05$ per task — depending on volume and tolerance. The single-metric framing breaks down the moment a real budget enters the picture.
+**Cost matters in production.** A $90\%$-accurate agent at $\$0.50$ per task may be worse than an $85\%$-accurate agent at $\$0.05$ per task, depending on volume and tolerance. The single-metric framing breaks down the moment a real budget enters the picture.
 
-**The Pareto frontier** is the right tool. Plot configurations on (cost, quality) axes. A configuration is **dominated** if another exists with lower cost AND higher quality. The **non-dominated set** — the Pareto frontier — is the meaningful set of choices. Dominated configurations are never the right answer.
+**The Pareto frontier** is the right tool. Plot configurations on (cost, quality) axes. A configuration is **dominated** if another exists with lower cost AND higher quality. The **non-dominated set**, the Pareto frontier, is the meaningful set of choices. Dominated configurations are never the right answer.
 
-**Typical $2025$ cost-quality tradeoffs.** Small models (Claude Haiku, GPT-4 mini) sit at the cheap end with lower quality. Frontier models (Claude Opus, GPT-4o, Gemini Pro) sit at the expensive end with higher quality. **Hybrid configurations** — a cheap model for routing and simple subtasks, a frontier model for the hard parts — usually land somewhere on the interior of the frontier, often dominating naive single-model setups.
+**Typical $2025$ cost-quality tradeoffs.** Small models (Claude Haiku, GPT-4 mini) sit at the cheap end with lower quality. Frontier models (Claude Opus, GPT-4o, Gemini Pro) sit at the expensive end with higher quality. **Hybrid configurations**: a cheap model for routing and simple subtasks, a frontier model for the hard parts, usually land somewhere on the interior of the frontier, often dominating naive single-model setups.
 
 ### Engineering levers
 
-Model choice is the biggest lever; bigger is not always better when cost matters. **Caching** repeats — common subtasks can hit a cache instead of the model. **Prompt compression** — tighter prompts cost less per call. **Self-routing** — a cheap model decides whether the frontier model is needed at all. **Parallelism versus sequential** — parallel often shortens wall-clock latency without changing cost; sequential conserves cost but takes longer.
+Model choice is the biggest lever; bigger is not always better when cost matters. **Caching** repeats, common subtasks can hit a cache instead of the model. **Prompt compression**: tighter prompts cost less per call. **Self-routing**, a cheap model decides whether the frontier model is needed at all. **Parallelism versus sequential**: parallel often shortens wall-clock latency without changing cost; sequential conserves cost but takes longer.
 
 **Production framing.** Define your **cost budget** (per task or per month). Define your **quality floor** (minimum acceptable score). **Find Pareto-optimal configurations** that meet both constraints. **Iterate** as models, prompts, and tools improve. The SWE-bench cost-quality story as of early $2025$: cheapest viable around $\$0.10$ per task at roughly $30\%$ success; frontier around $\$2$–$5$ per task at roughly $50\%$ success. The gap is shrinking as smaller models improve.
 
@@ -208,14 +208,14 @@ for c in sorted(pareto_frontier(CONFIGS), key=lambda x: x['cost']):
 
 # Observations:
 # - 'opus-bad-prompt' is dominated (higher cost AND lower quality than 'opus-only')
-# - All other configs are non-dominated — meaningful choices
+# - All other configs are non-dominated: meaningful choices
 # - Production picks a point on the frontier based on budget + quality floor
 # - Dominated configurations are NEVER the right choice
 ```
 </RunnableCode>
 
 <Callout type="note">
-**"Higher accuracy is always better."** False in production. **Cost-quality tradeoffs are real.** A $70\%$-accurate agent at $\$0.05$ per task may be far better than an $85\%$-accurate agent at $\$0.50$ per task — depending on volume and tolerance. **Optimize the Pareto, not the single metric.** The Pareto-optimal configurations are the meaningful choices; dominated configurations are never correct.
+**"Higher accuracy is always better."** False in production. **Cost-quality tradeoffs are real.** A $70\%$-accurate agent at $\$0.05$ per task may be far better than an $85\%$-accurate agent at $\$0.50$ per task, depending on volume and tolerance. **Optimize the Pareto, not the single metric.** The Pareto-optimal configurations are the meaningful choices; dominated configurations are never correct.
 </Callout>
 
 Section 5 covers the frameworks that make all of this measurable in real systems.
@@ -234,9 +234,9 @@ Section 5 covers the frameworks that make all of this measurable in real systems
 
 **Anthropic's evaluation tooling.** Integrated with Anthropic's Console and Claude apps. Evaluation playgrounds, prompt comparison, safety tooling. **Strengths**: tight integration with Anthropic models; safety-aware. **When to use**: Anthropic-native deployments.
 
-**OpenTelemetry GenAI conventions.** Open standard for LLM trace data — standardized span attributes for model name, token counts, costs. **Strengths**: future-proof; vendor-neutral. **Weaknesses**: requires manual instrumentation. **When to use**: when vendor independence matters.
+**OpenTelemetry GenAI conventions.** Open standard for LLM trace data, standardized span attributes for model name, token counts, costs. **Strengths**: future-proof; vendor-neutral. **Weaknesses**: requires manual instrumentation. **When to use**: when vendor independence matters.
 
-<WidgetFrame title="Framework picker" caption="Toggle four task characteristics (existing LangChain stack, cost sensitivity, team eval discipline, vendor independence) and see a recommended framework with explicit reasoning. Six frameworks are always visible — LangSmith, Helicone, Braintrust, Anthropic eval tooling, OpenTelemetry GenAI, and custom code — with strengths, weaknesses, and when-to-use guidance for each. The chapter's framework-as-plumbing framing made interactive.">
+<WidgetFrame title="Framework picker" caption="Toggle four task characteristics (existing LangChain stack, cost sensitivity, team eval discipline, vendor independence) and see a recommended framework with explicit reasoning. Six frameworks are always visible, LangSmith, Helicone, Braintrust, Anthropic eval tooling, OpenTelemetry GenAI, and custom code, with strengths, weaknesses, and when-to-use guidance for each. The chapter's framework-as-plumbing framing made interactive.">
   <FrameworkPicker client:visible />
 </WidgetFrame>
 
@@ -244,10 +244,10 @@ Section 5 covers the frameworks that make all of this measurable in real systems
 
 ### Choosing a framework
 
-Three factors decide it in practice. **Team familiarity** beats everything else — the framework your team already knows is rarely the bottleneck, and the framework your team doesn't know often is. **Stack alignment** — LangChain stacks fit LangSmith; cost-focused setups fit Helicone; eval-driven teams fit Braintrust. **Vendor independence** — if lock-in concerns dominate, OpenTelemetry's neutral conventions let you swap platforms behind a stable instrumentation layer.
+Three factors decide it in practice. **Team familiarity** beats everything else, the framework your team already knows is rarely the bottleneck, and the framework your team doesn't know often is. **Stack alignment**, LangChain stacks fit LangSmith; cost-focused setups fit Helicone; eval-driven teams fit Braintrust. **Vendor independence**: if lock-in concerns dominate, OpenTelemetry's neutral conventions let you swap platforms behind a stable instrumentation layer.
 
 <Callout type="note">
-**"Pick the observability platform with the most features."** Misleading. **The right platform is the one your team will actually use.** Feature overload often correlates with under-adoption — engineers stop opening dashboards they don't understand. **Match the platform to your team's needs**, not to the maximum feature checklist. The framework you wish you'd picked is rarely the one with the longest landing page.
+**"Pick the observability platform with the most features."** Misleading. **The right platform is the one your team will actually use.** Feature overload often correlates with under-adoption, engineers stop opening dashboards they don't understand. **Match the platform to your team's needs**, not to the maximum feature checklist. The framework you wish you'd picked is rarely the one with the longest landing page.
 </Callout>
 
 Section 6 closes the production arc with the deployment patterns and the readiness checklist.
@@ -260,9 +260,9 @@ Section 6 closes the production arc with the deployment patterns and the readine
 
 **One. Staging environments.** Production-like with non-production data. Run regression eval before promoting to production. Catches breakage from prompt and model changes before users see it.
 
-**Two. Canary deployment.** Roll out changes to a small percentage of traffic first. Monitor cost, latency, and quality. Roll back if metrics regress. **The standard pattern** for production agent deployments — named, fittingly, after the coal-mine canary that died before the miners did.
+**Two. Canary deployment.** Roll out changes to a small percentage of traffic first. Monitor cost, latency, and quality. Roll back if metrics regress. **The standard pattern** for production agent deployments, named, fittingly, after the coal-mine canary that died before the miners did.
 
-**Three. A/B testing.** Two versions in parallel; statistical significance for quality comparisons. Effective for prompt changes, model swaps, tool design changes. Watch the sample size — LLM outputs are stochastic and small samples mislead.
+**Three. A/B testing.** Two versions in parallel; statistical significance for quality comparisons. Effective for prompt changes, model swaps, tool design changes. Watch the sample size, LLM outputs are stochastic and small samples mislead.
 
 **Four. Shadow deployment.** New version runs in parallel without affecting users; outputs are compared offline. Lower risk than A/B; slower to learn from. Useful when the downside of a bad version is severe.
 
@@ -302,9 +302,9 @@ def check_regressions(baseline, threshold=0.05):
             regressions.append({'task': task, 'delta': delta})
     print()
     if regressions:
-        print(f"!! {len(regressions)} regression(s) — BLOCK deployment")
+        print(f"!! {len(regressions)} regression(s), BLOCK deployment")
     else:
-        print("ok All tasks pass — OK to deploy")
+        print("ok All tasks pass, OK to deploy")
     return regressions
 
 
@@ -312,8 +312,8 @@ check_regressions(BASELINE_SCORES)
 
 # Observations:
 # - Regression monitoring catches quality drops that benchmarks alone miss
-# - Threshold (5%) is tunable — too tight = false alarms; too loose = misses
-# - 'task_math' regressed 15% — flagged
+# - Threshold (5%) is tunable: too tight = false alarms; too loose = misses
+# - 'task_math' regressed 15%: flagged
 # - Production CI/CD blocks deployments with significant regressions
 # - This is the production-eval workhorse
 ```
@@ -335,7 +335,7 @@ check_regressions(BASELINE_SCORES)
 **The transition from prototype to production** is where most agent projects stall. **This checklist makes the transition concrete.** Each row is a category, not a single check; the items are the ones production agent teams discover (often the hard way) in the first six months of deployment.
 
 <Callout type="warning">
-**"Deployment is just hosting."** False. **Production deployment requires** staging, canary, monitoring, alerting, rollback, on-call. **Skipping these is how agent projects go from working prototype to broken production system.** The readiness checklist exists because the gap is real — most agent projects that fail in production fail on items in this checklist, not on items in the benchmarks.
+**"Deployment is just hosting."** False. **Production deployment requires** staging, canary, monitoring, alerting, rollback, on-call. **Skipping these is how agent projects go from working prototype to broken production system.** The readiness checklist exists because the gap is real, most agent projects that fail in production fail on items in this checklist, not on items in the benchmarks.
 </Callout>
 
 Section 7 takes stock of Phase 15's four-chapter arc before the curriculum closes.
@@ -357,19 +357,19 @@ Phase 15 covered the agent stack in four chapters, each handling a distinct laye
 
 ### What the reader can now do
 
-After Phase 15 the reader can **design an agent loop appropriate to a task** — picking from the patterns of Ch 27. **Implement production-grade agents** with proper tools, schemas, error handling, and observability — applying the engineering of Ch 28. **Decide when multi-agent is warranted** and, equally importantly, when it isn't — using the calibration of Ch 29. **Evaluate agent systems** with appropriate methodologies — pass$^k$, Pareto, regression monitoring — from this chapter. **Deploy agents to production** with the right observability and safety patterns. None of these are theoretical; each comes with code the reader has worked through and widgets the reader has played with.
+After Phase 15 the reader can **design an agent loop appropriate to a task**, picking from the patterns of Ch 27. **Implement production-grade agents** with proper tools, schemas, error handling, and observability, applying the engineering of Ch 28. **Decide when multi-agent is warranted** and, equally importantly, when it isn't, using the calibration of Ch 29. **Evaluate agent systems** with appropriate methodologies, pass$^k$, Pareto, regression monitoring, from this chapter. **Deploy agents to production** with the right observability and safety patterns. None of these are theoretical; each comes with code the reader has worked through and widgets the reader has played with.
 
-**Phase 15 framing.** Agents are real, useful, and improving fast. They are also still maturing — the $2025$ benchmark numbers (SWE-bench Verified around $50\%$, OSWorld around $15\%$, $\tau$-bench pass$^4$ around $50\%$) are honest reminders of how much capability is still being built. **The reader leaving Phase 15 has the practical foundation to build agent systems that survive production traffic — and the calibration to avoid over-engineering them.**
+**Phase 15 framing.** Agents are real, useful, and improving fast. They are also still maturing, the $2025$ benchmark numbers (SWE-bench Verified around $50\%$, OSWorld around $15\%$, $\tau$-bench pass$^4$ around $50\%$) are honest reminders of how much capability is still being built. **The reader leaving Phase 15 has the practical foundation to build agent systems that survive production traffic, and the calibration to avoid over-engineering them.**
 
 Section 8 closes the curriculum.
 
 ## Exercises
 
-Four exercises that lock in the discipline this chapter brings to agent systems. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+Four exercises that lock in the discipline this chapter brings to agent systems. Each is a self-contained problem with a starting template; hints are collapsed by default; try the problem first.
 
-The exercises trace the chapter's argument: design evaluation for a specific task (Ex 1) → compute pass$^k$ from raw data (Ex 2) → identify the Pareto frontier (Ex 3) → audit a production-readiness gap (Ex 4). After these, the reader has the practical discipline to evaluate any agent system being prepared for production — and to recognize systems that aren't ready.
+The exercises trace the chapter's argument: design evaluation for a specific task (Ex 1) → compute pass$^k$ from raw data (Ex 2) → identify the Pareto frontier (Ex 3) → audit a production-readiness gap (Ex 4). After these, the reader has the practical discipline to evaluate any agent system being prepared for production, and to recognize systems that aren't ready.
 
-### Exercise 1 (easy) — Evaluation methodology design
+### Exercise 1 (easy): Evaluation methodology design
 
 For each of four agent tasks, design an evaluation approach: pick the appropriate benchmark (or note "no benchmark fits"); choose methodologies (success rate, pass$^k$, partial credit, human-judged, LLM-as-judge); identify what counts as success. The point is to develop the judgment that no single methodology fits all tasks.
 
@@ -456,9 +456,9 @@ def design_evaluation(task):
   packages={[]}
 />
 
-### Exercise 2 (medium) — pass$^k$ computation from raw trial data
+### Exercise 2 (medium): pass$^k$ computation from raw trial data
 
-Given raw trial results (lists of pass/fail across multiple independent runs), compute pass$^k$ for $k \in \{1, 2, 4, 8\}$. Demonstrate empirically that pass$^k$ decays fast with $k$ — the gap $\tau$-bench surfaced and that production deployments must worry about.
+Given raw trial results (lists of pass/fail across multiple independent runs), compute pass$^k$ for $k \in \{1, 2, 4, 8\}$. Demonstrate empirically that pass$^k$ decays fast with $k$, the gap $\tau$-bench surfaced and that production deployments must worry about.
 
 <details>
 <summary>Hint</summary>
@@ -523,16 +523,16 @@ def pass_at_k(trials, k):
 # 
 # # Observations:
 # # - pass^1 captures single-trial accuracy (easy ~92%, hard ~25%)
-# # - pass^4 dramatically lower (easy ~71%, hard ~0.4%) — reliability collapses
-# # - The "easy" task at 92% pass^1 still has ~71% pass^4 — better than nothing but not great
-# # - The "medium" task at 60% has pass^4 ~13% — most multi-attempt sessions fail
+# # - pass^4 dramatically lower (easy ~71%, hard ~0.4%): reliability collapses
+# # - The "easy" task at 92% pass^1 still has ~71% pass^4: better than nothing but not great
+# # - The "medium" task at 60% has pass^4 ~13%: most multi-attempt sessions fail
 # # - This is the gap tau-bench surfaces empirically
 # # - Production deployments need pass^k of the relevant k, not just pass^1
 `}
   packages={[]}
 />
 
-### Exercise 3 (medium) — cost-quality Pareto frontier identification
+### Exercise 3 (medium): cost-quality Pareto frontier identification
 
 Given $8$ agent configurations on (cost, quality), identify which are Pareto-optimal (non-dominated) and which are dominated. Visualize the frontier as a sorted list. The exercise reinforces the chapter's framing: dominated configurations are never the right choice.
 
@@ -615,7 +615,7 @@ def pareto_frontier(configs):
   packages={[]}
 />
 
-### Exercise 4 (hard) — Production-readiness audit
+### Exercise 4 (hard): Production-readiness audit
 
 Given a description of an agent system being prepared for production, audit it against the $8$-category readiness checklist. Identify gaps; propose specific actions to close each gap. The exercise builds the practical skill of evaluating whether a system is genuinely ready to ship.
 
@@ -721,7 +721,7 @@ def audit(description, checklist):
 # #   - No on-call or incident response
 # # - This is what "ship it Friday" looks like before readiness audit
 # # - The audit is the discipline that catches what enthusiasm misses
-# # - Production readiness isn't just hosting — it's a checklist for a reason
+# # - Production readiness isn't just hosting: it's a checklist for a reason
 `}
   packages={[]}
 />
@@ -730,41 +730,41 @@ def audit(description, checklist):
 
 ### Thirty chapters
 
-**Thirty chapters.** From numpy primitives in Ch 1 to agent systems in production in Ch 30. Looking back over the arc, the curriculum's nine parts each carried a distinct piece of the modern LLM stack — and each, in retrospect, set up the part that came after it.
+**Thirty chapters.** From numpy primitives in Ch 1 to agent systems in production in Ch 30. Looking back over the arc, the curriculum's nine parts each carried a distinct piece of the modern LLM stack, and each, in retrospect, set up the part that came after it.
 
-**Part I — Foundations (Ch 1–3).** Tokens, embeddings, basic neural building blocks. Implemented in numpy from first principles. **Matrix multiplication and softmax** — the substrate of everything that followed. The chapters that set the discipline of the curriculum: nothing is allowed to remain magic.
+**Part I, Foundations (Ch 1–3).** Tokens, embeddings, basic neural building blocks. Implemented in numpy from first principles. **Matrix multiplication and softmax**: the substrate of everything that followed. The chapters that set the discipline of the curriculum: nothing is allowed to remain magic.
 
-**Part II — The Transformer (Ch 4–6).** Attention, multi-head attention, positional encoding, the full transformer block. **The architectural pattern that powered the field.** You implemented it from scratch — and from that point on, every model the rest of the curriculum touched was a variation, an extension, or a deployment story for the pattern built here.
+**Part II, The Transformer (Ch 4–6).** Attention, multi-head attention, positional encoding, the full transformer block. **The architectural pattern that powered the field.** You implemented it from scratch, and from that point on, every model the rest of the curriculum touched was a variation, an extension, or a deployment story for the pattern built here.
 
-**Part III — Pre-training (Ch 7–10).** Training objectives. Scaling laws (Chinchilla; Hoffmann $2022$). Data curation. Distributed training. **How frontier models actually get made** — not just in theory but in engineering practice. The infrastructure chapters in particular grounded what "training a frontier model" actually costs and looks like.
+**Part III, Pre-training (Ch 7–10).** Training objectives. Scaling laws (Chinchilla; Hoffmann $2022$). Data curation. Distributed training. **How frontier models actually get made**: not just in theory but in engineering practice. The infrastructure chapters in particular grounded what "training a frontier model" actually costs and looks like.
 
-**Part IV — Alternative Architectures (Ch 11–12).** Mixture of experts; state-space models. **The alternatives to dense transformers** — Mixtral, Mamba, the diversity of the architectural landscape. Most production is still transformer-dominated, but the alternatives matter for what they reveal about the design space.
+**Part IV, Alternative Architectures (Ch 11–12).** Mixture of experts; state-space models. **The alternatives to dense transformers**, Mixtral, Mamba, the diversity of the architectural landscape. Most production is still transformer-dominated, but the alternatives matter for what they reveal about the design space.
 
-**Part V — Post-training (Ch 13–16).** Supervised fine-tuning; RLHF; DPO; constitutional AI; parameter-efficient methods; distillation. **From base models to assistants.** From "predicts the next token" to "answers helpfully and harmlessly." The chapters that turned LLMs into the products the field actually ships.
+**Part V, Post-training (Ch 13–16).** Supervised fine-tuning; RLHF; DPO; constitutional AI; parameter-efficient methods; distillation. **From base models to assistants.** From "predicts the next token" to "answers helpfully and harmlessly." The chapters that turned LLMs into the products the field actually ships.
 
-**Part VI — Inference (Ch 17–19).** KV-caching; quantization; speculative decoding; sampling strategies. **The engineering that makes serving fast and affordable** — the $100$ms-per-token versus $5$ms-per-token difference between a toy and a product. The chapters most readers will revisit when their costs blow up.
+**Part VI, Inference (Ch 17–19).** KV-caching; quantization; speculative decoding; sampling strategies. **The engineering that makes serving fast and affordable**: the $100$ms-per-token versus $5$ms-per-token difference between a toy and a product. The chapters most readers will revisit when their costs blow up.
 
-**Part VII — Capabilities (Ch 20–23).** Reasoning (chain-of-thought, scratchpads, test-time compute). Tool use. Retrieval-augmented generation. Multimodal. **What LLMs can do beyond text generation** — and the engineering patterns that make each capability tractable.
+**Part VII, Capabilities (Ch 20–23).** Reasoning (chain-of-thought, scratchpads, test-time compute). Tool use. Retrieval-augmented generation. Multimodal. **What LLMs can do beyond text generation**, and the engineering patterns that make each capability tractable.
 
-**Part VIII — Discipline (Ch 24–26).** Safety, interpretability, evaluation. **The three disciplines that turn impressive capability into trustworthy products.** This is where the curriculum stopped accumulating features and started insisting on rigor. Ch 26 in particular set up the move this chapter completes.
+**Part VIII, Discipline (Ch 24–26).** Safety, interpretability, evaluation. **The three disciplines that turn impressive capability into trustworthy products.** This is where the curriculum stopped accumulating features and started insisting on rigor. Ch 26 in particular set up the move this chapter completes.
 
-**Part IX — Agents (Ch 27–30).** Foundations, engineering, composition, evaluation. **The composition of every layer that came before** — capable models (Parts I–VII), made trustworthy (Part VIII), assembled into systems that observe, think, act, iterate, and prove themselves in production. The closing arc.
+**Part IX, Agents (Ch 27–30).** Foundations, engineering, composition, evaluation. **The composition of every layer that came before**: capable models (Parts I–VII), made trustworthy (Part VIII), assembled into systems that observe, think, act, iterate, and prove themselves in production. The closing arc.
 
 ### What's not covered
 
-**No curriculum covers everything.** This one explicitly does not cover **specific model implementations** (Llama, Claude, GPT internals — vendor-specific and changing); **hardware design** (TPUs, chips — beyond the chapters on infrastructure); **the latest research papers** (the field moves faster than any curriculum can); **specific business applications** (each industry has its own patterns and constraints). What this curriculum did instead was build the substrate that lets you read those things — papers, vendor docs, industry write-ups — and understand them on first pass.
+**No curriculum covers everything.** This one explicitly does not cover **specific model implementations** (Llama, Claude, GPT internals, vendor-specific and changing); **hardware design** (TPUs, chips, beyond the chapters on infrastructure); **the latest research papers** (the field moves faster than any curriculum can); **specific business applications** (each industry has its own patterns and constraints). What this curriculum did instead was build the substrate that lets you read those things, papers, vendor docs, industry write-ups, and understand them on first pass.
 
 ### What comes next
 
-For the field, the directions are clear in shape if not in detail. **Better reasoning** — test-time compute scaling, reasoning models in the o1 and o3 lineage, novel objectives. **Better agents** — more reliable, more capable, more autonomous within bounded scopes. **Better safety** — interpretability scaling, alignment research, the methods that make capability claims trustworthy. **Better efficiency** — smaller models with frontier capability, the cost curve continuing to drop. **Better integration** — LLMs as components in larger software systems, not as standalone products.
+For the field, the directions are clear in shape if not in detail. **Better reasoning**, test-time compute scaling, reasoning models in the o1 and o3 lineage, novel objectives. **Better agents**: more reliable, more capable, more autonomous within bounded scopes. **Better safety**: interpretability scaling, alignment research, the methods that make capability claims trustworthy. **Better efficiency**: smaller models with frontier capability, the cost curve continuing to drop. **Better integration**, LLMs as components in larger software systems, not as standalone products.
 
-**You have the foundation to follow any of these directions.** The chapters that taught the substrate — Ch 1's numpy, Ch 4's attention, Ch 26's evaluation discipline, Ch 28's agent engineering — are the same chapters that will let you read the papers and write the systems that come next.
+**You have the foundation to follow any of these directions.** The chapters that taught the substrate, Ch 1's numpy, Ch 4's attention, Ch 26's evaluation discipline, Ch 28's agent engineering, are the same chapters that will let you read the papers and write the systems that come next.
 
 ### One last thing
 
-Thirty chapters. From the first matrix multiplication to the last production agent. **You started with numpy and ended with systems that observe, think, act, and iterate at production scale.** The field will keep moving — new architectures, new capabilities, new failure modes, new disciplines. **What this curriculum gave you is the foundation to follow.**
+Thirty chapters. From the first matrix multiplication to the last production agent. **You started with numpy and ended with systems that observe, think, act, and iterate at production scale.** The field will keep moving, new architectures, new capabilities, new failure modes, new disciplines. **What this curriculum gave you is the foundation to follow.**
 
-The transformer block is still the same matrix-multiplication-and-softmax it was in Chapter 4. The agent loop is still the same observe-think-act it was in Chapter 27. **The principles don't change as fast as the products.** When the next breakthrough lands — and it will — you'll be reading the paper with the substrate to understand it.
+The transformer block is still the same matrix-multiplication-and-softmax it was in Chapter 4. The agent loop is still the same observe-think-act it was in Chapter 27. **The principles don't change as fast as the products.** When the next breakthrough lands, and it will, you'll be reading the paper with the substrate to understand it.
 
 **That's what this curriculum was for.**
 

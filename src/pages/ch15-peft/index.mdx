@@ -1,35 +1,35 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch15-peft
-description: Parameter-efficient fine-tuning (PEFT) — the practical alternative to full fine-tuning that powers most production deployments. Where Chapters 13–14 covered post-training methods (SFT, RLHF, DPO, RLVR), this chapter covers the engineering that makes them tractable — rather than training all 70B parameters of a frontier model, train ~0.1–1%, a small low-rank update that captures the essential changes. The dominant technique is LoRA (Hu et al. 2021); QLoRA (Dettmers et al. 2023) makes it accessible on consumer GPUs by combining 4-bit NF4 quantization of the base model with LoRA training. The chapter also covers adapters, prefix tuning, (IA)³, DoRA, and the modern PEFT family. Most production fine-tuning is LoRA-based — this chapter explains why and how.
+description: Parameter-efficient fine-tuning (PEFT), the practical alternative to full fine-tuning that powers most production deployments. Where Chapters 13–14 covered post-training methods (SFT, RLHF, DPO, RLVR), this chapter covers the engineering that makes them tractable, rather than training all 70B parameters of a frontier model, train ~0.1–1%, a small low-rank update that captures the essential changes. The dominant technique is LoRA (Hu et al. 2021); QLoRA (Dettmers et al. 2023) makes it accessible on consumer GPUs by combining 4-bit NF4 quantization of the base model with LoRA training. The chapter also covers adapters, prefix tuning, (IA)³, DoRA, and the modern PEFT family. Most production fine-tuning is LoRA-based, this chapter explains why and how.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { LoRAArchitecture, ParameterBudgetCalculator } from '@components/widgets';
 
-Chapters 13 and 14 left you with the recipes for post-training. Take a base model, run SFT to teach it the chatbot format, layer DPO or RLHF on top to teach it quality, and you have a useful assistant. The recipes are clear; the problem is that doing them at the parameter scale of modern models is operationally brutal. Full fine-tuning of a $70$B-parameter model holds parameters, gradients, and AdamW's two optimizer moments in memory simultaneously — roughly $840$ GB before activations. That is $10\times$ A100s at minimum. Out of reach for most teams.
+Chapters 13 and 14 left you with the recipes for post-training. Take a base model, run SFT to teach it the chatbot format, layer DPO or RLHF on top to teach it quality, and you have a useful assistant. The recipes are clear; the problem is that doing them at the parameter scale of modern models is operationally brutal. Full fine-tuning of a $70$B-parameter model holds parameters, gradients, and AdamW's two optimizer moments in memory simultaneously, roughly $840$ GB before activations. That is $10\times$ A100s at minimum. Out of reach for most teams.
 
-Most production fine-tuning is not done that way. Instead, teams freeze the base model — no gradient, no optimizer state for those parameters — and train only a small subset, typically $0.1\%$ to $1\%$ of the base model's parameters. The dominant technique is **LoRA** (Low-Rank Adaptation), introduced by Hu et al. (2021). The hypothesis: fine-tuning updates have *low intrinsic dimensionality* — the matrix of changes $\Delta W = W_{\text{ft}} - W_{\text{base}}$ can be well approximated by a low-rank decomposition $\Delta W \approx BA$. Train $B$ and $A$, both small. Leave $W$ frozen and large.
+Most production fine-tuning is not done that way. Instead, teams freeze the base model, no gradient, no optimizer state for those parameters, and train only a small subset, typically $0.1\%$ to $1\%$ of the base model's parameters. The dominant technique is **LoRA** (Low-Rank Adaptation), introduced by Hu et al. (2021). The hypothesis: fine-tuning updates have *low intrinsic dimensionality*, the matrix of changes $\Delta W = W_{\text{ft}} - W_{\text{base}}$ can be well approximated by a low-rank decomposition $\Delta W \approx BA$. Train $B$ and $A$, both small. Leave $W$ frozen and large.
 
 Combined with **QLoRA** (Dettmers et al. 2023), which adds $4$-bit NF4 quantization of the base model to LoRA training, you can fine-tune a $70$B model on a single $48$ GB GPU. This is what made open-source post-training explode after early $2023$. This chapter walks through LoRA mechanics, the broader PEFT family (adapters, prefix tuning, (IA)³), QLoRA's tricks, and the modern variants (DoRA, AdaLoRA, MoLoRA). It is the practical-engineering counterpart to Chapters 13 and 14's algorithmic content.
 
-## The setup — full fine-tuning is expensive
+## The setup: full fine-tuning is expensive
 
 ### The memory cost
 
-A 70B-parameter model in BF16 occupies $140$ GB just for the weights. Full fine-tuning needs to hold three more things alongside the weights. **Gradients** require another $140$ GB (BF16, one float per parameter). **Optimizer state** — AdamW's first and second moments, typically kept in FP32 for stability — adds $4 \times 2 \times 70 \times 10^9 = 560$ GB. **Activations** for backpropagation depend on whether activation checkpointing is enabled and on batch size; figure tens to hundreds of additional GB.
+A 70B-parameter model in BF16 occupies $140$ GB just for the weights. Full fine-tuning needs to hold three more things alongside the weights. **Gradients** require another $140$ GB (BF16, one float per parameter). **Optimizer state**, AdamW's first and second moments, typically kept in FP32 for stability, adds $4 \times 2 \times 70 \times 10^9 = 560$ GB. **Activations** for backpropagation depend on whether activation checkpointing is enabled and on batch size; figure tens to hundreds of additional GB.
 
-The arithmetic is uncomfortable. Weights plus gradients plus optimizer state alone is $140 + 140 + 560 = 840$ GB. An A100 has $80$ GB of HBM; an H100 also has $80$ GB. **Full fine-tuning of a $70$B model needs at least $10$ A100s or H100s** before you even budget for activations and communication buffers. FSDP from Chapter 10 helps by sharding parameters, gradients, and optimizer state across GPUs — but it does not reduce the *total* memory budget. You still need ten GPUs' worth of HBM, just split across the cluster. For a team with one or two GPUs, full fine-tuning of frontier-scale models is not an option you can engineer around.
+The arithmetic is uncomfortable. Weights plus gradients plus optimizer state alone is $140 + 140 + 560 = 840$ GB. An A100 has $80$ GB of HBM; an H100 also has $80$ GB. **Full fine-tuning of a $70$B model needs at least $10$ A100s or H100s** before you even budget for activations and communication buffers. FSDP from Chapter 10 helps by sharding parameters, gradients, and optimizer state across GPUs, but it does not reduce the *total* memory budget. You still need ten GPUs' worth of HBM, just split across the cluster. For a team with one or two GPUs, full fine-tuning of frontier-scale models is not an option you can engineer around.
 
 ### The opportunity
 
-The key observation is that most parameters do not need to change much during fine-tuning. Pre-training spent trillions of tokens learning useful features — syntax, world knowledge, the residual-stream representations explored in Chapter 8. Fine-tuning typically teaches the model to *combine* and *select among* those features differently, not to relearn them. The "combination knob" has fewer degrees of freedom than the underlying feature library.
+The key observation is that most parameters do not need to change much during fine-tuning. Pre-training spent trillions of tokens learning useful features, syntax, world knowledge, the residual-stream representations explored in Chapter 8. Fine-tuning typically teaches the model to *combine* and *select among* those features differently, not to relearn them. The "combination knob" has fewer degrees of freedom than the underlying feature library.
 
-If that observation is right, then the path forward is direct: freeze the base model entirely, and train only a small subset of additional parameters that captures the combination updates. Memory drops by roughly $10\times$, because the base weights need no gradient or optimizer state — they just sit in HBM as constants during the forward pass. That is the PEFT promise, and the rest of the chapter is about cashing it in.
+If that observation is right, then the path forward is direct: freeze the base model entirely, and train only a small subset of additional parameters that captures the combination updates. Memory drops by roughly $10\times$, because the base weights need no gradient or optimizer state, they just sit in HBM as constants during the forward pass. That is the PEFT promise, and the rest of the chapter is about cashing it in.
 
 <Callout type="note">
-Chapter 15 is the *engineering* chapter of Phase 11. Chapters 13 and 14 gave you methods; this chapter gives you the engineering that makes those methods practical at scale. Most production post-training — open-source and frontier — uses some form of PEFT. The conceptual material is straightforward; the impact is enormous.
+Chapter 15 is the *engineering* chapter of Phase 11. Chapters 13 and 14 gave you methods; this chapter gives you the engineering that makes those methods practical at scale. Most production post-training, open-source and frontier, uses some form of PEFT. The conceptual material is straightforward; the impact is enormous.
 </Callout>
 
 The next section unpacks *why* freezing the base and training a small subset actually works.
@@ -38,9 +38,9 @@ The next section unpacks *why* freezing the base and training a small subset act
 
 ### Intrinsic dimensionality
 
-The empirical claim that fine-tuning updates are small in a *useful* sense predates LoRA. Aghajanyan et al. (2020) studied fine-tuning of language models by an unusual experiment: rather than train all $N$ parameters directly, they parameterized the update through a random projection from a much smaller $d$-dimensional space and trained only those $d$ values. They found that *most* fine-tuning effect was recoverable with $d$ on the order of $10^4$ to $10^5$ — orders of magnitude smaller than $N$, which for a $70$B model is $7 \times 10^{10}$. The effective dimensionality of the fine-tuning update is tiny relative to the parameter count.
+The empirical claim that fine-tuning updates are small in a *useful* sense predates LoRA. Aghajanyan et al. (2020) studied fine-tuning of language models by an unusual experiment: rather than train all $N$ parameters directly, they parameterized the update through a random projection from a much smaller $d$-dimensional space and trained only those $d$ values. They found that *most* fine-tuning effect was recoverable with $d$ on the order of $10^4$ to $10^5$, orders of magnitude smaller than $N$, which for a $70$B model is $7 \times 10^{10}$. The effective dimensionality of the fine-tuning update is tiny relative to the parameter count.
 
-The intuition is that pre-training learned a language model — a richly structured object encoding syntax, world knowledge, and reasoning patterns into billions of parameters. Fine-tuning does not relearn that language model. It teaches the model to *use* the language model differently — to behave as the assistant side of a conversation, to refuse harmful requests, to prefer one phrasing over another. The space of those *use* policies is much smaller than the space of all possible parameter configurations. There is a lot of overparameterization in the base model relative to what fine-tuning needs to change.
+The intuition is that pre-training learned a language model, a richly structured object encoding syntax, world knowledge, and reasoning patterns into billions of parameters. Fine-tuning does not relearn that language model. It teaches the model to *use* the language model differently, to behave as the assistant side of a conversation, to refuse harmful requests, to prefer one phrasing over another. The space of those *use* policies is much smaller than the space of all possible parameter configurations. There is a lot of overparameterization in the base model relative to what fine-tuning needs to change.
 
 This is a useful framing but not a theorem. It is an empirical regularity that holds for *most* fine-tuning tasks studied so far. Section 5 returns to the cases where it does not hold.
 
@@ -61,7 +61,7 @@ The savings are striking. For $d = k = 4096$ (a typical attention projection in 
 Aggregated across a $7$B transformer with LoRA on all attention projections, the trainable parameter count typically lands at $0.1\%$ to $1\%$ of base model parameters. For a $70$B model that is $50$–$500$ MB of trainable parameters against $140$ GB of frozen base. Gradients and optimizer state only need to cover the trainable subset, which is where the order-of-magnitude memory savings come from.
 
 <Callout type="aside">
-The low-rank hypothesis is not a theorem — it is an empirical observation. There exist tasks where it fails, rare but real. For most instruction tuning, preference optimization, and style adaptation, low-rank captures the relevant changes. For tasks requiring *deep* knowledge updates — adding a new language, a new modality, or substantial reasoning capability — full fine-tuning often wins. Section 8 returns to this trade-off.
+The low-rank hypothesis is not a theorem, it is an empirical observation. There exist tasks where it fails, rare but real. For most instruction tuning, preference optimization, and style adaptation, low-rank captures the relevant changes. For tasks requiring *deep* knowledge updates, adding a new language, a new modality, or substantial reasoning capability, full fine-tuning often wins. Section 8 returns to this trade-off.
 </Callout>
 
 The next section turns the decomposition into the actual forward pass and training recipe.
@@ -74,19 +74,19 @@ For a weight matrix $W_0 \in \mathbb{R}^{d \times k}$ in the base model, LoRA mo
 
 $$h = W_0 x + \Delta W x = W_0 x + \frac{\alpha}{r} B A x$$
 
-$W_0$ is the *frozen* pre-trained weight matrix — it never receives a gradient and never enters the optimizer state. $A$ and $B$ are the *trainable* low-rank factors. $r$ is the rank (typically $8$ to $32$). $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$, discussed in the next section). The forward pass is two matrix multiplications in parallel; the LoRA path is cheap because $r$ is small.
+$W_0$ is the *frozen* pre-trained weight matrix, it never receives a gradient and never enters the optimizer state. $A$ and $B$ are the *trainable* low-rank factors. $r$ is the rank (typically $8$ to $32$). $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$, discussed in the next section). The forward pass is two matrix multiplications in parallel; the LoRA path is cheap because $r$ is small.
 
 ### Initialization
 
-The two factors are initialized asymmetrically. $A$ is initialized with Gaussian noise — for example $\mathcal{N}(0, 1/r^2)$, the choice made by the original paper. $B$ is initialized to **zero**. The asymmetry is the point. Because $B = 0$ at step $0$, the LoRA contribution $BAx$ is zero everywhere, and therefore $\Delta W = 0$ at the start of training. **The model behaves identically to the base model on step zero.** Training updates $B$ (and $A$) away from this neutral starting point.
+The two factors are initialized asymmetrically. $A$ is initialized with Gaussian noise, for example $\mathcal{N}(0, 1/r^2)$, the choice made by the original paper. $B$ is initialized to **zero**. The asymmetry is the point. Because $B = 0$ at step $0$, the LoRA contribution $BAx$ is zero everywhere, and therefore $\Delta W = 0$ at the start of training. **The model behaves identically to the base model on step zero.** Training updates $B$ (and $A$) away from this neutral starting point.
 
-The zero-init of $B$ is load-bearing. Without it — for instance, if both $A$ and $B$ were initialized with random Gaussians — the first forward pass would inject a non-trivial random perturbation into every weight matrix of the network at once. Pre-trained representations would be corrupted before a single gradient step. Starting from $\Delta W = 0$ guarantees that LoRA training *begins* exactly where the base model is, and that the optimization moves the model away from there along directions selected by the gradient on real fine-tuning data.
+The zero-init of $B$ is load-bearing. Without it, for instance, if both $A$ and $B$ were initialized with random Gaussians, the first forward pass would inject a non-trivial random perturbation into every weight matrix of the network at once. Pre-trained representations would be corrupted before a single gradient step. Starting from $\Delta W = 0$ guarantees that LoRA training *begins* exactly where the base model is, and that the optimization moves the model away from there along directions selected by the gradient on real fine-tuning data.
 
 ### Merging vs adapter-mode
 
-At inference, LoRA gives you two options for how to evaluate the model. The first is to **merge** the adapter into the base weight matrix once at the end of training: compute $W_{\text{merged}} = W_0 + (\alpha/r) B A$ and store the result. From then on, the forward pass uses $W_{\text{merged}}$ directly — there is no LoRA path to evaluate at inference, and the model is computationally indistinguishable from a base model of the same shape. **Zero inference overhead.** This is the right choice for production deployment when the adapter is fixed.
+At inference, LoRA gives you two options for how to evaluate the model. The first is to **merge** the adapter into the base weight matrix once at the end of training: compute $W_{\text{merged}} = W_0 + (\alpha/r) B A$ and store the result. From then on, the forward pass uses $W_{\text{merged}}$ directly, there is no LoRA path to evaluate at inference, and the model is computationally indistinguishable from a base model of the same shape. **Zero inference overhead.** This is the right choice for production deployment when the adapter is fixed.
 
-The second option is **adapter-mode** inference. Keep $W_0$, $A$, and $B$ separate in memory; evaluate both terms on every forward pass. The cost is a small constant overhead per layer — the LoRA matmul against $r$-dimensional bottlenecks is cheap, but it is not free. The benefit is that adapters are *swappable* per request. A serving stack can load one base model and many adapter checkpoints, then route incoming requests to whichever adapter the request needs. Modern inference engines (vLLM, TGI) support multi-LoRA serving in exactly this mode, and it is increasingly common when one base model powers dozens of fine-tuned personas or vertical specializations.
+The second option is **adapter-mode** inference. Keep $W_0$, $A$, and $B$ separate in memory; evaluate both terms on every forward pass. The cost is a small constant overhead per layer, the LoRA matmul against $r$-dimensional bottlenecks is cheap, but it is not free. The benefit is that adapters are *swappable* per request. A serving stack can load one base model and many adapter checkpoints, then route incoming requests to whichever adapter the request needs. Modern inference engines (vLLM, TGI) support multi-LoRA serving in exactly this mode, and it is increasingly common when one base model powers dozens of fine-tuned personas or vertical specializations.
 
 Most teams use merging for production performance and keep adapter-mode for experimentation and multi-tenant serving. The choice is operational, not algorithmic.
 
@@ -94,9 +94,9 @@ Most teams use merging for production performance and keep adapter-mode for expe
 $$h = W_0 x + \frac{\alpha}{r} B A x, \quad B \in \mathbb{R}^{d \times r}, \quad A \in \mathbb{R}^{r \times k}, \quad r \ll \min(d, k)$$
 </Equation>
 
-LoRA forward pass. $W_0$ is the frozen pre-trained weight; $A$ and $B$ are trainable low-rank factors. $r$ is the rank (typically $8$–$32$); $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$). At step zero, $B = 0$ so $\Delta W = 0$ — the model is identical to the base.
+LoRA forward pass. $W_0$ is the frozen pre-trained weight; $A$ and $B$ are trainable low-rank factors. $r$ is the rank (typically $8$–$32$); $\alpha$ is a scaling factor (typically $\alpha = r$ or $\alpha = 2r$). At step zero, $B = 0$ so $\Delta W = 0$, the model is identical to the base.
 
-<WidgetFrame title="LoRA architecture" caption="A single attention block with the four projections (W_Q, W_K, W_V, W_O) shown as large frozen matrices and their tiny trainable LoRA adapters (B·A pairs) injected alongside. Slider for rank shows how the trainable parameter count scales — but it stays a tiny fraction of the base. Target-module selector toggles between Q+V only / Q,K,V,O / all linear. The size disparity is the visual punchline: a 7B model has 6.74B frozen params and ~17M trainable.">
+<WidgetFrame title="LoRA architecture" caption="A single attention block with the four projections (W_Q, W_K, W_V, W_O) shown as large frozen matrices and their tiny trainable LoRA adapters (B·A pairs) injected alongside. Slider for rank shows how the trainable parameter count scales, but it stays a tiny fraction of the base. Target-module selector toggles between Q+V only / Q,K,V,O / all linear. The size disparity is the visual punchline: a 7B model has 6.74B frozen params and ~17M trainable.">
   <LoRAArchitecture client:visible />
 </WidgetFrame>
 
@@ -111,9 +111,9 @@ def lora_forward(x, W_base, A, B, alpha=16, r=8):
     LoRA forward pass.
 
     x:      (batch, d_in)
-    W_base: (d_in, d_out) — FROZEN base weight
-    A:      (r, d_in)     — TRAINABLE down-projection
-    B:      (d_out, r)    — TRAINABLE up-projection
+    W_base: (d_in, d_out), FROZEN base weight
+    A:      (r, d_in)    , TRAINABLE down-projection
+    B:      (d_out, r)   , TRAINABLE up-projection
     alpha:  scaling factor (typically alpha = r or 2r)
     """
     base_out = x @ W_base                         # (batch, d_out)
@@ -145,32 +145,32 @@ print(f"\nAfter training (B != 0), LoRA != base: {not np.allclose(out_trained, o
 </RunnableCode>
 
 <Callout type="warning">
-**Misconception.** "LoRA is only for training; it doesn't matter at inference." False — **LoRA exists at both.** During training, $A$ and $B$ are the only weights that receive gradients. At inference, you choose between *merging* ($W_{\text{merged}} = W_0 + (\alpha/r) BA$, computed once, zero overhead) and *adapter-mode* (keep $A$, $B$ separate so that adapters can be swapped per request). Most production deployments merge for performance; multi-tenant serving stacks keep them separate.
+**Misconception.** "LoRA is only for training; it doesn't matter at inference." False: **LoRA exists at both.** During training, $A$ and $B$ are the only weights that receive gradients. At inference, you choose between *merging* ($W_{\text{merged}} = W_0 + (\alpha/r) BA$, computed once, zero overhead) and *adapter-mode* (keep $A$, $B$ separate so that adapters can be swapped per request). Most production deployments merge for performance; multi-tenant serving stacks keep them separate.
 </Callout>
 
-The next section covers the practical hyperparameter choices — rank, alpha, target modules — that determine how much of a base model LoRA actually adapts.
+The next section covers the practical hyperparameter choices, rank, alpha, target modules, that determine how much of a base model LoRA actually adapts.
 
-## Practical LoRA — rank, alpha, target modules
+## Practical LoRA: rank, alpha, target modules
 
 ### Rank
 
 The rank $r$ controls the capacity of each LoRA adapter. Typical values are $4$, $8$, $16$, $32$, and $64$; the most common starting point in modern recipes is $r = 8$ or $r = 16$. Higher rank means more trainable parameters per matrix, more memory for the adapter and its optimizer state, and slightly slower training. Lower rank means cheaper everything, at the cost of expressivity.
 
-Empirically, returns diminish past $r = 16$ to $r = 32$ for most fine-tuning tasks. The original LoRA paper found that rank $1$ was often surprisingly effective on the GLUE and WikiSQL benchmarks they studied — a striking demonstration of how concentrated fine-tuning updates really are. Modern recipes use $r = 8$ to $32$ as the default range; ranks above $64$ rarely improve task performance enough to justify the cost. The rule of thumb: start at $r = 16$, and only push higher when you have evidence the task needs it.
+Empirically, returns diminish past $r = 16$ to $r = 32$ for most fine-tuning tasks. The original LoRA paper found that rank $1$ was often surprisingly effective on the GLUE and WikiSQL benchmarks they studied, a striking demonstration of how concentrated fine-tuning updates really are. Modern recipes use $r = 8$ to $32$ as the default range; ranks above $64$ rarely improve task performance enough to justify the cost. The rule of thumb: start at $r = 16$, and only push higher when you have evidence the task needs it.
 
 ### Alpha and the scaling factor
 
-The scaling factor $\alpha/r$ in $h = W_0 x + (\alpha/r) BAx$ controls the magnitude of the LoRA contribution at inference and training time. It is *not* a learning rate — gradients still flow into $A$ and $B$ at full magnitude. Rather, $\alpha/r$ acts as a constant multiplier on the LoRA path's *output*. Higher $\alpha/r$ means the LoRA path contributes more strongly to the activations relative to the base path; lower $\alpha/r$ means the LoRA correction is more subtle.
+The scaling factor $\alpha/r$ in $h = W_0 x + (\alpha/r) BAx$ controls the magnitude of the LoRA contribution at inference and training time. It is *not* a learning rate, gradients still flow into $A$ and $B$ at full magnitude. Rather, $\alpha/r$ acts as a constant multiplier on the LoRA path's *output*. Higher $\alpha/r$ means the LoRA path contributes more strongly to the activations relative to the base path; lower $\alpha/r$ means the LoRA correction is more subtle.
 
-Three conventions dominate. Setting $\alpha = r$ keeps the ratio at exactly $1$ — no rescaling, the LoRA path is contributed at its raw magnitude. Setting $\alpha = 2r$ doubles the contribution; this is common in DPO and other preference-optimization recipes where the LoRA path is expected to drive a meaningful shift. Some implementations fix $\alpha = 16$ regardless of $r$, in which case the effective ratio varies (e.g., $\alpha/r = 2$ at $r = 8$, $\alpha/r = 1$ at $r = 16$, $\alpha/r = 0.25$ at $r = 64$). Mental model: think of $\alpha/r$ as a knob that controls *how loud* the LoRA correction is, relative to the frozen base.
+Three conventions dominate. Setting $\alpha = r$ keeps the ratio at exactly $1$, no rescaling, the LoRA path is contributed at its raw magnitude. Setting $\alpha = 2r$ doubles the contribution; this is common in DPO and other preference-optimization recipes where the LoRA path is expected to drive a meaningful shift. Some implementations fix $\alpha = 16$ regardless of $r$, in which case the effective ratio varies (e.g., $\alpha/r = 2$ at $r = 8$, $\alpha/r = 1$ at $r = 16$, $\alpha/r = 0.25$ at $r = 64$). Mental model: think of $\alpha/r$ as a knob that controls *how loud* the LoRA correction is, relative to the frozen base.
 
 ### Target modules
 
 LoRA does not have to be applied to every weight matrix in the model. The three common patterns:
 
-- **Attention $W_Q$, $W_V$ only.** The original LoRA paper's setting. Minimum parameter overhead, roughly $0.1\%$ of base. Effective when the fine-tuning task is mild — light instruction following, modest style adaptation.
-- **Attention $W_Q$, $W_K$, $W_V$, $W_O$ — all attention projections.** The modern default. Roughly $0.3\%$ of base. The standard choice for most SFT and DPO LoRA recipes today.
-- **All linear layers — attention plus FFN up- and down-projections.** Maximum coverage, roughly $0.5\%$–$1\%$ of base. The right choice when the task is complex and budget allows.
+- **Attention $W_Q$, $W_V$ only.** The original LoRA paper's setting. Minimum parameter overhead, roughly $0.1\%$ of base. Effective when the fine-tuning task is mild, light instruction following, modest style adaptation.
+- **Attention $W_Q$, $W_K$, $W_V$, $W_O$, all attention projections.** The modern default. Roughly $0.3\%$ of base. The standard choice for most SFT and DPO LoRA recipes today.
+- **All linear layers, attention plus FFN up- and down-projections.** Maximum coverage, roughly $0.5\%$–$1\%$ of base. The right choice when the task is complex and budget allows.
 
 Empirically, covering more modules helps for harder fine-tuning tasks but eventually hits diminishing returns of its own. For most instruction tuning the attention-only or all-attention pattern is sufficient. For preference optimization and tasks requiring stronger behavioral shifts, covering FFN as well tends to help. As with rank, the default recommendation is the middle option: all attention projections, $r = 16$, $\alpha = 16$ or $32$. Tune from there.
 
@@ -216,49 +216,49 @@ print(f"Combined with QLoRA's 4-bit base, fits 70B fine-tuning on a single 48GB 
 
 LoRA is by far the dominant PEFT method in production today, but it is not the only one. The next section surveys the broader family.
 
-## The PEFT family — beyond LoRA
+## The PEFT family: beyond LoRA
 
 ### Adapters
 
-Adapters predate LoRA by two years. Houlsby et al. (2019) inserted a small bottleneck module — a down-projection $W_{\text{down}} \in \mathbb{R}^{d \times r}$, an activation function, an up-projection $W_{\text{up}} \in \mathbb{R}^{r \times d}$, and a residual connection — after each attention and FFN block, then trained only the adapters with the rest of the model frozen. The parameter savings are similar to LoRA: $2 d r$ per insertion point. The key difference is *where* the trainable parameters live. Adapters add new layers to the network; LoRA modifies existing weight matrices in parallel.
+Adapters predate LoRA by two years. Houlsby et al. (2019) inserted a small bottleneck module, a down-projection $W_{\text{down}} \in \mathbb{R}^{d \times r}$, an activation function, an up-projection $W_{\text{up}} \in \mathbb{R}^{r \times d}$, and a residual connection, after each attention and FFN block, then trained only the adapters with the rest of the model frozen. The parameter savings are similar to LoRA: $2 d r$ per insertion point. The key difference is *where* the trainable parameters live. Adapters add new layers to the network; LoRA modifies existing weight matrices in parallel.
 
-The architectural difference matters at inference. Adapters cannot be merged into the base weights — they are extra layers that must be evaluated separately on every forward pass. The inference overhead is small but non-zero. LoRA, by contrast, merges cleanly into the existing weight matrices and adds nothing at inference. That is the operational reason LoRA won the open-source default fight: same-quality adaptation, zero inference cost after merging. Adapters are still used, particularly in multi-task setups where their additive structure makes it easy to compose multiple adapters at once, but for single-task fine-tuning LoRA dominates.
+The architectural difference matters at inference. Adapters cannot be merged into the base weights, they are extra layers that must be evaluated separately on every forward pass. The inference overhead is small but non-zero. LoRA, by contrast, merges cleanly into the existing weight matrices and adds nothing at inference. That is the operational reason LoRA won the open-source default fight: same-quality adaptation, zero inference cost after merging. Adapters are still used, particularly in multi-task setups where their additive structure makes it easy to compose multiple adapters at once, but for single-task fine-tuning LoRA dominates.
 
 ### Prefix tuning and prompt tuning
 
-Two related methods sidestep weight updates entirely and instead inject trainable information through the model's existing attention mechanism. **Prefix tuning** (Li & Liang 2021) prepends $L$ trainable continuous "soft prompt" vectors to the attention keys and values at *every layer* of the model. The model is otherwise frozen; only the prefixes train. Parameter count: roughly $2 L d \times \text{layers}$, typically about $1\%$ of base. Because prefix tuning never modifies model weights, it is the most "non-invasive" PEFT method — the base model is byte-for-byte identical before and after.
+Two related methods sidestep weight updates entirely and instead inject trainable information through the model's existing attention mechanism. **Prefix tuning** (Li & Liang 2021) prepends $L$ trainable continuous "soft prompt" vectors to the attention keys and values at *every layer* of the model. The model is otherwise frozen; only the prefixes train. Parameter count: roughly $2 L d \times \text{layers}$, typically about $1\%$ of base. Because prefix tuning never modifies model weights, it is the most "non-invasive" PEFT method, the base model is byte-for-byte identical before and after.
 
-**Prompt tuning** (Lester et al. 2021) is even simpler. Train only the *input embeddings* of a short soft prompt prepended to the input sequence. The parameter count drops to just $L \cdot d$ — a few thousand parameters total, regardless of model depth. Prompt tuning is striking because of *when* it works: at very large scale ($10$B parameters and up), prompt tuning becomes competitive with full fine-tuning on many tasks; at smaller scale, it lags noticeably. The empirical claim from the paper is that the more capable the base model, the less prompt tuning has to do to specialize it.
+**Prompt tuning** (Lester et al. 2021) is even simpler. Train only the *input embeddings* of a short soft prompt prepended to the input sequence. The parameter count drops to just $L \cdot d$, a few thousand parameters total, regardless of model depth. Prompt tuning is striking because of *when* it works: at very large scale ($10$B parameters and up), prompt tuning becomes competitive with full fine-tuning on many tasks; at smaller scale, it lags noticeably. The empirical claim from the paper is that the more capable the base model, the less prompt tuning has to do to specialize it.
 
 ### (IA)³
 
-(IA)³ — Infused Adapter by Inhibiting and Amplifying Inner Activations — is the smallest PEFT method that still works well. Liu et al. (2022) showed that rather than adding a low-rank matrix to certain weights, you can multiply attention K, V and FFN intermediate activations by *element-wise learned rescaling vectors*. Three vectors of length $d$ per layer is enough. That is roughly $10\times$ fewer parameters than LoRA at the same rank — a few hundred kilobytes of trainable parameters for a $7$B model. The use case is few-shot fine-tuning, where you have very limited training data and want the smallest possible adapter that still adapts.
+(IA)³, Infused Adapter by Inhibiting and Amplifying Inner Activations, is the smallest PEFT method that still works well. Liu et al. (2022) showed that rather than adding a low-rank matrix to certain weights, you can multiply attention K, V and FFN intermediate activations by *element-wise learned rescaling vectors*. Three vectors of length $d$ per layer is enough. That is roughly $10\times$ fewer parameters than LoRA at the same rank, a few hundred kilobytes of trainable parameters for a $7$B model. The use case is few-shot fine-tuning, where you have very limited training data and want the smallest possible adapter that still adapts.
 
 <Callout type="aside">
-PEFT methods proliferate, but for $95\%$ of teams the answer is LoRA — or QLoRA when memory is tight. Adapters are still common in multi-task setups; prefix tuning shows up in research; prompt tuning has a niche at very large scale; (IA)³ has a niche in few-shot. They are worth knowing about for technical reading and for the rare case where LoRA is genuinely the wrong tool. They are not where you should start.
+PEFT methods proliferate, but for $95\%$ of teams the answer is LoRA, or QLoRA when memory is tight. Adapters are still common in multi-task setups; prefix tuning shows up in research; prompt tuning has a niche at very large scale; (IA)³ has a niche in few-shot. They are worth knowing about for technical reading and for the rare case where LoRA is genuinely the wrong tool. They are not where you should start.
 </Callout>
 
 The next section covers QLoRA, the combination of $4$-bit quantization and LoRA that democratized $70$B fine-tuning.
 
-## QLoRA — 4-bit base + LoRA
+## QLoRA: 4-bit base + LoRA
 
 ### The memory problem persists
 
-LoRA solves the gradient and optimizer-state problem. It does *not* solve the base model problem. The frozen weights still need to be in HBM during the forward pass — the model has to read them to compute anything. For a $70$B model in BF16, that is $140$ GB of base weights, sitting in memory unchanged across the entire training run. No current consumer or prosumer GPU has $140$ GB of HBM. The smallest configuration that fits is $2 \times$ A100 $80$GB. For a researcher with a single workstation GPU, even LoRA leaves you short.
+LoRA solves the gradient and optimizer-state problem. It does *not* solve the base model problem. The frozen weights still need to be in HBM during the forward pass, the model has to read them to compute anything. For a $70$B model in BF16, that is $140$ GB of base weights, sitting in memory unchanged across the entire training run. No current consumer or prosumer GPU has $140$ GB of HBM. The smallest configuration that fits is $2 \times$ A100 $80$GB. For a researcher with a single workstation GPU, even LoRA leaves you short.
 
-QLoRA (Dettmers et al. 2023) targets the base-weight memory directly. The idea is to **quantize the base model to $4$ bits while keeping the LoRA adapters in BF16.** The trainable adapters stay in full precision so the gradient signal is clean; the frozen base shrinks $4\times$ because it does not need precision — it never updates. The result is that the dominant memory cost of fine-tuning collapses, and $70$B fine-tuning fits on a single $48$ GB GPU.
+QLoRA (Dettmers et al. 2023) targets the base-weight memory directly. The idea is to **quantize the base model to $4$ bits while keeping the LoRA adapters in BF16.** The trainable adapters stay in full precision so the gradient signal is clean; the frozen base shrinks $4\times$ because it does not need precision, it never updates. The result is that the dominant memory cost of fine-tuning collapses, and $70$B fine-tuning fits on a single $48$ GB GPU.
 
 ### NF4 quantization
 
-The specific $4$-bit format QLoRA uses is **NF4 (NormalFloat-4)**, a non-uniform quantization scheme custom-designed for normally distributed weights. NF4 places its $16$ quantization levels at the quantiles of a normal distribution — closely spaced near zero, more widely spaced in the tails — rather than uniformly across the range like standard INT4. The motivation is empirical: pre-trained LLM weights are approximately normally distributed. A uniform $4$-bit quantizer wastes bits in the tails (where weights rarely land) and underrepresents the dense region near zero (where weights cluster). NF4 fits the distribution and loses less information per parameter than INT4 at the same bit width.
+The specific $4$-bit format QLoRA uses is **NF4 (NormalFloat-4)**, a non-uniform quantization scheme custom-designed for normally distributed weights. NF4 places its $16$ quantization levels at the quantiles of a normal distribution, closely spaced near zero, more widely spaced in the tails, rather than uniformly across the range like standard INT4. The motivation is empirical: pre-trained LLM weights are approximately normally distributed. A uniform $4$-bit quantizer wastes bits in the tails (where weights rarely land) and underrepresents the dense region near zero (where weights cluster). NF4 fits the distribution and loses less information per parameter than INT4 at the same bit width.
 
 The memory impact is direct: a $70$B model in BF16 occupies $140$ GB; in NF4 it occupies roughly $35$ GB. That is a $4\times$ reduction from the dominant cost, and on its own it brings $70$B fine-tuning within reach of an $80$ GB A100.
 
 ### The full recipe
 
-The QLoRA pipeline runs in four steps per training iteration. **Step 1:** load the base model and quantize all weights to NF4 at load time. The quantized representation is what lives in HBM for the entire run. **Step 2:** add LoRA adapters in BF16 — a few hundred MB for a $70$B model, trivial relative to the base. **Step 3:** during the forward pass, dequantize each NF4 weight matrix to BF16 *just before its matmul*, run the matmul, then discard the dequantized version. The LoRA path runs entirely in BF16, no quantization involved. **Step 4:** during the backward pass, gradients flow only through the LoRA adapters — the base weights are frozen, so the quantization sits on the forward path only and never has to be made differentiable.
+The QLoRA pipeline runs in four steps per training iteration. **Step 1:** load the base model and quantize all weights to NF4 at load time. The quantized representation is what lives in HBM for the entire run. **Step 2:** add LoRA adapters in BF16, a few hundred MB for a $70$B model, trivial relative to the base. **Step 3:** during the forward pass, dequantize each NF4 weight matrix to BF16 *just before its matmul*, run the matmul, then discard the dequantized version. The LoRA path runs entirely in BF16, no quantization involved. **Step 4:** during the backward pass, gradients flow only through the LoRA adapters, the base weights are frozen, so the quantization sits on the forward path only and never has to be made differentiable.
 
-Two additional tricks make the headline numbers work. **Double quantization** quantizes the per-block quantization scalars themselves, saving an extra $\sim 0.4$ bits per parameter — small per-parameter but meaningful across $70$ billion of them. **Paged optimizers** use NVIDIA's unified memory paging to spill optimizer state between GPU and CPU memory automatically, so optimizer state larger than HBM does not crash the training run. Together, these are not optional polish — they are the difference between QLoRA working on a single GPU and not.
+Two additional tricks make the headline numbers work. **Double quantization** quantizes the per-block quantization scalars themselves, saving an extra $\sim 0.4$ bits per parameter, small per-parameter but meaningful across $70$ billion of them. **Paged optimizers** use NVIDIA's unified memory paging to spill optimizer state between GPU and CPU memory automatically, so optimizer state larger than HBM does not crash the training run. Together, these are not optional polish, they are the difference between QLoRA working on a single GPU and not.
 
 The total memory budget for QLoRA fine-tuning a $70$B model lands at: NF4 base $\approx 35$ GB; LoRA adapters in BF16 $\approx 0.5$ GB; activations and (paged) optimizer state $\approx 5$–$10$ GB; total $\approx 40$–$45$ GB. **A single $48$ GB A6000 fits the entire job.** A single A100 or H100 $80$GB fits it with comfortable headroom. This is what unlocked open-source post-training in $2023$.
 
@@ -323,15 +323,15 @@ LoRA and QLoRA cover the practical core. The next section surveys the active res
 
 ### DoRA
 
-DoRA — Weight-Decomposed Low-Rank Adaptation (Liu et al. 2024) — adds one piece of structure to LoRA. Decompose each base weight matrix $W$ into a *magnitude* vector $m$ and a *direction* matrix $V/\|V\|$ (with the norm taken per column). Apply LoRA only to the direction; learn the magnitude separately as a small additional trainable vector. The intuition is that the model can independently learn "how strongly does this column contribute" (magnitude) and "what direction does it point" (LoRA-updated direction), rather than collapsing both into a single low-rank update. Empirically DoRA matches or beats LoRA at the same trainable parameter count on a range of benchmarks. It is a refinement, not a paradigm shift, but it is gaining adoption in 2024 and 2025 PEFT recipes.
+DoRA, Weight-Decomposed Low-Rank Adaptation (Liu et al. 2024), adds one piece of structure to LoRA. Decompose each base weight matrix $W$ into a *magnitude* vector $m$ and a *direction* matrix $V/\|V\|$ (with the norm taken per column). Apply LoRA only to the direction; learn the magnitude separately as a small additional trainable vector. The intuition is that the model can independently learn "how strongly does this column contribute" (magnitude) and "what direction does it point" (LoRA-updated direction), rather than collapsing both into a single low-rank update. Empirically DoRA matches or beats LoRA at the same trainable parameter count on a range of benchmarks. It is a refinement, not a paradigm shift, but it is gaining adoption in 2024 and 2025 PEFT recipes.
 
 ### AdaLoRA
 
-AdaLoRA (Zhang et al. 2023) attacks the rank-allocation question: not every weight matrix benefits equally from the same LoRA rank. Some layers — typically middle attention layers — gain more capacity from extra rank than others. AdaLoRA *learns* the rank allocation during training. Start with a uniform budget across modules, then prune the least-important rank components via an importance score derived from the singular values of the LoRA factors. At the end of training, capacity has been redistributed toward the modules that needed it. Useful when you have a fixed parameter budget and want to maximize per-parameter utility.
+AdaLoRA (Zhang et al. 2023) attacks the rank-allocation question: not every weight matrix benefits equally from the same LoRA rank. Some layers, typically middle attention layers, gain more capacity from extra rank than others. AdaLoRA *learns* the rank allocation during training. Start with a uniform budget across modules, then prune the least-important rank components via an importance score derived from the singular values of the LoRA factors. At the end of training, capacity has been redistributed toward the modules that needed it. Useful when you have a fixed parameter budget and want to maximize per-parameter utility.
 
 ### Mixture of LoRAs
 
-A natural extension of LoRA is to maintain *multiple* adapters per weight matrix and route between them — essentially the MoE pattern from Chapter 11, applied at the adapter level rather than the FFN level. MoLoRA, X-LoRA, and related approaches train a small router that selects which LoRA expert to apply per token or per layer. The use case is multi-task fine-tuning: one base model serves many specializations, each carried by a small expert adapter, with the router learning when to invoke which. The serving story is favorable because the base model is shared and the experts are tiny; the training story is more involved because of the routing.
+A natural extension of LoRA is to maintain *multiple* adapters per weight matrix and route between them, essentially the MoE pattern from Chapter 11, applied at the adapter level rather than the FFN level. MoLoRA, X-LoRA, and related approaches train a small router that selects which LoRA expert to apply per token or per layer. The use case is multi-task fine-tuning: one base model serves many specializations, each carried by a small expert adapter, with the router learning when to invoke which. The serving story is favorable because the base model is shared and the experts are tiny; the training story is more involved because of the routing.
 
 <Callout type="aside">
 PEFT is an active research area in 2024 and 2025. New variants appear monthly. **Stick with LoRA or QLoRA as your default.** Explore DoRA when you want finer-grained updates at the same parameter budget; AdaLoRA when you have a tight parameter budget and need to allocate it carefully; MoLoRA-style approaches when you have a clean multi-task setup. Don't optimize prematurely.
@@ -341,11 +341,11 @@ The final section pulls all of this together and answers the practical question:
 
 ## Exercises
 
-Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — LoRA forward pass + zero-init
+### Exercise 1 (easy): LoRA forward pass + zero-init
 
-Implement the LoRA forward pass and verify that with proper zero-initialization of $B$, the LoRA contribution is exactly zero at step 0 — the model behaves identically to the base model.
+Implement the LoRA forward pass and verify that with proper zero-initialization of $B$, the LoRA contribution is exactly zero at step 0, the model behaves identically to the base model.
 
 <details>
 <summary>Hint</summary>
@@ -370,10 +370,10 @@ def lora_forward(x, W_base, A, B, alpha=16, r=8):
     """
     LoRA forward pass.
 
-    x:      (batch, d_in) — input
-    W_base: (d_in, d_out) — FROZEN base weight
-    A:      (r, d_in) — TRAINABLE down-projection
-    B:      (d_out, r) — TRAINABLE up-projection
+    x:      (batch, d_in), input
+    W_base: (d_in, d_out), FROZEN base weight
+    A:      (r, d_in), TRAINABLE down-projection
+    B:      (d_out, r), TRAINABLE up-projection
     alpha:  scaling factor
     r:      rank
     """
@@ -408,7 +408,7 @@ x = np.random.normal(0, 1, (batch, d_in))
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — Parameter count across configs
+### Exercise 2 (medium): Parameter count across configs
 
 Compute trainable parameter counts for LoRA across multiple model sizes (7B, 13B, 70B), ranks (4, 8, 16, 32, 64), and target modules (Q+V / Q,K,V,O / all linear). Print a table and observe how the ratio (trainable / base) stays consistently small.
 
@@ -473,7 +473,7 @@ def lora_params(d_model, n_layers, rank, targets_per_layer):
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — LoRA merge equivalence
+### Exercise 3 (medium): LoRA merge equivalence
 
 Verify that merging LoRA into the base weights produces *exactly* the same output as keeping them separate in adapter-mode. This is what enables zero-overhead inference.
 
@@ -535,7 +535,7 @@ x = np.random.normal(0, 1, (8, d_in))
   packages={["numpy"]}
 />
 
-### Exercise 4 (hard) — QLoRA memory budget for 70B
+### Exercise 4 (hard): QLoRA memory budget for 70B
 
 Compute the full memory budget for QLoRA fine-tuning of a 70B-parameter model. Break down the components (NF4 base, BF16 LoRA, gradients, optimizer state, activations) and identify which GPUs the budget fits on.
 
@@ -601,18 +601,18 @@ GPU_OPTIONS = [
 
 ### Use PEFT when
 
-The default answer for most teams is *use PEFT*, and the conditions that push you toward it are the conditions most teams find themselves in. **Compute budget is limited.** Full fine-tuning of a $70$B model needs at least $10$ A100s; LoRA needs one; QLoRA needs one prosumer GPU. The cost difference is often the entire decision. **You need multiple fine-tuned versions of the same base model.** LoRA adapters for a $70$B model are typically under $500$ MB; storing dozens of them is operationally trivial and lets one base model serve many specializations. **The fine-tuning task is a small departure from pre-training.** Instruction following, style adaptation, refusal-behavior tuning, and most preference optimization fall in this category — and these are the majority of production fine-tuning workloads. **You want fast iteration.** PEFT runs converge in hours where full FT takes days, which matters when you are sweeping hyperparameters or trying different data mixes.
+The default answer for most teams is *use PEFT*, and the conditions that push you toward it are the conditions most teams find themselves in. **Compute budget is limited.** Full fine-tuning of a $70$B model needs at least $10$ A100s; LoRA needs one; QLoRA needs one prosumer GPU. The cost difference is often the entire decision. **You need multiple fine-tuned versions of the same base model.** LoRA adapters for a $70$B model are typically under $500$ MB; storing dozens of them is operationally trivial and lets one base model serve many specializations. **The fine-tuning task is a small departure from pre-training.** Instruction following, style adaptation, refusal-behavior tuning, and most preference optimization fall in this category, and these are the majority of production fine-tuning workloads. **You want fast iteration.** PEFT runs converge in hours where full FT takes days, which matters when you are sweeping hyperparameters or trying different data mixes.
 
 ### Use full FT when
 
-The cases where full fine-tuning earns its cost are narrower but real. **The task requires deep capability shifts** — adding a new language, a new modality, or substantial new knowledge that the base model genuinely does not have. Low-rank updates *can* fail here because the change being learned does not actually fit in a low-rank subspace. **You are producing a foundation model** that will itself be the starting point for many downstream tasks. Frontier labs full-fine-tune their SFT base for this reason: the SFT model becomes the reference for every later RLHF or DPO run, and the small quality differences from full FT compound across the post-training stack. **You have the compute and LoRA's expressivity is genuinely limiting** for your task. This is the rarest case; most teams who *think* they need full FT actually have not exhausted LoRA's capacity yet.
+The cases where full fine-tuning earns its cost are narrower but real. **The task requires deep capability shifts**: adding a new language, a new modality, or substantial new knowledge that the base model genuinely does not have. Low-rank updates *can* fail here because the change being learned does not actually fit in a low-rank subspace. **You are producing a foundation model** that will itself be the starting point for many downstream tasks. Frontier labs full-fine-tune their SFT base for this reason: the SFT model becomes the reference for every later RLHF or DPO run, and the small quality differences from full FT compound across the post-training stack. **You have the compute and LoRA's expressivity is genuinely limiting** for your task. This is the rarest case; most teams who *think* they need full FT actually have not exhausted LoRA's capacity yet.
 
 ### Hybrid recipes
 
-In practice, production stacks mix the two. The most common pattern at well-resourced shops is **full FT for SFT**, run once at lab scale — expensive but tractable, and the resulting SFT model becomes the reference and the foundation for everything downstream. Then **LoRA (or QLoRA) for downstream task adaptation** — every product surface or vertical specialization gets its own small adapter on top of the shared SFT base. Storage costs scale with the number of adapters, not the number of models, and the base SFT investment is amortized across all of them.
+In practice, production stacks mix the two. The most common pattern at well-resourced shops is **full FT for SFT**, run once at lab scale, expensive but tractable, and the resulting SFT model becomes the reference and the foundation for everything downstream. Then **LoRA (or QLoRA) for downstream task adaptation**, every product surface or vertical specialization gets its own small adapter on top of the shared SFT base. Storage costs scale with the number of adapters, not the number of models, and the base SFT investment is amortized across all of them.
 
 For smaller teams, the analogous pattern is **QLoRA for SFT** and **QLoRA for DPO**, both runs sized to a single $48$ GB or $80$ GB GPU. The resulting adapters can be merged into the base at the end of training if a deployment target wants a single model file; otherwise they live as adapters on top of a shared base. This is how most of the high-quality open-source chat models from late $2023$ and through $2024$ were trained.
 
 Parameter-efficient fine-tuning is what makes the methods of Chapter 13 and 14 practical at the scale of modern models. The recipe is short: freeze the base, train only $0.1\%$–$1\%$ of additional parameters as low-rank adapters, and combine with $4$-bit NF4 quantization (QLoRA) when memory is tight. That is what most production teams do, and it is the reason open-source post-training matured as fast as it did. LoRA is the dominant technique; the broader PEFT family (adapters, prefix tuning, (IA)³) is worth knowing but rarely necessary; modern variants (DoRA, AdaLoRA, MoLoRA) refine the recipe at the margin.
 
-Chapter 16 — the final chapter of Phase 11 — covers **distillation**: how to compress a fully trained model into a smaller one for deployment. Where Chapters 13–15 covered how to *train* aligned models, Chapter 16 covers how to *deploy* them efficiently when even an inference-optimized $70$B is too large. After Chapter 16, Phase 11 closes and Phase 12 (inference and serving) begins.
+Chapter 16, the final chapter of Phase 11, covers **distillation**: how to compress a fully trained model into a smaller one for deployment. Where Chapters 13–15 covered how to *train* aligned models, Chapter 16 covers how to *deploy* them efficiently when even an inference-optimized $70$B is too large. After Chapter 16, Phase 11 closes and Phase 12 (inference and serving) begins.

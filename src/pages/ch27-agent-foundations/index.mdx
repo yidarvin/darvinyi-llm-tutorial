@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch27-agent-foundations
-description: Agent foundations — the chapter that turns a chat model into an actor. From the operational definition of an agent (LLM controller + tools + loop), through the canonical agentic loop (observe → think → act → observe), ReAct as the foundational pattern (Yao 2022), the 2023 agent boom (AutoGPT, BabyAGI), memory and state, common patterns and anti-patterns, and the 2025 agentic stack (Anthropic MCP, LangGraph, OpenAI Assistants). Opens Phase 15 — the curriculum's final arc — agents from scratch, multi-agent orchestration, and agent evaluation frameworks closing the curriculum.
+description: Agent foundations, the chapter that turns a chat model into an actor. From the operational definition of an agent (LLM controller + tools + loop), through the canonical agentic loop (observe → think → act → observe), ReAct as the foundational pattern (Yao 2022), the 2023 agent boom (AutoGPT, BabyAGI), memory and state, common patterns and anti-patterns, and the 2025 agentic stack (Anthropic MCP, LangGraph, OpenAI Assistants). Opens Phase 15, the curriculum's final arc, agents from scratch, multi-agent orchestration, and agent evaluation frameworks closing the curriculum.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { AgenticLoopVisualizer, AgentPatternCatalog } from '@components/widgets';
 
-Phase 14 closed with three disciplines complete: safety (what we want), interpretability (what's there), evaluation (how we measure). **Phase 15 opens here** — and Phase 15 is about composition. Capable, disciplined models assembled into systems that observe, think, act, and iterate. **This chapter is the foundational one**: what an agent is, what the loop looks like, what worked and what didn't in the 2023 boom, and where the field stands in 2025.
+Phase 14 closed with three disciplines complete: safety (what we want), interpretability (what's there), evaluation (how we measure). **Phase 15 opens here**, and Phase 15 is about composition. Capable, disciplined models assembled into systems that observe, think, act, and iterate. **This chapter is the foundational one**: what an agent is, what the loop looks like, what worked and what didn't in the 2023 boom, and where the field stands in 2025.
 
-An agent is **an LLM acting as a controller in a loop with an environment.** That is the operational definition this chapter builds on. The LLM observes; thinks; acts (by invoking a tool or producing output); observes again; repeats until done. **ReAct** (Yao $2022$) is the canonical pattern — interleave reasoning (chain-of-thought from Ch 20) with actions (tool calls from Ch 21). **AutoGPT** was the $2023$ viral moment that proved both the promise and the limits. The **$2025$ reality** is bounded autonomy with human oversight: production agents like Claude Code, Cursor, Devin, GitHub Copilot Workspace.
+An agent is **an LLM acting as a controller in a loop with an environment.** That is the operational definition this chapter builds on. The LLM observes; thinks; acts (by invoking a tool or producing output); observes again; repeats until done. **ReAct** (Yao $2022$) is the canonical pattern, interleave reasoning (chain-of-thought from Ch 20) with actions (tool calls from Ch 21). **AutoGPT** was the $2023$ viral moment that proved both the promise and the limits. The **$2025$ reality** is bounded autonomy with human oversight: production agents like Claude Code, Cursor, Devin, GitHub Copilot Workspace.
 
-The chapter is engineering with honest limits. **Agents work well for narrow, well-defined tasks** — GAIA scores at $60$ – $75\%$ for frontier agents; SWE-bench Verified at ~$50\%$; meaningful production deployments. **Open-ended autonomous agents remain unsolved** — the $2023$ framing has given way to $2025$'s bounded-autonomy framing. **By the end of this chapter, you'll have the conceptual toolkit and the historical context.** Then Ch 28 builds agents from scratch; Ch 29 composes multiple agents; Ch 30 evaluates them — **and closes the curriculum.** **Four chapters from the end.**
+The chapter is engineering with honest limits. **Agents work well for narrow, well-defined tasks**, GAIA scores at $60$ – $75\%$ for frontier agents; SWE-bench Verified at ~$50\%$; meaningful production deployments. **Open-ended autonomous agents remain unsolved**, the $2023$ framing has given way to $2025$'s bounded-autonomy framing. **By the end of this chapter, you'll have the conceptual toolkit and the historical context.** Then Ch 28 builds agents from scratch; Ch 29 composes multiple agents; Ch 30 evaluates them, **and closes the curriculum.** **Four chapters from the end.**
 
 ## What is an agent?
 
@@ -24,7 +24,7 @@ The chapter's central frame is one short equation, and the rest is unpacking it.
 $$\text{agent} \;=\; \text{LLM controller} \;+\; \text{tools} \;+\; \text{loop}$$
 </Equation>
 
-An **agent** is **an LLM acting as a controller in a loop with an environment**. The LLM **observes** the current state (initial prompt plus any prior observations); **thinks** about what to do next; **acts** by invoking a tool or producing output; **observes** the result of that action; and **repeats** until done. Five steps, one feedback loop, one LLM in the controller seat. Every subsequent agentic concept in this chapter — patterns, anti-patterns, frameworks — is some elaboration of those three components.
+An **agent** is **an LLM acting as a controller in a loop with an environment**. The LLM **observes** the current state (initial prompt plus any prior observations); **thinks** about what to do next; **acts** by invoking a tool or producing output; **observes** the result of that action; and **repeats** until done. Five steps, one feedback loop, one LLM in the controller seat. Every subsequent agentic concept in this chapter, patterns, anti-patterns, frameworks, is some elaboration of those three components.
 
 ### Distinctions that matter
 
@@ -34,14 +34,14 @@ The word *agent* gets overloaded in industry conversation. The distinctions wort
 |--------|-----------------|---------|
 | **Chat model** | One prompt → one response | *"Capital of France?"* → *"Paris."* |
 | **Tool-using LLM** | One prompt → tool calls within the response | *"Weather in Tokyo?"* → calls weather tool |
-| **Agent** | Iteration and decision-making across multiple turns | *"Book me a flight to Tokyo for next Tuesday under $1{,}000$"* — searches, compares, drafts, confirms |
+| **Agent** | Iteration and decision-making across multiple turns | *"Book me a flight to Tokyo for next Tuesday under $1{,}000$"*, searches, compares, drafts, confirms |
 
 **The defining feature is iteration and decision-making.** An agent decides what to do next; a chat model just responds; a tool-using chat model is still single-turn. The distinguishing capability is the loop wrapped around the call, not the call itself.
 
-The empirical scale in early $2025$ is worth keeping in mind. **GAIA** — frontier agents $60$ – $75\%$ on multi-step real-world tasks (humans about $92\%$). **SWE-bench Verified** — frontier agents around $50\%$ on real GitHub issues. **Production deployments** — Anthropic Claude Code, GitHub Copilot Workspace, Cursor, Devin, Aider, OpenAI's o-series with tool use. **Open-source ecosystem** — LangChain at roughly $100{,}000$ GitHub stars; AutoGPT at roughly $170{,}000$.
+The empirical scale in early $2025$ is worth keeping in mind. **GAIA**, frontier agents $60$ – $75\%$ on multi-step real-world tasks (humans about $92\%$). **SWE-bench Verified**, frontier agents around $50\%$ on real GitHub issues. **Production deployments**, Anthropic Claude Code, GitHub Copilot Workspace, Cursor, Devin, Aider, OpenAI's o-series with tool use. **Open-source ecosystem**, LangChain at roughly $100{,}000$ GitHub stars; AutoGPT at roughly $170{,}000$.
 
 <Callout type="aside">
-Agents are not **better chat models**. They are **a different mode of operation** — one where the LLM gets to keep going, keep deciding, keep iterating. **The capability is the loop, not the model.** A weaker model in a well-designed loop can outperform a stronger model used as a one-shot. Engineers often over-index on model selection and under-index on loop design; this chapter wants to flip that intuition.
+Agents are not **better chat models**. They are **a different mode of operation**, one where the LLM gets to keep going, keep deciding, keep iterating. **The capability is the loop, not the model.** A weaker model in a well-designed loop can outperform a stronger model used as a one-shot. Engineers often over-index on model selection and under-index on loop design; this chapter wants to flip that intuition.
 </Callout>
 
 The next section unpacks the loop itself.
@@ -75,23 +75,23 @@ The shape of the agentic loop is the same across every framework, every paper, e
 
 ### Components
 
-Five components carry the loop, and the engineering complexity of agents lives in how each is implemented. **Initial state** — the user's request plus any system context. **Controller call** — the LLM reasons about the current state and decides on an action. **Action execution** — a tool is called, code is run, or a final answer is produced. **Observation** — the result of the action becomes the next iteration's input. **Termination** — the agent decides it is done, or hits a limit, or fails.
+Five components carry the loop, and the engineering complexity of agents lives in how each is implemented. **Initial state**: the user's request plus any system context. **Controller call**: the LLM reasons about the current state and decides on an action. **Action execution**: a tool is called, code is run, or a final answer is produced. **Observation**, the result of the action becomes the next iteration's input. **Termination**, the agent decides it is done, or hits a limit, or fails.
 
 ### Termination
 
-Termination is where most agent failure modes live. The clean termination conditions are easy to enumerate. **Success** — the agent produces a final answer. **Max iterations** — a hard cap prevents runaway loops. **Budget exhausted** — a token or cost limit is reached. **Error** — an unrecoverable tool failure that the agent cannot work around. **Human interrupt** — the user cancels.
+Termination is where most agent failure modes live. The clean termination conditions are easy to enumerate. **Success**, the agent produces a final answer. **Max iterations**: a hard cap prevents runaway loops. **Budget exhausted**: a token or cost limit is reached. **Error**, an unrecoverable tool failure that the agent cannot work around. **Human interrupt**: the user cancels.
 
-Why termination is hard, in three points. **Premature termination** — the agent gives up before completing the task, declaring victory at the first plausible answer. **Late termination** — the agent loops forever, refining unnecessarily, polishing what was already done. **Hallucinated success** — the agent claims to be done when it is not, fabricating progress that does not match the observable state of the environment.
+Why termination is hard, in three points. **Premature termination**: the agent gives up before completing the task, declaring victory at the first plausible answer. **Late termination**: the agent loops forever, refining unnecessarily, polishing what was already done. **Hallucinated success**: the agent claims to be done when it is not, fabricating progress that does not match the observable state of the environment.
 
-The deceptively simple structure of the loop hides most of the engineering complexity in agents. **The loop itself is a dozen lines; making it work reliably is months of edge-case handling.** Every production agent team learns this the hard way. The naive implementation runs end-to-end on the first attempt and looks correct; the production-ready version comes after months of triaging edge cases — flaky tools, malformed tool outputs, ambiguous user requests, runaway iteration counts, context windows filling on long sessions, cost spikes when an obvious off-ramp is missed. None of those are interesting individually; together they are most of what *"agent engineering"* actually means in $2025$.
+The deceptively simple structure of the loop hides most of the engineering complexity in agents. **The loop itself is a dozen lines; making it work reliably is months of edge-case handling.** Every production agent team learns this the hard way. The naive implementation runs end-to-end on the first attempt and looks correct; the production-ready version comes after months of triaging edge cases, flaky tools, malformed tool outputs, ambiguous user requests, runaway iteration counts, context windows filling on long sessions, cost spikes when an obvious off-ramp is missed. None of those are interesting individually; together they are most of what *"agent engineering"* actually means in $2025$.
 
 <Callout type="note">
-The agentic loop is **the LLM analog of feedback control** — sense → decide → actuate → sense. Engineers from control-systems backgrounds will recognize the pattern; the failure modes (oscillation, divergence, instability) translate directly. **Bounded iteration, output-stability detection, and explicit termination criteria are the LLM agent's equivalents of stability margins.** Treat the loop as a control system and most production-engineering decisions follow.
+The agentic loop is **the LLM analog of feedback control**, sense → decide → actuate → sense. Engineers from control-systems backgrounds will recognize the pattern; the failure modes (oscillation, divergence, instability) translate directly. **Bounded iteration, output-stability detection, and explicit termination criteria are the LLM agent's equivalents of stability margins.** Treat the loop as a control system and most production-engineering decisions follow.
 </Callout>
 
-The next section turns to ReAct — the most influential concrete implementation of the loop.
+The next section turns to ReAct, the most influential concrete implementation of the loop.
 
-## ReAct — the foundational pattern
+## ReAct: the foundational pattern
 
 ### Interleaving reasoning and acting
 
@@ -112,13 +112,13 @@ Action: final_answer("Today in Tokyo: 18°C, partly cloudy.")
 
 ### Why it works
 
-Four properties make ReAct the default. **Reasoning grounds actions** — the agent thinks about *why* it is calling a tool before calling it, making the call less arbitrary. **Actions ground reasoning** — observations correct any mistakes in the model's thinking, so reasoning errors do not compound across turns. **Composability** — multi-step tasks decompose naturally into thought-action-observation triples, with no extra structure required. **Inspectability** — the trace is human-readable; failures are diagnosable from the log.
+Four properties make ReAct the default. **Reasoning grounds actions**: the agent thinks about *why* it is calling a tool before calling it, making the call less arbitrary. **Actions ground reasoning**: observations correct any mistakes in the model's thinking, so reasoning errors do not compound across turns. **Composability**, multi-step tasks decompose naturally into thought-action-observation triples, with no extra structure required. **Inspectability**, the trace is human-readable; failures are diagnosable from the log.
 
-<WidgetFrame title="Agentic loop visualizer" caption="Four ReAct agent scenarios — simple multi-step, computation with verification, research chain, and graceful failure. Step controls (prev/next/play/restart) advance through each agent's turns one phase at a time (think → act → observe). Accumulated context stays visible; the current step is highlighted. A mini loop diagram shows the active phase. Demonstrates the chapter's central operational claim: the agentic loop is iteration — multiple turns of thought-action-observation accumulating context. The capability is the loop, not any single LLM call.">
+<WidgetFrame title="Agentic loop visualizer" caption="Four ReAct agent scenarios, simple multi-step, computation with verification, research chain, and graceful failure. Step controls (prev/next/play/restart) advance through each agent's turns one phase at a time (think → act → observe). Accumulated context stays visible; the current step is highlighted. A mini loop diagram shows the active phase. Demonstrates the chapter's central operational claim: the agentic loop is iteration, multiple turns of thought-action-observation accumulating context. The capability is the loop, not any single LLM call.">
   <AgenticLoopVisualizer client:visible />
 </WidgetFrame>
 
-A minimal ReAct agent fits in fifty lines of Python — mock LLM, mock tools, regex parsing, full loop with termination. The point is to see that the loop itself is short; the LLM and parsing handle the complexity.
+A minimal ReAct agent fits in fifty lines of Python, mock LLM, mock tools, regex parsing, full loop with termination. The point is to see that the loop itself is short; the LLM and parsing handle the complexity.
 
 <RunnableCode client:visible>
 ```python
@@ -194,57 +194,57 @@ print(f"\n=== Final: {result}")
 # - The loop itself is short; the LLM and parsing handle the complexity
 # - Real ReAct uses JSON / function-calling instead of regex parsing
 # - Max iterations prevents runaway loops
-# - Every step is inspectable — agent failures are diagnosable
+# - Every step is inspectable: agent failures are diagnosable
 ```
 </RunnableCode>
 
 ### Variations
 
-ReAct is the default but not the only structure. **Plan-and-execute** produces a full plan first and then executes the steps — less iterative, more structured, useful when the plan space is bounded. **Reflexion** (Shinn $2023$) adds a self-critique step: after each failure, the agent writes a verbal reflection that goes into context for the next attempt. **Tree-of-Thoughts** (Yao $2023$) branches the thought process, exploring multiple reasoning paths before committing to an action.
+ReAct is the default but not the only structure. **Plan-and-execute** produces a full plan first and then executes the steps, less iterative, more structured, useful when the plan space is bounded. **Reflexion** (Shinn $2023$) adds a self-critique step: after each failure, the agent writes a verbal reflection that goes into context for the next attempt. **Tree-of-Thoughts** (Yao $2023$) branches the thought process, exploring multiple reasoning paths before committing to an action.
 
-Why ReAct stays the default in production. **Simple to implement.** Works with any LLM that supports chain-of-thought and tool calls. **Human-readable output**, which makes failure modes visible. **No exotic infrastructure required** — most production agents are ReAct with engineering polish on top.
+Why ReAct stays the default in production. **Simple to implement.** Works with any LLM that supports chain-of-thought and tool calls. **Human-readable output**, which makes failure modes visible. **No exotic infrastructure required**: most production agents are ReAct with engineering polish on top.
 
-The next section covers the $2023$ boom that took ReAct to its viral peak — and revealed its limits.
+The next section covers the $2023$ boom that took ReAct to its viral peak, and revealed its limits.
 
-## From ReAct to AutoGPT — the 2023 boom
+## From ReAct to AutoGPT: the 2023 boom
 
 ### The viral moment
 
-In March-April $2023$, AutoGPT was released as an open-source project. It quickly became the most-starred GitHub repo of the year — currently around $170{,}000$ stars. **The pitch was direct**: tell an LLM your goal, and it autonomously breaks the goal into sub-tasks and executes them. The architecture was a five-step loop. The user specifies a goal. The LLM generates an initial task list. The LLM picks the next task and executes it with tools. The LLM updates the task list based on the result. The loop repeats until the LLM decides the goal is met.
+In March-April $2023$, AutoGPT was released as an open-source project. It quickly became the most-starred GitHub repo of the year, currently around $170{,}000$ stars. **The pitch was direct**: tell an LLM your goal, and it autonomously breaks the goal into sub-tasks and executes them. The architecture was a five-step loop. The user specifies a goal. The LLM generates an initial task list. The LLM picks the next task and executes it with tools. The LLM updates the task list based on the result. The loop repeats until the LLM decides the goal is met.
 
 ### What worked, what didn't
 
-Four things worked and stayed. **Task decomposition** — the planner-executor pattern proved durable. **Tool integration** — file I/O, web browsing, code execution were stitched together cleanly. **The vision** — autonomy as a useful framing for many real-world tasks resonated. **Open-source momentum** — the project sparked the broader agent ecosystem (LangChain, LangGraph, BabyAGI, CrewAI).
+Four things worked and stayed. **Task decomposition**: the planner-executor pattern proved durable. **Tool integration**: file I/O, web browsing, code execution were stitched together cleanly. **The vision**: autonomy as a useful framing for many real-world tasks resonated. **Open-source momentum**, the project sparked the broader agent ecosystem (LangChain, LangGraph, BabyAGI, CrewAI).
 
-Six things did not work and had to be re-engineered. **Unbounded loops** — agents refined endlessly without finishing. **Hallucinated successes** — agents claimed *"done"* without actually completing the task. **Context bloat** — long task histories overflowed the context window. **Cost** — running agents until completion was expensive on $2023$ models. **Error recovery** — agents struggled to recover from tool failures, often aborting on the first non-trivial error. **No grounding** — agents generated plans disconnected from real-world constraints.
+Six things did not work and had to be re-engineered. **Unbounded loops**: agents refined endlessly without finishing. **Hallucinated successes**: agents claimed *"done"* without actually completing the task. **Context bloat**: long task histories overflowed the context window. **Cost**, running agents until completion was expensive on $2023$ models. **Error recovery**: agents struggled to recover from tool failures, often aborting on the first non-trivial error. **No grounding**: agents generated plans disconnected from real-world constraints.
 
 ### The lessons that survived
 
-Five engineering lessons came out of the boom and shape every modern agent. **Planner-executor decomposition** — separating planning from execution makes both more tractable. **Memory stores** — agents need external memory to handle long horizons. **Structured tool calls** — JSON schemas instead of free-text actions. **Bounded iteration** — explicit max-step limits prevent runaway loops. **Human-in-the-loop checkpoints** — letting humans approve key decisions improves reliability dramatically.
+Five engineering lessons came out of the boom and shape every modern agent. **Planner-executor decomposition**, separating planning from execution makes both more tractable. **Memory stores**: agents need external memory to handle long horizons. **Structured tool calls**, JSON schemas instead of free-text actions. **Bounded iteration**: explicit max-step limits prevent runaway loops. **Human-in-the-loop checkpoints**, letting humans approve key decisions improves reliability dramatically.
 
-Where the field went from there is the bridge to the next section. **From end-to-end autonomous agents back to bounded agents with human oversight.** The $2025$ production-grade agent looks more like Claude Code (developer-supervised, narrow scope, observable trace) than AutoGPT (fully autonomous, broad scope, opaque internals). The framing shift is engineering maturity, not a retreat — every lesson AutoGPT taught about reliability shows up in the architecture of the production agents that succeeded it.
+Where the field went from there is the bridge to the next section. **From end-to-end autonomous agents back to bounded agents with human oversight.** The $2025$ production-grade agent looks more like Claude Code (developer-supervised, narrow scope, observable trace) than AutoGPT (fully autonomous, broad scope, opaque internals). The framing shift is engineering maturity, not a retreat, every lesson AutoGPT taught about reliability shows up in the architecture of the production agents that succeeded it.
 
 <Callout type="note">
-*"AutoGPT was a failure"* is **mixed**. **AutoGPT did not reliably complete tasks** — true and important. **But it succeeded as a paradigm-shaper** — it sparked the agent ecosystem, validated planner-executor decomposition, and put autonomous agents on the industry agenda. **Failure to ship is not failure to influence.** Think of it as the Wright Brothers' first powered flight: did not go far, did not carry passengers, but proved the pattern. **The $2025$ agentic stack exists because of the $2023$ boom.**
+*"AutoGPT was a failure"* is **mixed**. **AutoGPT did not reliably complete tasks**, true and important. **But it succeeded as a paradigm-shaper**, it sparked the agent ecosystem, validated planner-executor decomposition, and put autonomous agents on the industry agenda. **Failure to ship is not failure to influence.** Think of it as the Wright Brothers' first powered flight: did not go far, did not carry passengers, but proved the pattern. **The $2025$ agentic stack exists because of the $2023$ boom.**
 </Callout>
 
-The next section covers what made long-horizon agents possible — memory.
+The next section covers what made long-horizon agents possible, memory.
 
 ## Memory and state
 
 ### Short-term vs long-term
 
-LLMs have **no persistent state across calls**. Each agentic loop call is a fresh API request. **State must be reconstructed each time** — usually by passing it back into the prompt. That single property is what makes agent memory an engineering problem rather than a model property.
+LLMs have **no persistent state across calls**. Each agentic loop call is a fresh API request. **State must be reconstructed each time**: usually by passing it back into the prompt. That single property is what makes agent memory an engineering problem rather than a model property.
 
-Short-term memory is **in-context**. The conversation history — all prior turns in the current loop — sits inside the prompt. **Pros**: simple; the LLM sees everything; reasoning has full context. **Cons**: the context window is finite; long conversations get truncated; cost scales with history length.
+Short-term memory is **in-context**. The conversation history, all prior turns in the current loop, sits inside the prompt. **Pros**: simple; the LLM sees everything; reasoning has full context. **Cons**: the context window is finite; long conversations get truncated; cost scales with history length.
 
 Long-term memory is **external**, and decomposes into four patterns. **Vector databases** (Ch 22) store past observations as embeddings; retrieval is by semantic similarity. **Summary memory** periodically summarizes older history into a shorter representation. **Structured memory** is a key-value store for facts the agent should remember verbatim. **Episodic memory** retrieves past complete task traces when a similar task recurs.
 
-When long-term memory earns its complexity. **Long-horizon tasks** — anything that will not fit in a single context window. **Persistent agents** — agents that operate across multiple user sessions. **Self-improvement** — Reflexion-style learning from past failures. **Personalization** — agents that adapt to user preferences over time.
+When long-term memory earns its complexity. **Long-horizon tasks**, anything that will not fit in a single context window. **Persistent agents**: agents that operate across multiple user sessions. **Self-improvement**, Reflexion-style learning from past failures. **Personalization**, agents that adapt to user preferences over time.
 
 ### The memory tradeoff
 
-More memory means more context, which means more cost and more potential confusion. Less memory means smaller context, which is faster and cheaper but may forget important details. **The right amount of memory is task-specific** — there is no general answer. The pattern in production is to start short-term-only, add structured memory for facts that must persist, and add retrieval-based long-term memory only when context-window limits force it.
+More memory means more context, which means more cost and more potential confusion. Less memory means smaller context, which is faster and cheaper but may forget important details. **The right amount of memory is task-specific**, there is no general answer. The pattern in production is to start short-term-only, add structured memory for facts that must persist, and add retrieval-based long-term memory only when context-window limits force it.
 
 <RunnableCode client:visible>
 ```python
@@ -317,34 +317,34 @@ memory_agent(session)
 ```
 </RunnableCode>
 
-The next section covers the patterns that real production agents follow — and the anti-patterns they avoid.
+The next section covers the patterns that real production agents follow, and the anti-patterns they avoid.
 
 ## Patterns and anti-patterns
 
 ### Common patterns
 
-Five patterns recur across modern agent systems, and the choice of pattern depends on the task. **Single-agent linear** — one agent, one task, one execution path; right for simple tasks where the path is obvious. **Single-agent iterative (ReAct)** — one agent, looping; right for multi-step tasks with unknown depth. **Hierarchical (planner + executor)** — one agent plans, another executes; right for complex multi-step workflows where planning matters. **Reflexion** (Shinn $2023$) — self-critique loops that iterate on failures; right for tasks where iteration improves performance. **Multi-agent** (preview of Ch 29) — multiple agents with specialized roles; right for tasks that genuinely decompose into expertise.
+Five patterns recur across modern agent systems, and the choice of pattern depends on the task. **Single-agent linear**, one agent, one task, one execution path; right for simple tasks where the path is obvious. **Single-agent iterative (ReAct)**, one agent, looping; right for multi-step tasks with unknown depth. **Hierarchical (planner + executor)**, one agent plans, another executes; right for complex multi-step workflows where planning matters. **Reflexion** (Shinn $2023$), self-critique loops that iterate on failures; right for tasks where iteration improves performance. **Multi-agent** (preview of Ch 29), multiple agents with specialized roles; right for tasks that genuinely decompose into expertise.
 
-<WidgetFrame title="Agent pattern catalog" caption="Five agent patterns visualized side-by-side: single-agent linear (one-shot), single-agent iterative (ReAct), hierarchical (planner-executor), Reflexion (self-critique), and multi-agent (Ch 29 preview). Each shows a small diagram, use cases, pros/cons, and a maturity badge. Demonstrates that 'agent' isn't one architecture but a family of them — and the choice matters. Bridges Ch 27 (conceptual) toward Ch 28 (engineering).">
+<WidgetFrame title="Agent pattern catalog" caption="Five agent patterns visualized side-by-side: single-agent linear (one-shot), single-agent iterative (ReAct), hierarchical (planner-executor), Reflexion (self-critique), and multi-agent (Ch 29 preview). Each shows a small diagram, use cases, pros/cons, and a maturity badge. Demonstrates that 'agent' isn't one architecture but a family of them, and the choice matters. Bridges Ch 27 (conceptual) toward Ch 28 (engineering).">
   <AgentPatternCatalog client:visible />
 </WidgetFrame>
 
 ### Anti-patterns
 
-Seven anti-patterns recur often enough to enumerate. **Unbounded loops** — no max-iteration cap; the agent loops forever. **Hallucinated tool outputs** — the agent fabricates what a tool would return instead of calling it. **Context bloat** — every observation appended; the context overflows. **Over-decomposition** — the agent generates a $50$-task plan for a simple problem. **No error handling** — a tool fails; the agent does not recover; the task aborts. **Premature termination** — the agent claims done when it is not. **Hallucinated progress** — the agent claims to have completed steps without actually doing them.
+Seven anti-patterns recur often enough to enumerate. **Unbounded loops**: no max-iteration cap; the agent loops forever. **Hallucinated tool outputs**: the agent fabricates what a tool would return instead of calling it. **Context bloat**: every observation appended; the context overflows. **Over-decomposition**, the agent generates a $50$-task plan for a simple problem. **No error handling**: a tool fails; the agent does not recover; the task aborts. **Premature termination**: the agent claims done when it is not. **Hallucinated progress**: the agent claims to have completed steps without actually doing them.
 
 The fixes are not exotic. Max iteration caps with cost budgets. Structured tool calls with JSON schemas instead of free-text actions. Rolling-window or summarized context. Verification steps before the final-answer action. Retry-with-backoff for transient tool failures. Each anti-pattern has a known mitigation; the engineering work is wiring them together.
 
 ### Defense-in-depth
 
-The framing from Chapter 24's safety chapter applies here too. **No single safeguard catches every failure mode.** Production agents stack defenses. **Layered defenses** — max iterations plus cost cap plus output validation plus human-in-the-loop checkpoints. **Observability** — every thought, action, and observation logged; alerts on unusual patterns like high iteration counts or repeated tool failures. **Bounded autonomy** — production agents act within constrained scopes rather than open-ended ones.
+The framing from Chapter 24's safety chapter applies here too. **No single safeguard catches every failure mode.** Production agents stack defenses. **Layered defenses**: max iterations plus cost cap plus output validation plus human-in-the-loop checkpoints. **Observability**, every thought, action, and observation logged; alerts on unusual patterns like high iteration counts or repeated tool failures. **Bounded autonomy**: production agents act within constrained scopes rather than open-ended ones.
 
 <RunnableCode client:visible>
 ```python
 # Error handling pattern: retry with exponential backoff for transient tool failures.
 
 def flaky_tool(input_str):
-    """Sometimes fails — to demonstrate error handling."""
+    """Sometimes fails, to demonstrate error handling."""
     import random
     if random.random() < 0.4:
         raise ConnectionError("Tool service unavailable")
@@ -393,7 +393,7 @@ print(f"\nCompleted: {sum(1 for r in results if r is not None)}/{len(tasks)}")
 </RunnableCode>
 
 <Callout type="warning">
-*"An agent is just a chat model with tools"* is **false**. **The defining feature of an agent is iteration** — making multiple decisions across multiple turns, with the ability to incorporate observations into future actions. A tool-using chat model is still single-turn; an agent is the loop wrapped around it. **The capability is the loop, not the tool.** This is the chapter's central insight, and it is the one most worth carrying into the rest of Phase 15.
+*"An agent is just a chat model with tools"* is **false**. **The defining feature of an agent is iteration**: making multiple decisions across multiple turns, with the ability to incorporate observations into future actions. A tool-using chat model is still single-turn; an agent is the loop wrapped around it. **The capability is the loop, not the tool.** This is the chapter's central insight, and it is the one most worth carrying into the rest of Phase 15.
 </Callout>
 
 The next section surveys where the field is in $2025$.
@@ -404,33 +404,33 @@ The next section surveys where the field is in $2025$.
 
 The modern agentic stack stratifies into five layers, and engineers building production agents touch most of them.
 
-**Layer 1 — Models.** Frontier LLMs with strong tool use: Claude Sonnet/Opus, GPT-$4$ family, Gemini Pro. Specialized fine-tunes appear at the edges — Claude Code, GitHub Copilot models, Cursor's tunes.
+**Layer 1, Models.** Frontier LLMs with strong tool use: Claude Sonnet/Opus, GPT-$4$ family, Gemini Pro. Specialized fine-tunes appear at the edges, Claude Code, GitHub Copilot models, Cursor's tunes.
 
-**Layer 2 — Tool protocols.** **MCP (Model Context Protocol)** is Anthropic's open standard for tool and data connections, the closest thing to a USB-C for agents. **Function calling** is OpenAI's structured-output approach; it is widely adopted across providers.
+**Layer 2, Tool protocols.** **MCP (Model Context Protocol)** is Anthropic's open standard for tool and data connections, the closest thing to a USB-C for agents. **Function calling** is OpenAI's structured-output approach; it is widely adopted across providers.
 
-**Layer 3 — Agent frameworks.** **LangGraph** offers graph-based agent orchestration with explicit state machines. **CrewAI** is a multi-agent collaboration framework. **AutoGen** (Microsoft) is a multi-agent conversation framework. Most production agents are bespoke — **frameworks handle the loop scaffolding, not the domain**.
+**Layer 3, Agent frameworks.** **LangGraph** offers graph-based agent orchestration with explicit state machines. **CrewAI** is a multi-agent collaboration framework. **AutoGen** (Microsoft) is a multi-agent conversation framework. Most production agents are bespoke, **frameworks handle the loop scaffolding, not the domain**.
 
-**Layer 4 — Hosted services.** **Anthropic Claude Code** is a coding agent with file and terminal access. **OpenAI Assistants API** is a managed agent service with built-in tools. **OpenAI o1 / o3** are reasoning-first models with implicit agentic structure. **Cursor**, **Aider**, **Continue** are coding-focused agent products. **Devin** is Cognition AI's autonomous SWE agent.
+**Layer 4, Hosted services.** **Anthropic Claude Code** is a coding agent with file and terminal access. **OpenAI Assistants API** is a managed agent service with built-in tools. **OpenAI o1 / o3** are reasoning-first models with implicit agentic structure. **Cursor**, **Aider**, **Continue** are coding-focused agent products. **Devin** is Cognition AI's autonomous SWE agent.
 
-**Layer 5 — Production patterns.** **Bounded autonomy** — agents act within constrained scopes with human oversight. **Tool-use first, agency second** — most production *"agents"* are tool-using LLMs with light iteration, not autonomous decision-makers. **Specialized beats general** — domain-specific agents (coding, customer support, data analysis) outperform general-purpose ones in deployment, because the scope constraint is what makes oversight tractable.
+**Layer 5, Production patterns.** **Bounded autonomy**: agents act within constrained scopes with human oversight. **Tool-use first, agency second**, most production *"agents"* are tool-using LLMs with light iteration, not autonomous decision-makers. **Specialized beats general**, domain-specific agents (coding, customer support, data analysis) outperform general-purpose ones in deployment, because the scope constraint is what makes oversight tractable.
 
 ### Where the field is
 
-Production agents work well in **constrained, well-defined domains** — coding assistance, customer service, data lookup. They struggle with **open-ended, long-horizon tasks** — writing a startup business plan from scratch, conducting independent research, planning a multi-week project without supervision. Anthropic, OpenAI, and Google are all investing heavily; frontier capability is moving fast, and the discriminating benchmarks have shifted from MMLU and HumanEval to SWE-bench, GAIA, and OSWorld. **The autonomous-AGI framing of $2023$ has given way to the bounded-agent-with-oversight framing of $2025$.** That shift is engineering maturity, not a capability ceiling — and it is what makes the production stack work.
+Production agents work well in **constrained, well-defined domains**, coding assistance, customer service, data lookup. They struggle with **open-ended, long-horizon tasks**, writing a startup business plan from scratch, conducting independent research, planning a multi-week project without supervision. Anthropic, OpenAI, and Google are all investing heavily; frontier capability is moving fast, and the discriminating benchmarks have shifted from MMLU and HumanEval to SWE-bench, GAIA, and OSWorld. **The autonomous-AGI framing of $2023$ has given way to the bounded-agent-with-oversight framing of $2025$.** That shift is engineering maturity, not a capability ceiling, and it is what makes the production stack work.
 
 <Callout type="aside">
-*"An agent's autonomy is the goal"* is **false in production**. **Bounded autonomy is the production goal** — agents should be as autonomous as the task allows, but no more. **Human-in-the-loop checkpoints, explicit scope limits, oversight mechanisms** are the difference between a useful agent and a runaway system. **$2025$'s production agents emphasize bounded autonomy** because that is the configuration that ships.
+*"An agent's autonomy is the goal"* is **false in production**. **Bounded autonomy is the production goal**: agents should be as autonomous as the task allows, but no more. **Human-in-the-loop checkpoints, explicit scope limits, oversight mechanisms** are the difference between a useful agent and a runaway system. **$2025$'s production agents emphasize bounded autonomy** because that is the configuration that ships.
 </Callout>
 
 The next section closes the chapter and lays out Phase 15.
 
 ## Exercises
 
-Four exercises that lock in agent foundations. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+Four exercises that lock in agent foundations. Each is a self-contained problem with a starting template; hints are collapsed by default; try the problem first.
 
 The exercises trace the chapter's arc: build a minimal ReAct agent (Ex 1) → add Reflexion-style memory (Ex 2) → add error handling with retries (Ex 3) → design your own agent for a given task (Ex 4). After these, the reader is ready for Ch 28's engineering deep-dive.
 
-### Exercise 1 (easy) — Minimal ReAct agent
+### Exercise 1 (easy): Minimal ReAct agent
 
 Implement a minimal ReAct agent that loops over a task, calling tools and parsing thought/action output until it produces a final answer.
 
@@ -444,7 +444,7 @@ The ReAct loop structure:
 4. Otherwise: execute the action via the tools dict; append observation to history
 5. Cap iterations to prevent runaway loops
 
-Real implementations use JSON / function-calling instead of regex parsing — but the loop structure is identical.
+Real implementations use JSON / function-calling instead of regex parsing, but the loop structure is identical.
 
 </details>
 
@@ -452,7 +452,7 @@ Real implementations use JSON / function-calling instead of regex parsing — bu
   client:visible
   defaultCode={`import re
 
-# Mock tools — real agents use actual APIs
+# Mock tools: real agents use actual APIs
 def tool_weather(city):
     return f"18°C, partly cloudy in {city}"
 
@@ -538,7 +538,7 @@ def react_agent(task, tools=TOOLS, max_iterations=8):
   packages={[]}
 />
 
-### Exercise 2 (medium) — Agent with Reflexion-style memory
+### Exercise 2 (medium): Agent with Reflexion-style memory
 
 Add a Reflexion-style memory that captures verbal critiques after failures and feeds them into future attempts.
 
@@ -632,7 +632,7 @@ def reflexion_run(task, max_attempts=4):
   packages={[]}
 />
 
-### Exercise 3 (medium) — Error handling with retry
+### Exercise 3 (medium): Error handling with retry
 
 Add robust error handling to an agent: catch tool failures, retry with exponential backoff, and gracefully fall back when retries are exhausted.
 
@@ -738,7 +738,7 @@ print(f"\\n=== Summary: {successes}/{len(plan)} steps succeeded ===")
   packages={[]}
 />
 
-### Exercise 4 (hard) — Design-your-own-agent
+### Exercise 4 (hard): Design-your-own-agent
 
 For each of three different tasks, pick the most appropriate agent pattern and justify your choice. Implement a sketch of one of them.
 
@@ -752,7 +752,7 @@ The mapping from task → pattern:
 - **Tasks with verifiable feedback** → Reflexion
 - **Tasks that genuinely decompose into specialized roles** → Multi-agent
 
-Each task below has a "right" pattern (not unique — multiple can work). Read the task carefully; what does it require?
+Each task below has a "right" pattern (not unique, multiple can work). Read the task carefully; what does it require?
 
 </details>
 
@@ -841,11 +841,11 @@ for task in TASKS:
   packages={[]}
 />
 
-## Phase 15 opens — chapter map
+## Phase 15 opens: chapter map
 
 ### The composition arc
 
-Phase 15 is the curriculum's final arc, and its name is **composition** — assembling capable, disciplined models into systems that observe, think, act, and iterate. The four chapters trace a deliberate path from concept to system.
+Phase 15 is the curriculum's final arc, and its name is **composition**, assembling capable, disciplined models into systems that observe, think, act, and iterate. The four chapters trace a deliberate path from concept to system.
 
 | Chapter | Topic | What it covers |
 |---------|-------|----------------|
@@ -854,12 +854,12 @@ Phase 15 is the curriculum's final arc, and its name is **composition** — asse
 | **Ch 29** | Multi-agent | Orchestration, agent-to-agent communication, role specialization |
 | **Ch 30** | Agent eval and frameworks | How to evaluate agents (connecting back to Ch 26); production frameworks; the curriculum's close |
 
-The three phases of this curriculum's later arc fit together cleanly. **Phase 13 (Capabilities)** — what individual models can do. **Phase 14 (Disciplines)** — making capable development trustworthy. **Phase 15 (Composition)** — assembling models into systems.
+The three phases of this curriculum's later arc fit together cleanly. **Phase 13 (Capabilities)**, what individual models can do. **Phase 14 (Disciplines)**, making capable development trustworthy. **Phase 15 (Composition)**, assembling models into systems.
 
 ### Four chapters remain
 
-Why agents close the curriculum: they are the **highest level of composition** the curriculum addresses — combining capability (Phase 13), discipline (Phase 14), and orchestration into systems that act in the world rather than just answer questions about it. **After Ch 30, the reader has the full stack** from numpy primitives (Ch 1) to production agent systems. The trajectory of this chapter into Ch 28 is also deliberate. **Ch 27 is conceptual** — what an agent is and how the loop works. **Ch 28 is engineering** — actually building agents end-to-end with real tools.
+Why agents close the curriculum: they are the **highest level of composition** the curriculum addresses, combining capability (Phase 13), discipline (Phase 14), and orchestration into systems that act in the world rather than just answer questions about it. **After Ch 30, the reader has the full stack** from numpy primitives (Ch 1) to production agent systems. The trajectory of this chapter into Ch 28 is also deliberate. **Ch 27 is conceptual**, what an agent is and how the loop works. **Ch 28 is engineering**, actually building agents end-to-end with real tools.
 
-An agent is an LLM acting as a controller in a loop with an environment. **That is the operational definition.** The loop observes, thinks, acts, and observes again, until termination. **ReAct** interleaves reasoning with action and produces inspectable traces. **AutoGPT** proved the pattern's promise and revealed its limits; the $2025$ agentic stack — Anthropic Claude Code, OpenAI Assistants, LangGraph, Cursor, Devin — runs on the lessons that survived. **Memory and state** turn single-shot loops into persistent agents. **Patterns and anti-patterns** turn experiments into production. **Bounded autonomy with human oversight** turns agents from research demos into reliable products. **The capability is the loop, not the model.**
+An agent is an LLM acting as a controller in a loop with an environment. **That is the operational definition.** The loop observes, thinks, acts, and observes again, until termination. **ReAct** interleaves reasoning with action and produces inspectable traces. **AutoGPT** proved the pattern's promise and revealed its limits; the $2025$ agentic stack, Anthropic Claude Code, OpenAI Assistants, LangGraph, Cursor, Devin, runs on the lessons that survived. **Memory and state** turn single-shot loops into persistent agents. **Patterns and anti-patterns** turn experiments into production. **Bounded autonomy with human oversight** turns agents from research demos into reliable products. **The capability is the loop, not the model.**
 
-**Phase 15 has three chapters left.** Ch 28 builds agents end-to-end from real tools. Ch 29 composes multiple agents into orchestrated systems. Ch 30 evaluates agents — closing both the eval discipline from Ch 26 and the curriculum itself. **Three chapters between here and the end.**
+**Phase 15 has three chapters left.** Ch 28 builds agents end-to-end from real tools. Ch 29 composes multiple agents into orchestrated systems. Ch 30 evaluates agents, closing both the eval discipline from Ch 26 and the curriculum itself. **Three chapters between here and the end.**

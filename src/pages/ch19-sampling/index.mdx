@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch19-sampling
-description: Sampling — how a transformer's logits become emitted tokens. Greedy/argmax for deterministic outputs; temperature for global softness; top-k for fixed-size truncation; top-p (nucleus) sampling (Holtzman 2019) as the modern adaptive default; combinations with repetition penalties for chat-grade output; beam search for high-likelihood paths (rare in modern serving); constrained decoding (Outlines, JSON mode, grammar enforcement) for structured outputs. Modern recipes per use case (chat, code, creative, reasoning). The chapter that closes Phase 12 — and the inference-engineering arc.
+description: Sampling, how a transformer's logits become emitted tokens. Greedy/argmax for deterministic outputs; temperature for global softness; top-k for fixed-size truncation; top-p (nucleus) sampling (Holtzman 2019) as the modern adaptive default; combinations with repetition penalties for chat-grade output; beam search for high-likelihood paths (rare in modern serving); constrained decoding (Outlines, JSON mode, grammar enforcement) for structured outputs. Modern recipes per use case (chat, code, creative, reasoning). The chapter that closes Phase 12, and the inference-engineering arc.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { SamplingDistribution, ConstrainedDecoding } from '@components/widgets';
 
-Chapter 17 made the forward pass faster. Chapter 18 made it smaller. This chapter is about what happens *after* the forward pass: how a vector of logits — one score per vocabulary token — becomes the next emitted text token. **The choice matters enormously.** Greedy decoding produces robotic, repetitive output. Pure random sampling produces incoherent nonsense. Carefully-designed strategies (temperature + nucleus + a mild repetition penalty) produce natural, varied, useful text. The algorithms are short; the impact is huge.
+Chapter 17 made the forward pass faster. Chapter 18 made it smaller. This chapter is about what happens *after* the forward pass: how a vector of logits, one score per vocabulary token, becomes the next emitted text token. **The choice matters enormously.** Greedy decoding produces robotic, repetitive output. Pure random sampling produces incoherent nonsense. Carefully-designed strategies (temperature + nucleus + a mild repetition penalty) produce natural, varied, useful text. The algorithms are short; the impact is huge.
 
-This chapter walks through the canon: **greedy** (argmax) as the baseline; **temperature** as the global softening knob; **top-k** as fixed-size truncation; **top-p (nucleus) sampling** (Holtzman 2019) as the modern adaptive default; **repetition penalties** for loop prevention; **beam search** for the few cases where it still wins; and **constrained decoding** for production agents that need structured output. By the end you should know which sampling configuration to reach for in chat, code, creative writing, reasoning, and structured-output use cases — and why the production defaults are what they are.
+This chapter walks through the canon: **greedy** (argmax) as the baseline; **temperature** as the global softening knob; **top-k** as fixed-size truncation; **top-p (nucleus) sampling** (Holtzman 2019) as the modern adaptive default; **repetition penalties** for loop prevention; **beam search** for the few cases where it still wins; and **constrained decoding** for production agents that need structured output. By the end you should know which sampling configuration to reach for in chat, code, creative writing, reasoning, and structured-output use cases, and why the production defaults are what they are.
 
-And then Phase 12 is complete. Three chapters covered the full inference-engineering arc: cache + batching + Flash Attention + speculative + paging (Ch 17); quantization + NF4 + GPTQ + AWQ (Ch 18); and sampling (this chapter). Combined, these are the difference between a $50$-token-per-second research curiosity and a $500$-token-per-second production service. **Phase 13 opens next with capabilities** — reasoning, tools, retrieval, multimodal — the chapters that turn deployable models into useful systems.
+And then Phase 12 is complete. Three chapters covered the full inference-engineering arc: cache + batching + Flash Attention + speculative + paging (Ch 17); quantization + NF4 + GPTQ + AWQ (Ch 18); and sampling (this chapter). Combined, these are the difference between a $50$-token-per-second research curiosity and a $500$-token-per-second production service. **Phase 13 opens next with capabilities**, reasoning, tools, retrieval, multimodal, the chapters that turn deployable models into useful systems.
 
 ## From logits to text
 
@@ -22,19 +22,19 @@ Every decode step inside an LLM has the same three-step shape. **Logits** come o
 
 ### Why this is microseconds
 
-The forward pass dominates time per decode step — hundreds of milliseconds at scale, or tens of milliseconds in a well-optimized serving stack (Ch 17 §2 walked through why decode is memory-bound). **Sampling is microseconds.** Even an elaborate strategy — top-p plus a repetition penalty plus a constrained-decoding mask — runs in well under a millisecond per token. The sampler is not where the engineering effort is hardest, and it is not where the time is. **But the impact on output quality is enormous**: an order-of-magnitude difference in usefulness between greedy and a well-tuned nucleus configuration. **The leverage ratio is the highest in Phase 12** — a few lines of Python transform the model's user-facing behavior.
+The forward pass dominates time per decode step, hundreds of milliseconds at scale, or tens of milliseconds in a well-optimized serving stack (Ch 17 §2 walked through why decode is memory-bound). **Sampling is microseconds.** Even an elaborate strategy, top-p plus a repetition penalty plus a constrained-decoding mask, runs in well under a millisecond per token. The sampler is not where the engineering effort is hardest, and it is not where the time is. **But the impact on output quality is enormous**: an order-of-magnitude difference in usefulness between greedy and a well-tuned nucleus configuration. **The leverage ratio is the highest in Phase 12**, a few lines of Python transform the model's user-facing behavior.
 
 <Callout type="aside">
 Sampling is the highest leverage-to-complexity ratio in Phase 12. A few lines of code (top-p, temperature, a mild repetition penalty) transform output quality. Compare to Ch 17 (sophisticated kernel engineering across days of work) and Ch 18 (intricate quantization recipes with calibration steps). Sampling is *not* where the engineering effort is hardest, but it *is* where small changes have the biggest user-facing effect. Tune carefully and the model behaves like a different product.
 </Callout>
 
-The next section starts with the two simplest strategies — greedy decoding as the deterministic baseline, and temperature scaling as the simplest stochastic generalization.
+The next section starts with the two simplest strategies, greedy decoding as the deterministic baseline, and temperature scaling as the simplest stochastic generalization.
 
 ## Greedy and temperature
 
 ### Greedy decoding
 
-**Greedy decoding** is the simplest possible sampler: emit the token with the highest logit at each step. It is deterministic, reproducible, and the obvious thing to try first. It is also wrong for most LLM use cases, for three connected reasons. **Greedy loops** — once the most-likely token at position $t$ becomes the most-likely token at position $t+1$, the same word can repeat ("the cat sat on the the cat sat on the") because there is no randomness to break out of the attractor. **Greedy is brittle** — a single early misstep, like picking a slightly wrong noun, locks the rest of the sequence into a chain of conditioned errors that compounds. **Greedy is robotic** — human text has variation; greedy text does not, and the absence of variation reads as machine-generated even when the content is correct.
+**Greedy decoding** is the simplest possible sampler: emit the token with the highest logit at each step. It is deterministic, reproducible, and the obvious thing to try first. It is also wrong for most LLM use cases, for three connected reasons. **Greedy loops**: once the most-likely token at position $t$ becomes the most-likely token at position $t+1$, the same word can repeat ("the cat sat on the the cat sat on the") because there is no randomness to break out of the attractor. **Greedy is brittle**: a single early misstep, like picking a slightly wrong noun, locks the rest of the sequence into a chain of conditioned errors that compounds. **Greedy is robotic**: human text has variation; greedy text does not, and the absence of variation reads as machine-generated even when the content is correct.
 
 There are still cases where greedy is the right call. Short factual extraction ("what is the capital of France"), a code-completion site where the next token is genuinely the only sensible one, and any setting where reproducibility matters more than quality (testing, regression checks). **But for chat-grade generation across hundreds of tokens, greedy underperforms moderate stochastic sampling** by a wide margin, even on tasks that nominally have a single correct answer.
 
@@ -46,11 +46,11 @@ There are still cases where greedy is the right call. Short factual extraction (
 $$p_i(T) = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$$
 </Equation>
 
-When $T = 1$, this is the model's natural distribution — the same probabilities you would get by softmaxing the raw logits. When $T < 1$, the distribution sharpens: ratios between probabilities widen, the top token's mass grows, and as $T \to 0$ the sampler collapses to greedy. When $T > 1$, the distribution softens: ratios shrink, mass spreads out, and as $T \to \infty$ the sampler approaches uniform random.
+When $T = 1$, this is the model's natural distribution, the same probabilities you would get by softmaxing the raw logits. When $T < 1$, the distribution sharpens: ratios between probabilities widen, the top token's mass grows, and as $T \to 0$ the sampler collapses to greedy. When $T > 1$, the distribution softens: ratios shrink, mass spreads out, and as $T \to \infty$ the sampler approaches uniform random.
 
-Typical values are well-established in practice. **$T = 0$** (or near-zero) for factual extraction, structured tasks, and "definite" code tokens. **$T = 0.7$ to $1.0$** for chat and instruction following — the default range for almost every chat API. **$T = 1.2$ to $1.5$** for brainstorming, story writing, and other settings where diversity matters more than reliability. Above $T = 1.5$ the distribution becomes too flat to produce coherent text; the model emits random-looking tokens from the long tail and the output degrades fast.
+Typical values are well-established in practice. **$T = 0$** (or near-zero) for factual extraction, structured tasks, and "definite" code tokens. **$T = 0.7$ to $1.0$** for chat and instruction following, the default range for almost every chat API. **$T = 1.2$ to $1.5$** for brainstorming, story writing, and other settings where diversity matters more than reliability. Above $T = 1.5$ the distribution becomes too flat to produce coherent text; the model emits random-looking tokens from the long tail and the output degrades fast.
 
-The connection back to Ch 16 is worth noticing. **Temperature here is the same mathematical operation as in distillation** — divide logits by $T$ before softmax. There, high temperature revealed the teacher's dark knowledge by softening its peaked distribution so that the student could learn from the relative ordering of unlikely classes. Here, temperature adjusts the creativity dial. **Same math; different purpose** — and the reuse is genuine, not coincidental, because both settings care about the same thing (how peaked or flat the distribution is) for different reasons.
+The connection back to Ch 16 is worth noticing. **Temperature here is the same mathematical operation as in distillation**: divide logits by $T$ before softmax. There, high temperature revealed the teacher's dark knowledge by softening its peaked distribution so that the student could learn from the relative ordering of unlikely classes. Here, temperature adjusts the creativity dial. **Same math; different purpose**, and the reuse is genuine, not coincidental, because both settings care about the same thing (how peaked or flat the distribution is) for different reasons.
 
 <RunnableCode client:visible>
 ```python
@@ -96,44 +96,44 @@ for name, fn in [
 print("\nObservations:")
 print("- Greedy: always token 5 (deterministic, but boring)")
 print("- T = 0.5: mostly 5, occasional 12 (sharp, conservative)")
-print("- T = 1.0: balanced — 5 dominant, 12 and 42 appear sometimes")
+print("- T = 1.0: balanced, 5 dominant, 12 and 42 appear sometimes")
 print("- T = 2.0: random tokens from all over (too noisy)")
 ```
 </RunnableCode>
 
 <Callout type="warning">
-"Higher temperature is always more creative" is false at the extremes. **At $T \gtrsim 2$, the distribution approaches uniform** — most-likely tokens lose their advantage, and the output becomes incoherent. The creativity sweet spot is $T = 0.7$ to $1.2$. Above $1.5$, quality degrades rapidly: long stretches of random tokens dominate the output and the model stops looking like a model at all. **Creativity comes from the middle of the temperature range**, not from cranking the dial.
+"Higher temperature is always more creative" is false at the extremes. **At $T \gtrsim 2$, the distribution approaches uniform**, most-likely tokens lose their advantage, and the output becomes incoherent. The creativity sweet spot is $T = 0.7$ to $1.2$. Above $1.5$, quality degrades rapidly: long stretches of random tokens dominate the output and the model stops looking like a model at all. **Creativity comes from the middle of the temperature range**: not from cranking the dial.
 </Callout>
 
-The next section starts on the family of strategies that *truncate* the distribution rather than just reshaping it — beginning with the simplest, top-k.
+The next section starts on the family of strategies that *truncate* the distribution rather than just reshaping it, beginning with the simplest, top-k.
 
 ## Top-k sampling
 
 ### The tail-noise problem
 
-Even at $T = 1$, the tail of the distribution still contributes occasionally. A long-tail token with probability $10^{-6}$ will be sampled roughly once in a million decode steps — rare but not zero, and in a $2{,}000$-token generation across many parallel sessions the rare events add up. **Most of those tail tokens are nonsensical given the context** — they are the model's residual uncertainty leaking through, and when they leak they break coherence. The phenomenon has a name: **tail noise**, and it is the central reason raw temperature sampling underperforms truncated sampling for long-form generation.
+Even at $T = 1$, the tail of the distribution still contributes occasionally. A long-tail token with probability $10^{-6}$ will be sampled roughly once in a million decode steps, rare but not zero, and in a $2{,}000$-token generation across many parallel sessions the rare events add up. **Most of those tail tokens are nonsensical given the context**: they are the model's residual uncertainty leaking through, and when they leak they break coherence. The phenomenon has a name: **tail noise**, and it is the central reason raw temperature sampling underperforms truncated sampling for long-form generation.
 
-The fix is to throw away the tail before sampling. There are two ways to do this — pick a fixed number of tokens to keep (top-k, this section), or pick a fixed amount of probability mass to keep (top-p, next section). Top-k is the older idea, and the simpler one.
+The fix is to throw away the tail before sampling. There are two ways to do this, pick a fixed number of tokens to keep (top-k, this section), or pick a fixed amount of probability mass to keep (top-p, next section). Top-k is the older idea, and the simpler one.
 
 ### Fixed-size truncation
 
 **Top-k sampling** (Fan et al., 2018) keeps the $k$ highest-probability tokens, renormalizes, and samples from the truncated distribution. Sort logits descending, keep the first $k$ indices, set the rest to $-\infty$ (or equivalently, mask them out), softmax over what remains, and sample. The typical values are $k = 50$ (the historical default), $k = 40$ (chat configurations), and $k = 20$ (focused outputs like code completion). The cost is negligible; the implementation is a few lines.
 
-The structural limitation of top-k is that **$k$ is fixed regardless of distribution shape**, and distribution shape varies enormously across decode steps. After a punctuation token the next-token distribution is wildly uncertain — many words could plausibly start the next sentence. After "the cat sat on the" the distribution is highly peaked — "mat" or "floor" dominate, and the third-most-likely token is much less plausible than the second. **A fixed $k = 50$ wastes resolution on the peaked case** (only the top few tokens matter; the other $47$ are noise that the sampler should not be considering) **and risks under-sampling on the flat case** (genuine alternatives outside the top $50$ get excluded). The mismatch motivates top-p, which adapts to the shape automatically.
+The structural limitation of top-k is that **$k$ is fixed regardless of distribution shape**, and distribution shape varies enormously across decode steps. After a punctuation token the next-token distribution is wildly uncertain, many words could plausibly start the next sentence. After "the cat sat on the" the distribution is highly peaked, "mat" or "floor" dominate, and the third-most-likely token is much less plausible than the second. **A fixed $k = 50$ wastes resolution on the peaked case** (only the top few tokens matter; the other $47$ are noise that the sampler should not be considering) **and risks under-sampling on the flat case** (genuine alternatives outside the top $50$ get excluded). The mismatch motivates top-p, which adapts to the shape automatically.
 
 <Callout type="aside">
-Top-k is the historical predecessor of top-p. **Before nucleus sampling (Holtzman 2019), top-k was the standard truncation strategy** in the seq-to-seq and early GPT eras. It is still useful as a "safety net" — even production stacks that default to top-p often combine it with $k = 50$ to bound the truncation set in pathological cases (very flat distributions where top-p at $0.95$ might include hundreds of tokens). The two are not exclusive; the modern stack uses both, with top-p as the primary truncator and top-k as the upper bound.
+Top-k is the historical predecessor of top-p. **Before nucleus sampling (Holtzman 2019), top-k was the standard truncation strategy** in the seq-to-seq and early GPT eras. It is still useful as a "safety net", even production stacks that default to top-p often combine it with $k = 50$ to bound the truncation set in pathological cases (very flat distributions where top-p at $0.95$ might include hundreds of tokens). The two are not exclusive; the modern stack uses both, with top-p as the primary truncator and top-k as the upper bound.
 </Callout>
 
-The runnable code that demonstrates top-k lives in the next section, alongside top-p — comparing the two on the same logits is more illustrative than presenting them in isolation.
+The runnable code that demonstrates top-k lives in the next section, alongside top-p, comparing the two on the same logits is more illustrative than presenting them in isolation.
 
 ## Top-p (nucleus) sampling
 
 ### The adaptive insight
 
-Holtzman and collaborators in 2019 made the central observation that drives modern decoding: **the right truncation set depends on the distribution's peakedness, not on a fixed size**. A peaked distribution puts almost all its mass on a handful of tokens — keep those few and you have captured nearly all the probability the model believes. A flat distribution spreads mass across many tokens — many of them are plausible, and aggressive truncation throws away legitimate options. **A fixed $k$ cannot adapt to either case**; an adaptive truncator can.
+Holtzman and collaborators in 2019 made the central observation that drives modern decoding: **the right truncation set depends on the distribution's peakedness, not on a fixed size**. A peaked distribution puts almost all its mass on a handful of tokens, keep those few and you have captured nearly all the probability the model believes. A flat distribution spreads mass across many tokens, many of them are plausible, and aggressive truncation throws away legitimate options. **A fixed $k$ cannot adapt to either case**; an adaptive truncator can.
 
-The adaptive criterion they proposed is cumulative probability mass. Sort the tokens by descending probability; walk down the sorted list summing as you go; stop at the smallest index where the cumulative sum reaches a target threshold $p$ (typically $0.95$). The retained set is the **nucleus** — the smallest set of tokens whose probability mass adds to at least $p$. Everything outside the nucleus is discarded; everything inside is renormalized and sampled.
+The adaptive criterion they proposed is cumulative probability mass. Sort the tokens by descending probability; walk down the sorted list summing as you go; stop at the smallest index where the cumulative sum reaches a target threshold $p$ (typically $0.95$). The retained set is the **nucleus**, the smallest set of tokens whose probability mass adds to at least $p$. Everything outside the nucleus is discarded; everything inside is renormalized and sampled.
 
 ### The algorithm
 
@@ -147,9 +147,9 @@ Mechanically: sort descending; cumulative-sum the sorted probabilities; binary-s
 
 ### Why it's the default
 
-The behavior on the two distribution-shape extremes is what makes nucleus the default. **At peaked distributions, the nucleus is small** — if the top token already carries $0.9$ of the mass, the nucleus might be just one or two tokens, and the sampler effectively reduces to greedy on the cases where greedy is the right call. **At flat distributions, the nucleus grows** — needing $0.95$ of the mass from a roughly-uniform tail might require dozens of tokens, and the sampler keeps all of them so that the genuine alternatives stay in play. **The truncation budget adjusts to what the model believes**, which is exactly what a sampler should do.
+The behavior on the two distribution-shape extremes is what makes nucleus the default. **At peaked distributions, the nucleus is small**, if the top token already carries $0.9$ of the mass, the nucleus might be just one or two tokens, and the sampler effectively reduces to greedy on the cases where greedy is the right call. **At flat distributions, the nucleus grows**, needing $0.95$ of the mass from a roughly-uniform tail might require dozens of tokens, and the sampler keeps all of them so that the genuine alternatives stay in play. **The truncation budget adjusts to what the model believes**: which is exactly what a sampler should do.
 
-Typical values are $p = 0.95$ (the modern chat default across most providers), $p = 0.9$ (the older default, slightly tighter), and $p = 0.8$ for more focused outputs. **Nucleus sampling is the default for GPT, Claude, Llama, Gemini, and essentially every other production LLM API.** There is also a more recent variant — **min-p** (Nguyen et al., 2024) — which keeps tokens with $p_i \geq p_{\min} \cdot \max_j p_j$, adapting to the peak rather than to cumulative mass. It is gaining traction but is not yet the default anywhere widely deployed; nucleus is still the standard.
+Typical values are $p = 0.95$ (the modern chat default across most providers), $p = 0.9$ (the older default, slightly tighter), and $p = 0.8$ for more focused outputs. **Nucleus sampling is the default for GPT, Claude, Llama, Gemini, and essentially every other production LLM API.** There is also a more recent variant, **min-p** (Nguyen et al., 2024), which keeps tokens with $p_i \geq p_{\min} \cdot \max_j p_j$, adapting to the peak rather than to cumulative mass. It is gaining traction but is not yet the default anywhere widely deployed; nucleus is still the standard.
 
 <RunnableCode client:visible>
 ```python
@@ -207,15 +207,15 @@ print("\nTop-p adapts where top-k cannot.")
 ```
 </RunnableCode>
 
-<WidgetFrame title="Sampling distribution explorer" caption="Pick a distribution shape (peaked / bimodal / flat); adjust temperature, top-p, top-k. The top chart shows the original distribution; the bottom shows the post-pipeline distribution (cyan = in nucleus; rose-faded = masked). Stats panel shows nucleus size, top probability, entropy. Watch nucleus size adapt to distribution shape — small at peaked confidence, large at uncertainty. This is why nucleus sampling is the modern default.">
+<WidgetFrame title="Sampling distribution explorer" caption="Pick a distribution shape (peaked / bimodal / flat); adjust temperature, top-p, top-k. The top chart shows the original distribution; the bottom shows the post-pipeline distribution (cyan = in nucleus; rose-faded = masked). Stats panel shows nucleus size, top probability, entropy. Watch nucleus size adapt to distribution shape, small at peaked confidence, large at uncertainty. This is why nucleus sampling is the modern default.">
   <SamplingDistribution client:visible />
 </WidgetFrame>
 
 <Callout type="note">
-"Top-p is always better than top-k" is mostly true but not absolutely. In practice, most production stacks **use top-p as the primary truncator** for its adaptive properties, but many also combine it with a safety-net top-k (often $k = 50$) to bound the truncation set on pathological flat distributions. Hugging Face's `transformers.generate()` exposes both knobs and applies them sequentially by default. **The right answer is usually "use both"** — top-p for adaptivity, top-k as the upper bound, both tuned per workload.
+"Top-p is always better than top-k" is mostly true but not absolutely. In practice, most production stacks **use top-p as the primary truncator** for its adaptive properties, but many also combine it with a safety-net top-k (often $k = 50$) to bound the truncation set on pathological flat distributions. Hugging Face's `transformers.generate()` exposes both knobs and applies them sequentially by default. **The right answer is usually "use both"**, top-p for adaptivity, top-k as the upper bound, both tuned per workload.
 </Callout>
 
-The next section covers how multiple sampling strategies combine in a production stack — temperature plus nucleus plus repetition penalty, in the right order, with the recipes table that the chapter is largely organized around.
+The next section covers how multiple sampling strategies combine in a production stack, temperature plus nucleus plus repetition penalty, in the right order, with the recipes table that the chapter is largely organized around.
 
 ## Combining strategies
 
@@ -230,7 +230,7 @@ A production sampling step stacks several operations, and the order matters. The
 5. **Softmax** over the surviving tokens.
 6. **Sample.**
 
-Temperature comes first because it reshapes the distribution that subsequent truncation operates on — a temperature of $0.7$ produces a peakier distribution than $T = 1$, and the nucleus on that peaker distribution is naturally smaller. Truncation comes second because it bounds the candidate set, and applying a repetition penalty to a thousand-token full vocabulary is wasteful when only a few dozen will survive truncation anyway. Repetition penalty comes third because it operates on the surviving candidates, not on the full vocabulary. **Softmax-and-sample comes last.** Some implementations rearrange these — applying the repetition penalty to raw logits before temperature, for instance — and the differences are usually small, but the order above is the most common convention.
+Temperature comes first because it reshapes the distribution that subsequent truncation operates on, a temperature of $0.7$ produces a peakier distribution than $T = 1$, and the nucleus on that peaker distribution is naturally smaller. Truncation comes second because it bounds the candidate set, and applying a repetition penalty to a thousand-token full vocabulary is wasteful when only a few dozen will survive truncation anyway. Repetition penalty comes third because it operates on the surviving candidates, not on the full vocabulary. **Softmax-and-sample comes last.** Some implementations rearrange these, applying the repetition penalty to raw logits before temperature, for instance, and the differences are usually small, but the order above is the most common convention.
 
 ### Production recipes
 
@@ -245,15 +245,15 @@ The recipes table is the most directly actionable artifact in the chapter. **Cop
 | Reasoning | $0.6$ – $0.7$ | $0.95$ | (off) | (off) |
 | Brainstorming | $1.2$ – $1.5$ | $0.95$ – $1.0$ | (off) | (off) |
 
-API defaults differ across providers. **OpenAI**: $T = 1.0$, top-p $= 1.0$ (effectively off), no top-k, no penalties — the user is expected to set them per-request. **Anthropic Claude**: $T = 1.0$ as the default, other parameters per-request. **Llama** (per Meta's reference inference): $T = 0.6$, top-p $= 0.9$ — slightly more conservative than the OpenAI defaults. **Codex / Copilot** for code completion: $T = 0.2$, top-p $= 0.95$ — high confidence, low variance. **Reasoning models** like o1 and R1: $T = 0.6$ – $0.7$, top-p $= 0.95$ — balanced between exploration during chain-of-thought and convergence to the final answer.
+API defaults differ across providers. **OpenAI**: $T = 1.0$, top-p $= 1.0$ (effectively off), no top-k, no penalties, the user is expected to set them per-request. **Anthropic Claude**: $T = 1.0$ as the default, other parameters per-request. **Llama** (per Meta's reference inference): $T = 0.6$, top-p $= 0.9$, slightly more conservative than the OpenAI defaults. **Codex / Copilot** for code completion: $T = 0.2$, top-p $= 0.95$, high confidence, low variance. **Reasoning models** like o1 and R1: $T = 0.6$ – $0.7$, top-p $= 0.95$, balanced between exploration during chain-of-thought and convergence to the final answer.
 
 The practical guideline is short: **start with chat defaults** ($T = 0.7$, top-p $= 0.95$, mild repetition penalty); observe the output on your actual workload; adjust from there. The defaults are good enough for almost any use case; the cases where they need tuning are usually obvious from the failure mode (loops → bump repetition penalty; bland output → bump temperature; incoherence → drop temperature).
 
 <Callout type="note">
-The recipes table is guidance, not law. **Different models prefer different sampling configurations** — a model heavily trained with RLHF (Claude, GPT-4, Llama 3 Instruct) produces well-shaped distributions where $T = 1.0$ and top-p $= 1.0$ work well because the post-RLHF logits are already focused on plausible tokens. A less-tuned model — a base completion model, or a smaller open-source release — usually needs lower temperature or tighter top-p to avoid incoherent outputs. **Tune per-model, not by reading the docs of the model you used last time.**
+The recipes table is guidance, not law. **Different models prefer different sampling configurations**: a model heavily trained with RLHF (Claude, GPT-4, Llama 3 Instruct) produces well-shaped distributions where $T = 1.0$ and top-p $= 1.0$ work well because the post-RLHF logits are already focused on plausible tokens. A less-tuned model, a base completion model, or a smaller open-source release, usually needs lower temperature or tighter top-p to avoid incoherent outputs. **Tune per-model, not by reading the docs of the model you used last time.**
 </Callout>
 
-The next section covers the third knob in the production stack — repetition penalties, including when *not* to use them.
+The next section covers the third knob in the production stack, repetition penalties, including when *not* to use them.
 
 ## Repetition penalties
 
@@ -263,7 +263,7 @@ Even with stochastic sampling, models can fall into repetition loops, especially
 
 **Frequency penalty** (the OpenAI convention): reduce each token's logit proportional to how many times it has appeared so far. $z'_i = z_i - \alpha \cdot \text{count}_i$. A token that has appeared three times has its logit reduced by $3\alpha$; the next occurrence by $4\alpha$. The penalty grows with use, which makes runaway repetition essentially impossible.
 
-**Presence penalty**: reduce a token's logit by a fixed amount if it has appeared *at all*, regardless of count. $z'_i = z_i - \alpha \cdot \mathbb{1}[\text{count}_i > 0]$. Cheaper and less aggressive — discourages reuse without escalating.
+**Presence penalty**: reduce a token's logit by a fixed amount if it has appeared *at all*, regardless of count. $z'_i = z_i - \alpha \cdot \mathbb{1}[\text{count}_i > 0]$. Cheaper and less aggressive, discourages reuse without escalating.
 
 **N-gram blocking**: the strictest of the three. If generating token $t$ would produce an $n$-gram (typically $3$- or $4$-grams) that already appears in the output, set $p_t = 0$. Common in beam search; less common in standard sampling because stochastic sampling rarely needs the heaviest hammer.
 
@@ -271,7 +271,7 @@ Typical values: frequency penalty $\alpha = 0.0$ – $0.3$ (rarely above), prese
 
 ### When to use
 
-**Modern instruction-tuned models (post-SFT, post-RLHF) rarely need strong repetition penalties** because the post-training process already discourages loops directly — RLHF reward models penalize repetitive outputs, and SFT data is curated for natural variation. A mild frequency penalty of $\alpha = 0.1$ is usually sufficient for chat. Higher values often *hurt* quality: at $\alpha > 0.5$, the model starts avoiding natural repetition (common words like "the" and "and" become artificially rare), and the output reads as stilted even when it is no longer looping.
+**Modern instruction-tuned models (post-SFT, post-RLHF) rarely need strong repetition penalties** because the post-training process already discourages loops directly, RLHF reward models penalize repetitive outputs, and SFT data is curated for natural variation. A mild frequency penalty of $\alpha = 0.1$ is usually sufficient for chat. Higher values often *hurt* quality: at $\alpha > 0.5$, the model starts avoiding natural repetition (common words like "the" and "and" become artificially rare), and the output reads as stilted even when it is no longer looping.
 
 The order of when to reach for repetition penalties: start at $\alpha = 0.0$ (off); if you observe loops on your workload, bump to $0.1$; if loops persist, bump to $0.3$; above that, you are probably better off changing the temperature or top-p than adding more penalty.
 
@@ -319,36 +319,36 @@ print(f"α > 0.5 often degrades output by suppressing natural repetition.")
 </RunnableCode>
 
 <Callout type="warning">
-"Repetition penalties always improve quality" is false at high values. **Strong penalties** ($\alpha > 0.5$) prevent natural repetition — common words like "the" and "and" become rare; output becomes unnatural. **Modern RLHF'd chat models rarely need strong repetition penalties** because RLHF training already discourages loops directly. Start with $\alpha = 0.1$; only raise it if you observe actual repetition loops in production. The penalty is a band-aid for an underlying logit-shape problem, and the cure can be worse than the disease.
+"Repetition penalties always improve quality" is false at high values. **Strong penalties** ($\alpha > 0.5$) prevent natural repetition, common words like "the" and "and" become rare; output becomes unnatural. **Modern RLHF'd chat models rarely need strong repetition penalties** because RLHF training already discourages loops directly. Start with $\alpha = 0.1$; only raise it if you observe actual repetition loops in production. The penalty is a band-aid for an underlying logit-shape problem, and the cure can be worse than the disease.
 </Callout>
 
-The next section steps away from stochastic sampling to cover the search-based alternative — beam search — and explains why it has largely fallen out of favor for LLM serving.
+The next section steps away from stochastic sampling to cover the search-based alternative, beam search, and explains why it has largely fallen out of favor for LLM serving.
 
 ## Beam search
 
 ### The mechanics
 
-Beam search is a search-based decoding strategy. Maintain $B$ partial sequences at each step — the "beam". For each sequence in the beam, run a forward pass, take the top $k$ next-token extensions, and produce $B \times k$ candidates. Score each candidate by cumulative log-probability (sum of log-probs of the tokens chosen so far) and keep the top $B$ overall as the new beam. Repeat until every beam has emitted end-of-sequence or hit the max length, then return the highest-scoring complete sequence. **The output is the highest-likelihood sequence the search found** — not the highest-likelihood sequence overall (true ML decoding is intractable), but a reasonable approximation.
+Beam search is a search-based decoding strategy. Maintain $B$ partial sequences at each step, the "beam". For each sequence in the beam, run a forward pass, take the top $k$ next-token extensions, and produce $B \times k$ candidates. Score each candidate by cumulative log-probability (sum of log-probs of the tokens chosen so far) and keep the top $B$ overall as the new beam. Repeat until every beam has emitted end-of-sequence or hit the max length, then return the highest-scoring complete sequence. **The output is the highest-likelihood sequence the search found**, not the highest-likelihood sequence overall (true ML decoding is intractable), but a reasonable approximation.
 
 Beam width $B$ is the knob. $B = 1$ degenerates to greedy. $B = 4$ to $10$ is typical for translation. Larger $B$ explores more paths and finds higher-likelihood sequences but costs $B$ times more compute per step (and more memory for the KV cache, which now has to be replicated across beams).
 
 ### Why it's rare in LLM serving
 
-Beam search dominated machine translation from $2014$ to $2020$ and is still the standard there. For modern LLM serving it is rarely used, for four overlapping reasons. **Repetitive at high beam width** — famously degenerate (Holtzman 2019, the same paper that gave us nucleus sampling, was largely motivated by this observation). The highest-likelihood sequence tends to be a low-entropy sequence, and low-entropy sequences love to repeat common phrases. **Computational cost** — $B$ times more forward passes per step, and the KV cache replicates across beams; for an LLM at decode-time bandwidth limits, this is a significant tax. **Bland output** — maximum-likelihood sequences are "safe": no surprising choices, no rare-but-good vocabulary, no creative leaps. Often dull to read. **Wrong objective for most LLM tasks** — chat, story generation, brainstorming, even most reasoning all want diversity over max-likelihood. Translation wants max-likelihood because translation has a correct answer; chat does not.
+Beam search dominated machine translation from $2014$ to $2020$ and is still the standard there. For modern LLM serving it is rarely used, for four overlapping reasons. **Repetitive at high beam width**: famously degenerate (Holtzman 2019, the same paper that gave us nucleus sampling, was largely motivated by this observation). The highest-likelihood sequence tends to be a low-entropy sequence, and low-entropy sequences love to repeat common phrases. **Computational cost**, $B$ times more forward passes per step, and the KV cache replicates across beams; for an LLM at decode-time bandwidth limits, this is a significant tax. **Bland output**, maximum-likelihood sequences are "safe": no surprising choices, no rare-but-good vocabulary, no creative leaps. Often dull to read. **Wrong objective for most LLM tasks**, chat, story generation, brainstorming, even most reasoning all want diversity over max-likelihood. Translation wants max-likelihood because translation has a correct answer; chat does not.
 
 The result is that **most production LLM APIs do not expose beam search** as a sampling option. It is available in `transformers.generate()` and other library defaults, but it is essentially never the path taken by an OpenAI, Anthropic, or Llama serving stack. Stochastic sampling with nucleus and modest temperature wins on almost every chat-style benchmark, costs less to run, and produces more pleasant output.
 
 <Callout type="aside">
-Beam search dominated machine translation for years ($2014$ – $2020$) but has fallen out of favor for LLM serving. The reason is the training: **modern LLMs trained with RLHF produce well-shaped output distributions**, where stochastic sampling competes well even on tasks beam search used to win — and beats it badly on the open-ended tasks that LLMs are actually deployed for. Beam search is now mostly a fallback for specialized tasks with discrete correct answers (still: translation, some classification, structured output without a constrained decoder). **For chat, code, or creative generation, nucleus sampling wins.**
+Beam search dominated machine translation for years ($2014$ – $2020$) but has fallen out of favor for LLM serving. The reason is the training: **modern LLMs trained with RLHF produce well-shaped output distributions**, where stochastic sampling competes well even on tasks beam search used to win, and beats it badly on the open-ended tasks that LLMs are actually deployed for. Beam search is now mostly a fallback for specialized tasks with discrete correct answers (still: translation, some classification, structured output without a constrained decoder). **For chat, code, or creative generation, nucleus sampling wins.**
 </Callout>
 
-The final section covers the production-critical topic of constrained decoding — how to guarantee structured outputs like JSON — and then closes Phase 12.
+The final section covers the production-critical topic of constrained decoding, how to guarantee structured outputs like JSON, and then closes Phase 12.
 
 ## Exercises
 
-Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — Greedy and temperature
+### Exercise 1 (easy): Greedy and temperature
 
 Implement greedy decoding and temperature-scaled sampling. Verify the qualitative behavior: greedy is deterministic; low temperature is conservative; high temperature is noisy.
 
@@ -402,15 +402,15 @@ rng = np.random.RandomState(42)
 # # Observations:
 # # - Greedy: always token 5
 # # - T = 0.3: mostly token 5 (sharp)
-# # - T = 1.0: balanced — 5 dominant with some variety
+# # - T = 1.0: balanced: 5 dominant with some variety
 # # - T = 2.0: scattered across many tokens (too noisy)
 `}
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — Top-p sampling
+### Exercise 2 (medium): Top-p sampling
 
-Implement top-p (nucleus) sampling. Verify the nucleus size adapts to distribution shape — small for peaked, large for flat.
+Implement top-p (nucleus) sampling. Verify the nucleus size adapts to distribution shape, small for peaked, large for flat.
 
 <details>
 <summary>Hint</summary>
@@ -484,12 +484,12 @@ def make_distribution(shape='peaked', V=50):
 # # - Peaked: nucleus is small (~1-3 even at p=0.95)
 # # - Bimodal: nucleus naturally includes both peaks
 # # - Flat: nucleus is large (need many tokens to reach 95% mass)
-# # This is why top-p is the modern default — it adapts.
+# # This is why top-p is the modern default: it adapts.
 `}
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Repetition penalty
+### Exercise 3 (medium): Repetition penalty
 
 Implement a frequency penalty: each token's logit is reduced proportional to how many times it has appeared in the generation so far. Verify the effect on a token that has been repeated.
 
@@ -564,7 +564,7 @@ rng_pen = np.random.RandomState(42)
   packages={["numpy"]}
 />
 
-### Exercise 4 (hard) — FSM masking for constrained decoding
+### Exercise 4 (hard): FSM masking for constrained decoding
 
 Implement constrained decoding via FSM masking for a tiny JSON-like grammar. At each step, mask out tokens that would violate the current FSM state.
 
@@ -641,7 +641,7 @@ def fake_logits(state):
     rng_state = sum(ord(c) for c in state) % 100
     np.random.seed(rng_state)
     z = np.random.normal(0, 1, len(VOCAB))
-    # Often the model would prefer 'random' (token 6) — invalid!
+    # Often the model would prefer 'random' (token 6), invalid!
     z[6] += 1.5
     return z
 
@@ -660,26 +660,26 @@ def fake_logits(state):
 
 ### Why constrained decoding matters
 
-Production agents need structured outputs. JSON for tool calls. Regex matches for parseable fields. A grammar like "valid Python" or "valid SQL" for code-generation pipelines. The naive approach is to prompt the model to follow the format, parse the output, and retry on failure — **brittle and slow**. Retry rates of ten percent are common at first; latency spikes when the retry path fires; and the failure mode (malformed JSON in a tool call) breaks every downstream system that depends on the output. **Constrained decoding** is the alternative: **guarantee** that the output satisfies the structural constraint by enforcing it at the sampler.
+Production agents need structured outputs. JSON for tool calls. Regex matches for parseable fields. A grammar like "valid Python" or "valid SQL" for code-generation pipelines. The naive approach is to prompt the model to follow the format, parse the output, and retry on failure, **brittle and slow**. Retry rates of ten percent are common at first; latency spikes when the retry path fires; and the failure mode (malformed JSON in a tool call) breaks every downstream system that depends on the output. **Constrained decoding** is the alternative: **guarantee** that the output satisfies the structural constraint by enforcing it at the sampler.
 
 ### The FSM masking technique
 
-The technique generalizes nicely. Compile the structural constraint to a **finite-state machine** (or, more generally, a context-free grammar) — for regex constraints this is the standard regex-to-DFA conversion that every textbook covers; for grammars it is parser-generator machinery (LR, GLR, Earley). The compiled FSM has a notion of "current state" and "valid next transitions". At each decode step, look up which token IDs from the model's vocabulary would correspond to a legal next transition from the current FSM state, and mask the logits of every other token to $-\infty$:
+The technique generalizes nicely. Compile the structural constraint to a **finite-state machine** (or, more generally, a context-free grammar), for regex constraints this is the standard regex-to-DFA conversion that every textbook covers; for grammars it is parser-generator machinery (LR, GLR, Earley). The compiled FSM has a notion of "current state" and "valid next transitions". At each decode step, look up which token IDs from the model's vocabulary would correspond to a legal next transition from the current FSM state, and mask the logits of every other token to $-\infty$:
 
 <Equation label="19.constrained">
 $$z'_i = \begin{cases} z_i & \text{if token } i \text{ is valid at the current state} \\ -\infty & \text{otherwise} \end{cases}$$
 </Equation>
 
-Apply the usual sampling pipeline — temperature, top-p, repetition penalty if you like — over the masked distribution. The infinities become zeros after softmax, so the sampler can only choose from the valid set. **The model picks its most-likely valid token**, the FSM advances, and the next step repeats. The output is guaranteed to satisfy the constraint, the model's predictions stay coherent (because it is still choosing what *it* thinks is best, just restricted to valid options), and the latency overhead is small — an FSM lookup per step, with state cached across steps so the cost stays per-token rather than per-token-squared.
+Apply the usual sampling pipeline, temperature, top-p, repetition penalty if you like, over the masked distribution. The infinities become zeros after softmax, so the sampler can only choose from the valid set. **The model picks its most-likely valid token**, the FSM advances, and the next step repeats. The output is guaranteed to satisfy the constraint, the model's predictions stay coherent (because it is still choosing what *it* thinks is best, just restricted to valid options), and the latency overhead is small, an FSM lookup per step, with state cached across steps so the cost stays per-token rather than per-token-squared.
 
 Production implementations vary by ecosystem. **Outlines** (Willard & Louf, 2023) compiles regex to FSMs; works with any Hugging Face model. **OpenAI JSON mode** (`response_format = json_object`) constrains output to valid JSON. **Anthropic structured outputs** enforce tool schemas under the hood. **Llama.cpp grammar mode** accepts BNF grammars and applies them as masking constraints at every decode step. The mechanics are similar across all of them; the API surface differs.
 
-<WidgetFrame title="Constrained decoding" caption="Step-by-step generation of valid JSON. At each FSM state, only certain vocabulary tokens are valid; invalid tokens are masked (rose). The ★ marks the model's *preferred* token without constraints — often invalid! Constrained decoding picks the highest-probability valid token instead. The widget makes 'how does JSON mode work' concrete.">
+<WidgetFrame title="Constrained decoding" caption="Step-by-step generation of valid JSON. At each FSM state, only certain vocabulary tokens are valid; invalid tokens are masked (rose). The ★ marks the model's *preferred* token without constraints, often invalid! Constrained decoding picks the highest-probability valid token instead. The widget makes 'how does JSON mode work' concrete.">
   <ConstrainedDecoding client:visible />
 </WidgetFrame>
 
-### Phase 12 — complete
+### Phase 12: complete
 
-Phase 12 wraps with this chapter. The trilogy: **Ch 17** reduced wasted *computation* — KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. **Ch 18** reduced *bits per parameter* — INT8 with LLM.int8 outlier handling, INT4 with per-group scales, NF4 with double quantization, GPTQ and AWQ as the modern PTQ algorithms. **Ch 19** governs the *decision* — how the decoder picks tokens given the logits the (cached, batched, quantized) forward pass produces. Combined, the three chapters are the difference between an order-of-magnitude operational cost on identical hardware: about $50$ tokens per second from naive inference, against $500$ to $1{,}000$ tokens per second aggregate from a production stack with everything in place.
+Phase 12 wraps with this chapter. The trilogy: **Ch 17** reduced wasted *computation*, KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. **Ch 18** reduced *bits per parameter*, INT8 with LLM.int8 outlier handling, INT4 with per-group scales, NF4 with double quantization, GPTQ and AWQ as the modern PTQ algorithms. **Ch 19** governs the *decision*, how the decoder picks tokens given the logits the (cached, batched, quantized) forward pass produces. Combined, the three chapters are the difference between an order-of-magnitude operational cost on identical hardware: about $50$ tokens per second from naive inference, against $500$ to $1{,}000$ tokens per second aggregate from a production stack with everything in place.
 
-Phase 13 opens next with capabilities. Where Phase 12 made the model *deployable*, Phase 13 makes it *useful*. **Reasoning** (Ch 20) covers chain-of-thought, test-time compute, deliberation, and modern reasoning models like o1 and R1 that scale capability through inference-time search rather than parameter count. **Tools** (Ch 21) covers how the model calls external APIs, where the constrained-decoding JSON-mode machinery from this chapter does its operationally critical work. **Retrieval-augmented generation** (Ch 22) covers RAG — pulling relevant context out of vector stores and feeding it back through a deployed model. **Multimodal** (Ch 23) covers vision and audio — how the same transformer backbone extends to non-text inputs. **From here on, deployment is assumed and the focus shifts to building useful systems on top of deployed models.**
+Phase 13 opens next with capabilities. Where Phase 12 made the model *deployable*, Phase 13 makes it *useful*. **Reasoning** (Ch 20) covers chain-of-thought, test-time compute, deliberation, and modern reasoning models like o1 and R1 that scale capability through inference-time search rather than parameter count. **Tools** (Ch 21) covers how the model calls external APIs, where the constrained-decoding JSON-mode machinery from this chapter does its operationally critical work. **Retrieval-augmented generation** (Ch 22) covers RAG, pulling relevant context out of vector stores and feeding it back through a deployed model. **Multimodal** (Ch 23) covers vision and audio, how the same transformer backbone extends to non-text inputs. **From here on, deployment is assumed and the focus shifts to building useful systems on top of deployed models.**

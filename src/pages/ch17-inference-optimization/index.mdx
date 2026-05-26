@@ -1,50 +1,50 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch17-inference-optimization
-description: Inference optimization — how to serve trained LLMs efficiently at scale. This chapter is the foundation of Phase 12. KV cache is the central optimization (~700× speedup vs naive); prefill (compute-bound) and decode (memory-bound) are fundamentally different phases with different bottlenecks; continuous batching is the modern default for high GPU utilization; Flash Attention (Dao 2022) enables long context; speculative decoding (Leviathan 2023) amortizes the big model's forward pass; PagedAttention (vLLM) manages KV cache memory like an OS. The chapter that opens the serving arc.
+description: Inference optimization, how to serve trained LLMs efficiently at scale. This chapter is the foundation of Phase 12. KV cache is the central optimization (~700× speedup vs naive); prefill (compute-bound) and decode (memory-bound) are fundamentally different phases with different bottlenecks; continuous batching is the modern default for high GPU utilization; Flash Attention (Dao 2022) enables long context; speculative decoding (Leviathan 2023) amortizes the big model's forward pass; PagedAttention (vLLM) manages KV cache memory like an OS. The chapter that opens the serving arc.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { KVCacheAnimation, SpeculativeDecoding } from '@components/widgets';
 
-Phase 11 left you with a trained model — pre-trained, supervised-fine-tuned, preference-aligned, optionally PEFT-adapted, optionally distilled. The mathematical object exists. Phase 12 asks the engineering question that follows: **how do you actually serve it?** A transformer forward pass is conceptually simple; serving one at production scale is an entire discipline. Naive implementations are shockingly inefficient. They rerun every layer for every generated token, pad short sequences to match long ones in the batch, and materialize huge intermediate attention matrices that the GPU spends most of its time reading and writing rather than computing. **A production stack does none of this.**
+Phase 11 left you with a trained model, pre-trained, supervised-fine-tuned, preference-aligned, optionally PEFT-adapted, optionally distilled. The mathematical object exists. Phase 12 asks the engineering question that follows: **how do you actually serve it?** A transformer forward pass is conceptually simple; serving one at production scale is an entire discipline. Naive implementations are shockingly inefficient. They rerun every layer for every generated token, pad short sequences to match long ones in the batch, and materialize huge intermediate attention matrices that the GPU spends most of its time reading and writing rather than computing. **A production stack does none of this.**
 
-This chapter covers the foundational optimizations that distinguish production serving from a naive forward pass. **KV cache** — the central optimization, an ~$700\times$ speedup over re-computing past tokens. **Prefill vs decode** — two phases with completely different performance characteristics, which dictates which optimizations help where. **Continuous batching** — Yu et al. (2022, Orca) showed that the batch should adapt request by request, not be fixed at startup. **Flash Attention** — Dao (2022) eliminated the $(N \times N)$ intermediate that made long contexts impractical. **Speculative decoding** — Leviathan et al. (2023) and Chen et al. (2023) amortize each big-model forward pass across multiple accepted tokens. **PagedAttention** — Kwon et al. (2023, vLLM) manages KV cache memory like an operating system manages RAM.
+This chapter covers the foundational optimizations that distinguish production serving from a naive forward pass. **KV cache**, the central optimization, an ~$700\times$ speedup over re-computing past tokens. **Prefill vs decode**: two phases with completely different performance characteristics, which dictates which optimizations help where. **Continuous batching**, Yu et al. (2022, Orca) showed that the batch should adapt request by request, not be fixed at startup. **Flash Attention**, Dao (2022) eliminated the $(N \times N)$ intermediate that made long contexts impractical. **Speculative decoding**, Leviathan et al. (2023) and Chen et al. (2023) amortize each big-model forward pass across multiple accepted tokens. **PagedAttention**, Kwon et al. (2023, vLLM) manages KV cache memory like an operating system manages RAM.
 
-The goal of the chapter is not to make you re-implement vLLM. It is to give you the mental model: what's expensive, what's cheap, where the bottlenecks live, and which optimization attacks which bottleneck. With that frame, the next two chapters fall into place — **quantization** (Ch 18) reduces bits per parameter, **sampling** (Ch 19) decides what the decoder actually emits — and the modern serving stacks (vLLM, TGI, SGLang, TensorRT-LLM) start to read as recombinations of a small number of primitives.
+The goal of the chapter is not to make you re-implement vLLM. It is to give you the mental model: what's expensive, what's cheap, where the bottlenecks live, and which optimization attacks which bottleneck. With that frame, the next two chapters fall into place, **quantization** (Ch 18) reduces bits per parameter, **sampling** (Ch 19) decides what the decoder actually emits, and the modern serving stacks (vLLM, TGI, SGLang, TensorRT-LLM) start to read as recombinations of a small number of primitives.
 
 ## The inference cost problem
 
 ### The naive baseline
 
-The naive way to generate text is the way the math is written down: at every step, push the entire so-far sequence through every layer of the model and read off the next-token distribution. Cost is $O(N^2)$ in attention per step and $O(N^3)$ to generate $N$ tokens in total — the outer loop over generated tokens multiplies into the per-step attention cost. For a single $1024$-token completion on a $7$B model, that is roughly $10^9$ FLOP-equivalents of *redundant* work: every step recomputes the keys and values for every previous token, even though those tokens have not changed since the previous step. Wall-clock throughput on an A100 lands somewhere around $5$ to $10$ tokens per second. That is fast enough to type out a response, but nowhere close to what production economics demand.
+The naive way to generate text is the way the math is written down: at every step, push the entire so-far sequence through every layer of the model and read off the next-token distribution. Cost is $O(N^2)$ in attention per step and $O(N^3)$ to generate $N$ tokens in total, the outer loop over generated tokens multiplies into the per-step attention cost. For a single $1024$-token completion on a $7$B model, that is roughly $10^9$ FLOP-equivalents of *redundant* work: every step recomputes the keys and values for every previous token, even though those tokens have not changed since the previous step. Wall-clock throughput on an A100 lands somewhere around $5$ to $10$ tokens per second. That is fast enough to type out a response, but nowhere close to what production economics demand.
 
 ### Why this matters
 
-The same model, same hardware, with a fully optimized inference stack: $200$ to $500$ tokens per second. **A $5$ to $50\times$ throughput gap that has nothing to do with model architecture and nothing to do with hardware.** It is purely the difference between running the math as written and running the system as designed for serving. The economic consequence is decisive. A service handling one billion tokens per day on naive inference might need a hundred A100s; on a production stack, five. Margin per request flips from impossible to comfortable. **Operational money matters**, and at LLM scale the savings are not marginal — they are the difference between a viable product and one that bleeds compute.
+The same model, same hardware, with a fully optimized inference stack: $200$ to $500$ tokens per second. **A $5$ to $50\times$ throughput gap that has nothing to do with model architecture and nothing to do with hardware.** It is purely the difference between running the math as written and running the system as designed for serving. The economic consequence is decisive. A service handling one billion tokens per day on naive inference might need a hundred A100s; on a production stack, five. Margin per request flips from impossible to comfortable. **Operational money matters**: and at LLM scale the savings are not marginal, they are the difference between a viable product and one that bleeds compute.
 
-These optimizations are not exotic research. Every major open-source serving system — vLLM, TGI, SGLang, TensorRT-LLM — uses some combination of them, and most managed APIs (Together, Anyscale, Fireworks, the model-provider endpoints) layer additional proprietary tuning on top. The pattern is industry standard, and the patterns are the topic of this chapter.
+These optimizations are not exotic research. Every major open-source serving system, vLLM, TGI, SGLang, TensorRT-LLM, uses some combination of them, and most managed APIs (Together, Anyscale, Fireworks, the model-provider endpoints) layer additional proprietary tuning on top. The pattern is industry standard, and the patterns are the topic of this chapter.
 
 <Callout type="note">
-This chapter is the *engineering* counterpart to Phase 11's training-method content. **Distillation (Ch 16) reduces parameter count; quantization (Ch 18) reduces bits per parameter; inference optimization (this chapter) reduces wasted computation.** All three compose multiplicatively. A production $70$B serving stack might run $20\times$ faster than a naive baseline just from stacking these three categories — before any architectural changes.
+This chapter is the *engineering* counterpart to Phase 11's training-method content. **Distillation (Ch 16) reduces parameter count; quantization (Ch 18) reduces bits per parameter; inference optimization (this chapter) reduces wasted computation.** All three compose multiplicatively. A production $70$B serving stack might run $20\times$ faster than a naive baseline just from stacking these three categories, before any architectural changes.
 </Callout>
 
 The next section introduces the structural pivot that organizes the rest of the chapter: the two phases of inference.
 
-## Prefill vs decode — two phases
+## Prefill vs decode: two phases
 
 ### Prefill
 
-Generation begins with **prefill**: the model processes the entire prompt in a single forward pass. All prompt tokens flow through every layer together, queries and keys and values are computed for every position at once, and the attention matrix is filled in one shot. Because each matmul operates on a wide sequence dimension, prefill is **compute-bound** — high arithmetic intensity, lots of FLOPs per byte of weight loaded from HBM, GPU fully saturated. Cost scales as $O(N^2)$ in attention and $O(N)$ in the rest of the model, where $N$ is the prompt length. The user-facing metric this phase determines is **TTFT** (Time To First Token): the latency between submitting a request and seeing the first output. Long prompts move TTFT up roughly quadratically because of the attention term.
+Generation begins with **prefill**: the model processes the entire prompt in a single forward pass. All prompt tokens flow through every layer together, queries and keys and values are computed for every position at once, and the attention matrix is filled in one shot. Because each matmul operates on a wide sequence dimension, prefill is **compute-bound**, high arithmetic intensity, lots of FLOPs per byte of weight loaded from HBM, GPU fully saturated. Cost scales as $O(N^2)$ in attention and $O(N)$ in the rest of the model, where $N$ is the prompt length. The user-facing metric this phase determines is **TTFT** (Time To First Token): the latency between submitting a request and seeing the first output. Long prompts move TTFT up roughly quadratically because of the attention term.
 
 ### Decode
 
-After prefill, the model enters **decode**: tokens come out one at a time, each requiring its own forward pass. The sequence dimension of those forward passes is exactly one — just the newly emitted token, with the rest of the context handled through the KV cache (next section). This makes decode **memory-bound**. Each layer's matmul has the same big weight matrix as in prefill but with a tiny activation tensor, so the GPU is dominated by the time spent loading weights from HBM rather than the time spent multiplying. Arithmetic intensity collapses. The user-facing metric this phase determines is **TPOT** (Time Per Output Token): how fast the stream of tokens scrolls once it has started. TPOT is roughly constant per token after the KV cache amortizes the past work, and is dominated by memory bandwidth, not compute.
+After prefill, the model enters **decode**: tokens come out one at a time, each requiring its own forward pass. The sequence dimension of those forward passes is exactly one, just the newly emitted token, with the rest of the context handled through the KV cache (next section). This makes decode **memory-bound**. Each layer's matmul has the same big weight matrix as in prefill but with a tiny activation tensor, so the GPU is dominated by the time spent loading weights from HBM rather than the time spent multiplying. Arithmetic intensity collapses. The user-facing metric this phase determines is **TPOT** (Time Per Output Token): how fast the stream of tokens scrolls once it has started. TPOT is roughly constant per token after the KV cache amortizes the past work, and is dominated by memory bandwidth, not compute.
 
 ### Why this matters
 
-The two phases have different bottlenecks, which means they call for different optimizations. **Prefill optimizations** target compute and kernel efficiency: bigger matmuls, kernel fusion, Flash Attention. **Decode optimizations** target memory bandwidth and unused compute: cache layouts that minimize HBM traffic, Flash Decoding, and speculative decoding (which uses up the slack compute to verify many drafted tokens at once). Naming the phases makes the rest of the chapter readable: when you read about a new technique, the first question to ask is *"does this help prefill or decode?"* — and the answer almost always reveals which bottleneck the technique attacks. Productionally, the two phases also trade off against each other in a serving scheduler: long prefills can stall the decode of ongoing requests, so modern stacks chunk prefills to interleave them with decode steps and keep the TPOT smooth for already-streaming users.
+The two phases have different bottlenecks, which means they call for different optimizations. **Prefill optimizations** target compute and kernel efficiency: bigger matmuls, kernel fusion, Flash Attention. **Decode optimizations** target memory bandwidth and unused compute: cache layouts that minimize HBM traffic, Flash Decoding, and speculative decoding (which uses up the slack compute to verify many drafted tokens at once). Naming the phases makes the rest of the chapter readable: when you read about a new technique, the first question to ask is *"does this help prefill or decode?"*, and the answer almost always reveals which bottleneck the technique attacks. Productionally, the two phases also trade off against each other in a serving scheduler: long prefills can stall the decode of ongoing requests, so modern stacks chunk prefills to interleave them with decode steps and keep the TPOT smooth for already-streaming users.
 
 <Callout type="aside">
 A textbook view treats inference as "running the model forward." But **the two phases have completely different characteristics**, and any meaningful serving discussion has to keep them separate. Most papers and tutorials emphasize the algorithmic forward pass; production engineers emphasize the serving system that exploits the prefill/decode distinction. **This chapter sits on the production engineer's side of that divide.**
@@ -52,13 +52,13 @@ A textbook view treats inference as "running the model forward." But **the two p
 
 The next section introduces the optimization that turns decode from a re-derivation into a lookup.
 
-## KV cache — the central optimization
+## KV cache: the central optimization
 
 ### The redundancy
 
-Consider what a naive decode step at position $i$ actually does. To compute attention at that step, the model needs the keys and values $K_1, V_1, \ldots, K_{i-1}, V_{i-1}$ for every previous token, plus the new ones $K_i, V_i$ for the token just generated. The naive way is to compute *all of them from scratch* — re-running the K and V projections for the entire prefix at every step. But those past keys and values are **deterministic functions of the past tokens**, which have not changed since the previous step. Recomputing them is pure waste. The **KV cache** removes this waste by storing keys and values from previous steps and only computing the new ones at each decode iteration.
+Consider what a naive decode step at position $i$ actually does. To compute attention at that step, the model needs the keys and values $K_1, V_1, \ldots, K_{i-1}, V_{i-1}$ for every previous token, plus the new ones $K_i, V_i$ for the token just generated. The naive way is to compute *all of them from scratch*, re-running the K and V projections for the entire prefix at every step. But those past keys and values are **deterministic functions of the past tokens**, which have not changed since the previous step. Recomputing them is pure waste. The **KV cache** removes this waste by storing keys and values from previous steps and only computing the new ones at each decode iteration.
 
-The savings are dramatic. Per layer per token, the work drops from $O(N)$ matmul (compute K and V for all $N$ tokens) to $O(1)$ matmul (compute K and V for just the new token). The attention computation itself drops from $O(N^2)$ per step to $O(N)$ per step — each new query still attends to all $N$ cached keys, but the keys themselves are looked up rather than re-derived. Summed across a $1024$-token decode, the total attention work collapses from $\sum_{i=1}^{1024} i^2 \approx 3.6 \times 10^8$ to $\sum_{i=1}^{1024} i \approx 5.2 \times 10^5$ — **roughly a $700\times$ reduction in attention FLOPs**, plus the savings from never re-projecting K and V. This is the central optimization of LLM inference; everything else stacks on top of it.
+The savings are dramatic. Per layer per token, the work drops from $O(N)$ matmul (compute K and V for all $N$ tokens) to $O(1)$ matmul (compute K and V for just the new token). The attention computation itself drops from $O(N^2)$ per step to $O(N)$ per step, each new query still attends to all $N$ cached keys, but the keys themselves are looked up rather than re-derived. Summed across a $1024$-token decode, the total attention work collapses from $\sum_{i=1}^{1024} i^2 \approx 3.6 \times 10^8$ to $\sum_{i=1}^{1024} i \approx 5.2 \times 10^5$, **roughly a $700\times$ reduction in attention FLOPs**, plus the savings from never re-projecting K and V. This is the central optimization of LLM inference; everything else stacks on top of it.
 
 ### What the cache stores
 
@@ -68,7 +68,7 @@ For every layer, the cache stores the keys and values for every previous positio
 2. Appends the new K and V into the cache slot at position $\text{seq\_len}$,
 3. Computes attention between the new Q and the *full* cache of K and V.
 
-The Q for the new token is the only fresh query in the layer; the keys and values for everything else were paid for once, on the step they were produced. **The KV cache is the model's working memory** — the snapshot of what has been said and how it has been encoded — and after prefill, decode is just lookups against that snapshot plus a small new write each step.
+The Q for the new token is the only fresh query in the layer; the keys and values for everything else were paid for once, on the step they were produced. **The KV cache is the model's working memory**, the snapshot of what has been said and how it has been encoded, and after prefill, decode is just lookups against that snapshot plus a small new write each step.
 
 ### The memory cost
 
@@ -80,13 +80,13 @@ $$\text{KV cache size} = 2 \times L \times H \times d_{\text{head}} \times N \ti
 
 where $L$ is the number of layers, $H$ is the number of attention heads, $d_{\text{head}}$ is the per-head dimension, $N$ is the current sequence length, and batch is the number of concurrent sequences sharing the GPU. In BF16, each entry takes $2$ bytes.
 
-For Llama-7B at $4$K context, plugging in $L = 32$, $H = 32$, $d_{\text{head}} = 128$, $N = 4096$ gives roughly $270$ MB per sequence — manageable. For Llama-70B at $128$K context, with $L = 80$, $H = 64$ (post-GQA), $d_{\text{head}} = 128$, $N = 131072$, the number jumps to roughly $22$ GB *per sequence*. **The KV cache dominates inference memory at long context.** Model weights are fixed regardless of how many users you serve; the cache scales linearly with both context length and concurrent requests. This is the fundamental tension of long-context serving: the algorithmic speedup is enormous, but the price is paid in memory, and at $128$K and beyond the cache becomes the binding constraint on how many concurrent sequences a GPU can hold.
+For Llama-7B at $4$K context, plugging in $L = 32$, $H = 32$, $d_{\text{head}} = 128$, $N = 4096$ gives roughly $270$ MB per sequence, manageable. For Llama-70B at $128$K context, with $L = 80$, $H = 64$ (post-GQA), $d_{\text{head}} = 128$, $N = 131072$, the number jumps to roughly $22$ GB *per sequence*. **The KV cache dominates inference memory at long context.** Model weights are fixed regardless of how many users you serve; the cache scales linearly with both context length and concurrent requests. This is the fundamental tension of long-context serving: the algorithmic speedup is enormous, but the price is paid in memory, and at $128$K and beyond the cache becomes the binding constraint on how many concurrent sequences a GPU can hold.
 
 <WidgetFrame title="KV cache lifecycle" caption="Animated visualization of the cache filling during prefill (all prompt tokens at once) and decode (one new token per step). Concrete example: prompt 'The capital of France is' → generated 'Paris.' Prefill fills 5 slots simultaneously (amber); decode fills 2 more slots one at a time (cyan). Play/pause/reset controls; speed slider. The widget makes the central inference optimization visceral.">
   <KVCacheAnimation client:visible />
 </WidgetFrame>
 
-The runnable cell below simulates the speedup directly. It defines a toy "transformer" — four layers of $W \cdot x$ with a quadratic-attention term — and times $50$ decode steps both ways: recomputing the entire prefix each step versus carrying a KV cache forward. Even on a CPU, even with small dimensions, the recomputation tax is visible. Real transformers see a much larger gap because real attention is genuinely $O(N^2)$ per layer.
+The runnable cell below simulates the speedup directly. It defines a toy "transformer", four layers of $W \cdot x$ with a quadratic-attention term, and times $50$ decode steps both ways: recomputing the entire prefix each step versus carrying a KV cache forward. Even on a CPU, even with small dimensions, the recomputation tax is visible. Real transformers see a much larger gap because real attention is genuinely $O(N^2)$ per layer.
 
 <RunnableCode client:visible>
 ```python
@@ -99,7 +99,7 @@ n_layers = 4
 W = [np.random.normal(0, 0.02, (d_model, d_model)) for _ in range(n_layers)]
 
 def naive_decode_one_step(tokens, weights):
-    """No KV cache — recompute everything for all tokens."""
+    """No KV cache, recompute everything for all tokens."""
     x = tokens                # (seq, d_model)
     for w in weights:
         # Recompute Q, K, V for ALL tokens; attention is O(seq^2) per layer
@@ -107,7 +107,7 @@ def naive_decode_one_step(tokens, weights):
     return x
 
 def cached_decode_one_step(new_token, kv_cache, weights):
-    """With KV cache — process only the new token."""
+    """With KV cache, process only the new token."""
     x = new_token.reshape(1, -1)
     for layer_idx, w in enumerate(weights):
         kv_cache[layer_idx].append(x @ w)
@@ -146,7 +146,7 @@ print(f"For 1024-token sequences, KV cache provides ~700× speedup vs naive.")
 </RunnableCode>
 
 <Callout type="warning">
-**Misconception.** "The KV cache is optional — it's just an optimization." False in any practical sense. **Without the KV cache, inference is roughly $700\times$ slower** for a $1024$-token sequence, and the gap widens with context length. Every modern inference stack uses it; the KV cache *is* what decode means in production. The cost is paid in memory — $O(N)$ per layer per sequence — which is why subsequent optimizations (PagedAttention, KV cache quantization, GQA) target the cache size rather than the algorithm itself.
+**Misconception.** "The KV cache is optional, it's just an optimization." False in any practical sense. **Without the KV cache, inference is roughly $700\times$ slower** for a $1024$-token sequence, and the gap widens with context length. Every modern inference stack uses it; the KV cache *is* what decode means in production. The cost is paid in memory, $O(N)$ per layer per sequence, which is why subsequent optimizations (PagedAttention, KV cache quantization, GQA) target the cache size rather than the algorithm itself.
 </Callout>
 
 The next section steps up a level: given that each request runs decode efficiently, how do you handle many requests at once?
@@ -155,16 +155,16 @@ The next section steps up a level: given that each request runs decode efficient
 
 ### Static, dynamic, continuous
 
-Three batching strategies have dominated, in roughly chronological order. **Static batching** is the simplest: pad every sequence in the batch to the same length and run them as one big matrix. This is easy to implement and trivially correct, but it is wasteful — short sequences burn compute on padding tokens, and the batch only advances at the rate of the *longest* sequence, so any request finishing early just sits idle until the batch is done. **Dynamic batching** improves utilization by grouping incoming requests by similar length and serving each length-bucket as its own static batch. Less padding waste, but the cost is latency: each request has to wait for its bucket to fill before processing begins.
+Three batching strategies have dominated, in roughly chronological order. **Static batching** is the simplest: pad every sequence in the batch to the same length and run them as one big matrix. This is easy to implement and trivially correct, but it is wasteful, short sequences burn compute on padding tokens, and the batch only advances at the rate of the *longest* sequence, so any request finishing early just sits idle until the batch is done. **Dynamic batching** improves utilization by grouping incoming requests by similar length and serving each length-bucket as its own static batch. Less padding waste, but the cost is latency: each request has to wait for its bucket to fill before processing begins.
 
-**Continuous batching** is the modern default, introduced by Yu et al. (2022) in the Orca paper. The idea is iteration-level scheduling instead of request-level scheduling: at each decode step, the serving system re-decides which sequences are in the batch. When a sequence finishes (hits EOS or the max length), its slot is freed immediately; when a new request arrives, it joins the batch at the next step without waiting for anyone else. Prefill and decode for different requests can even interleave on the same batch — prefill of a new request runs alongside decode of established ones, with the scheduler choosing chunk sizes that keep both classes of work flowing. The result is the highest sustained GPU utilization any pre-2022 approach could match while keeping per-request latency low because nothing artificially stalls.
+**Continuous batching** is the modern default, introduced by Yu et al. (2022) in the Orca paper. The idea is iteration-level scheduling instead of request-level scheduling: at each decode step, the serving system re-decides which sequences are in the batch. When a sequence finishes (hits EOS or the max length), its slot is freed immediately; when a new request arrives, it joins the batch at the next step without waiting for anyone else. Prefill and decode for different requests can even interleave on the same batch, prefill of a new request runs alongside decode of established ones, with the scheduler choosing chunk sizes that keep both classes of work flowing. The result is the highest sustained GPU utilization any pre-2022 approach could match while keeping per-request latency low because nothing artificially stalls.
 
 ### The latency vs throughput tradeoff
 
-Even with continuous batching there is no free lunch. **Higher batch size** increases throughput — more requests share each weight-loading round, which is exactly what decode (memory-bound) needs — but per-request latency climbs as the batch crowds shared memory and compute. **Lower batch size** cuts per-request latency but leaves the GPU underutilized, especially during decode. The continuous-batching scheduler walks this tightrope dynamically: fill the batch when there are requests waiting, drain it when there are not, never block a finished sequence behind an unfinished one. The empirically observed sweet spot for a $7$B model on an A100 sits somewhere around batch size $16$ to $64$; for bigger models on bigger hardware the optimum slides around based on memory pressure and the prefill/decode mix.
+Even with continuous batching there is no free lunch. **Higher batch size** increases throughput, more requests share each weight-loading round, which is exactly what decode (memory-bound) needs, but per-request latency climbs as the batch crowds shared memory and compute. **Lower batch size** cuts per-request latency but leaves the GPU underutilized, especially during decode. The continuous-batching scheduler walks this tightrope dynamically: fill the batch when there are requests waiting, drain it when there are not, never block a finished sequence behind an unfinished one. The empirically observed sweet spot for a $7$B model on an A100 sits somewhere around batch size $16$ to $64$; for bigger models on bigger hardware the optimum slides around based on memory pressure and the prefill/decode mix.
 
 <Callout type="note">
-**Continuous batching is what made vLLM, TGI, and SGLang competitive** with closed-source serving systems. Before Orca, public serving stacks faced a brutal choice: accept low GPU utilization to keep latency bounded, or fill big batches and live with high TTFT. Iteration-level scheduling — adding and removing sequences each decode step — broke the dichotomy. Most subsequent serving-system papers (PagedAttention, SGLang, vLLM continuous-prefill chunking) treat continuous batching as the table-stakes baseline rather than a feature.
+**Continuous batching is what made vLLM, TGI, and SGLang competitive** with closed-source serving systems. Before Orca, public serving stacks faced a brutal choice: accept low GPU utilization to keep latency bounded, or fill big batches and live with high TTFT. Iteration-level scheduling, adding and removing sequences each decode step, broke the dichotomy. Most subsequent serving-system papers (PagedAttention, SGLang, vLLM continuous-prefill chunking) treat continuous batching as the table-stakes baseline rather than a feature.
 </Callout>
 
 The next section drops back down to the kernel level: even within a single batched forward pass, the attention computation itself has been re-engineered.
@@ -173,13 +173,13 @@ The next section drops back down to the kernel level: even within a single batch
 
 ### The memory problem
 
-Naive attention computes the full $(N \times N)$ score matrix $QK^T$ as an explicit intermediate, applies softmax row-wise, and multiplies by $V$. For a sequence of length $N = 8192$, that intermediate has $67$M entries, occupying $268$ MB in BF16. **The intermediate is wasteful**: only the final $\text{softmax}(QK^T) V$ output ever leaves the attention block; the full score matrix exists for milliseconds before being thrown away. But on the way there, it has to be written to HBM and read back to apply softmax, then read again to multiply by $V$. At long context, those round trips to HBM eat almost all of the kernel's wall-clock time — the matmul itself is fast; the memory traffic is not.
+Naive attention computes the full $(N \times N)$ score matrix $QK^T$ as an explicit intermediate, applies softmax row-wise, and multiplies by $V$. For a sequence of length $N = 8192$, that intermediate has $67$M entries, occupying $268$ MB in BF16. **The intermediate is wasteful**: only the final $\text{softmax}(QK^T) V$ output ever leaves the attention block; the full score matrix exists for milliseconds before being thrown away. But on the way there, it has to be written to HBM and read back to apply softmax, then read again to multiply by $V$. At long context, those round trips to HBM eat almost all of the kernel's wall-clock time, the matmul itself is fast; the memory traffic is not.
 
 ### Tiling + online softmax
 
 **Flash Attention** (Dao 2022) eliminates the intermediate. The trick has two pieces. First, **tiling**: process attention in blocks of size $B_q \times B_k$ that fit in the GPU's on-chip SRAM rather than its HBM. Second, **online softmax**: maintain a running max and a running sum for each query row so that partial softmax outputs from each tile can be merged into the final answer without ever reconstructing the full row. The output $\text{softmax}(QK^T)V$ is built incrementally as the kernel sweeps over $K$ and $V$ tiles, never materializing the full $(N \times N)$ matrix anywhere outside the on-chip register file.
 
-The effect is two-fold. Memory complexity for the intermediate drops from $O(N^2)$ to $O(N)$, removing the practical ceiling on context length. Wall-clock time drops $2$ to $4\times$ versus naive attention on long sequences because the kernel is no longer pinned by HBM bandwidth. **Flash Attention 2** (Dao 2023) refined the parallelism — better work partitioning across thread blocks and tighter outer loops — for roughly another $2\times$ on top of FA-1. Production frameworks (PyTorch SDPA, vLLM, xFormers, the major training stacks) all default to Flash Attention or an equivalent fused kernel; **the "naive" attention from textbooks is essentially never what runs on a real GPU today**.
+The effect is two-fold. Memory complexity for the intermediate drops from $O(N^2)$ to $O(N)$, removing the practical ceiling on context length. Wall-clock time drops $2$ to $4\times$ versus naive attention on long sequences because the kernel is no longer pinned by HBM bandwidth. **Flash Attention 2** (Dao 2023) refined the parallelism, better work partitioning across thread blocks and tighter outer loops, for roughly another $2\times$ on top of FA-1. Production frameworks (PyTorch SDPA, vLLM, xFormers, the major training stacks) all default to Flash Attention or an equivalent fused kernel; **the "naive" attention from textbooks is essentially never what runs on a real GPU today**.
 
 <Callout type="aside">
 **Misconception.** "Flash Attention is just a faster kernel." It is more than that. By collapsing intermediate memory from $O(N^2)$ to $O(N)$, **Flash Attention changes what's feasible**, not just what's fast. The modern $32$K, $128$K, and $1$M context windows that frontier models advertise are only practical because of Flash Attention or its successors (Ring Attention, sliding-window variants). The kernel rewrite is what unlocked the long-context era; without it, long contexts would still be a research curiosity, not a product feature.
@@ -193,7 +193,7 @@ Flash Attention is the kernel-level lever. The next section covers the second al
 
 Decode is memory-bound. Each step loads the entire weight matrix from HBM, multiplies it against a sequence dimension of one, and spends most of its time waiting on memory. **There is unused compute capacity in every decode step.** Speculative decoding (Leviathan, Kalman & Matias 2023; Chen et al. 2023) is the optimization that converts that unused capacity into throughput. The recipe is short:
 
-1. A small **draft model** — typically $30\times$ to $100\times$ smaller than the target model — generates $k$ candidate tokens autoregressively. Because it is small, this is cheap.
+1. A small **draft model**, typically $30\times$ to $100\times$ smaller than the target model, generates $k$ candidate tokens autoregressively. Because it is small, this is cheap.
 2. The **big model** runs a single forward pass with all $k$ candidates concatenated to the existing context. Same matmuls as a normal decode step but with a sequence dimension of $k$ instead of $1$.
 3. For each position $i = 1, \ldots, k$, compare the big model's distribution to the draft's choice. **Accept** every draft token that matches; on the first **rejection**, replace it with the big model's choice and stop.
 
@@ -201,9 +201,9 @@ The big model emits at least one token per round (the rejected position, replace
 
 ### Why it works
 
-Two facts make the bookkeeping pay off. First, the big model's forward pass with $k$ tokens of input is **only modestly slower** than with $1$ token — the matmuls are the same shape on the weight side, only the sequence dim widens. For a memory-bound regime, $k$ tokens cost almost the same as $1$. Second, **each accepted draft token saves a full big-model forward pass** that the system would otherwise have had to run to produce that same token. As long as the draft model agrees with the big model often enough, the speedup is real. Acceptance rates of $0.6$ to $0.8$ are typical for a well-chosen draft model; below $0.5$ the technique struggles to break even because the draft cost and the rejection probability conspire against you.
+Two facts make the bookkeeping pay off. First, the big model's forward pass with $k$ tokens of input is **only modestly slower** than with $1$ token, the matmuls are the same shape on the weight side, only the sequence dim widens. For a memory-bound regime, $k$ tokens cost almost the same as $1$. Second, **each accepted draft token saves a full big-model forward pass** that the system would otherwise have had to run to produce that same token. As long as the draft model agrees with the big model often enough, the speedup is real. Acceptance rates of $0.6$ to $0.8$ are typical for a well-chosen draft model; below $0.5$ the technique struggles to break even because the draft cost and the rejection probability conspire against you.
 
-The version in Chen et al. (2023) goes one step further: a rejection-sampling correction guarantees that the resulting token distribution is **exactly** what the big model alone would produce. Speculative decoding under this scheme is not an approximation — **it is mathematically equivalent to the original decoder, just faster**. That property is what made the technique a deployment-ready optimization rather than a quality-throughput tradeoff.
+The version in Chen et al. (2023) goes one step further: a rejection-sampling correction guarantees that the resulting token distribution is **exactly** what the big model alone would produce. Speculative decoding under this scheme is not an approximation, **it is mathematically equivalent to the original decoder, just faster**. That property is what made the technique a deployment-ready optimization rather than a quality-throughput tradeoff.
 
 ### The speedup formula
 
@@ -213,7 +213,7 @@ The expected speedup can be written:
 $$\text{Speedup} = \frac{1 + \text{expected accepted tokens}}{1 + k \cdot (\text{draft cost / big cost}) + \text{overhead}}$$
 </Equation>
 
-Numerator: tokens committed per round. Denominator: cost per round in units of one big-model forward pass. With $k = 5$, acceptance rate $\alpha = 0.7$, and a draft model $50\times$ cheaper than the big one, the formula gives roughly $2.5\times$ speedup — large enough to matter, modest enough to be honest about the engineering work required to capture it.
+Numerator: tokens committed per round. Denominator: cost per round in units of one big-model forward pass. With $k = 5$, acceptance rate $\alpha = 0.7$, and a draft model $50\times$ cheaper than the big one, the formula gives roughly $2.5\times$ speedup, large enough to matter, modest enough to be honest about the engineering work required to capture it.
 
 <RunnableCode client:visible>
 ```python
@@ -262,7 +262,7 @@ print("- Too-high k can hurt: draft cost accumulates, acceptance drops over hori
 </WidgetFrame>
 
 <Callout type="warning">
-**Misconception.** "Speculative decoding always speeds up inference." False — **speedup depends on the draft model's acceptance rate**, and a poorly chosen draft can lose. If the draft rarely agrees with the big model, every round pays for $k$ draft passes *plus* a big-model verification *plus* a rejection, with no token throughput gain. Practical acceptance must be above roughly $60\%$ for a net win. Choosing a draft is itself a research problem — recent variants (Medusa, EAGLE) train the draft jointly with the target to push acceptance above $80\%$.
+**Misconception.** "Speculative decoding always speeds up inference." False: **speedup depends on the draft model's acceptance rate**, and a poorly chosen draft can lose. If the draft rarely agrees with the big model, every round pays for $k$ draft passes *plus* a big-model verification *plus* a rejection, with no token throughput gain. Practical acceptance must be above roughly $60\%$ for a net win. Choosing a draft is itself a research problem, recent variants (Medusa, EAGLE) train the draft jointly with the target to push acceptance above $80\%$.
 </Callout>
 
 The next section turns to memory: even with KV cache and Flash Attention, how do you actually lay it all out across many concurrent requests?
@@ -271,11 +271,11 @@ The next section turns to memory: even with KV cache and Flash Attention, how do
 
 ### The fragmentation problem
 
-A naive KV cache allocator reserves a contiguous memory block per sequence, sized for the maximum context that sequence might reach. Sequences arrive and finish at different times with different actual lengths, so the freed-up blocks are different sizes than the incoming ones need — **classic memory fragmentation**, the same phenomenon that motivated paged virtual memory in operating systems. At low concurrency it is annoying; at production scale, with hundreds of overlapping sequences, the GPU ends up unable to admit new requests despite having plenty of total free memory.
+A naive KV cache allocator reserves a contiguous memory block per sequence, sized for the maximum context that sequence might reach. Sequences arrive and finish at different times with different actual lengths, so the freed-up blocks are different sizes than the incoming ones need, **classic memory fragmentation**, the same phenomenon that motivated paged virtual memory in operating systems. At low concurrency it is annoying; at production scale, with hundreds of overlapping sequences, the GPU ends up unable to admit new requests despite having plenty of total free memory.
 
 ### Pages, like an OS
 
-**PagedAttention** (Kwon et al. 2023, vLLM) borrows the OS solution directly. Allocate the KV cache in fixed-size **pages** — typically $16$ tokens each — and let a sequence's cache be a *list* of pages, not necessarily contiguous in physical memory. A page table maps logical positions in the sequence to physical pages. When a sequence finishes, its pages return to a free pool and are reusable by anyone, regardless of the next request's length. Fragmentation effectively vanishes.
+**PagedAttention** (Kwon et al. 2023, vLLM) borrows the OS solution directly. Allocate the KV cache in fixed-size **pages**, typically $16$ tokens each, and let a sequence's cache be a *list* of pages, not necessarily contiguous in physical memory. A page table maps logical positions in the sequence to physical pages. When a sequence finishes, its pages return to a free pool and are reusable by anyone, regardless of the next request's length. Fragmentation effectively vanishes.
 
 Pages buy something the contiguous layout could not. **Shared prefixes**: when many requests share a common system prompt or few-shot prefix, the corresponding KV cache pages can be shared across sequences with copy-on-write semantics. A single copy of the system prompt's cache serves all users; only the per-user suffix needs new pages. **Higher concurrency**: $2$ to $4\times$ more sequences fit on the same GPU than under contiguous allocation, depending on the workload mix. **Dynamic memory pressure**: when a long-running sequence demands more pages than expected, the scheduler can swap out other sequences' pages, much like an OS swaps memory under pressure.
 
@@ -283,24 +283,24 @@ Pages buy something the contiguous layout could not. **Shared prefixes**: when m
 
 A short, opinionated map of the production landscape:
 
-- **vLLM** — open source; introduced PagedAttention; the default starting point for self-hosted serving in $2024$–$2026$.
-- **TGI** (Hugging Face Text Generation Inference) — production-focused, multi-LoRA serving, deep Hugging Face Hub integration.
-- **SGLang** — adds a programming-language abstraction for complex multi-step LLM workflows on top of efficient inference.
-- **TensorRT-LLM** (NVIDIA) — aggressive kernel-level optimization tuned for NVIDIA hardware; the choice when you have NVIDIA-only deployments and want the last drop of throughput.
+- **vLLM**, open source; introduced PagedAttention; the default starting point for self-hosted serving in $2024$–$2026$.
+- **TGI** (Hugging Face Text Generation Inference), production-focused, multi-LoRA serving, deep Hugging Face Hub integration.
+- **SGLang**, adds a programming-language abstraction for complex multi-step LLM workflows on top of efficient inference.
+- **TensorRT-LLM** (NVIDIA), aggressive kernel-level optimization tuned for NVIDIA hardware; the choice when you have NVIDIA-only deployments and want the last drop of throughput.
 
-For most teams the answer is vLLM unless there is a specific reason to reach elsewhere. Larger organizations mix and match — or build proprietary stacks — but the underlying primitives (continuous batching, paged KV cache, Flash Attention, speculative decoding) are common across every serious option.
+For most teams the answer is vLLM unless there is a specific reason to reach elsewhere. Larger organizations mix and match, or build proprietary stacks, but the underlying primitives (continuous batching, paged KV cache, Flash Attention, speculative decoding) are common across every serious option.
 
 <Callout type="aside">
-**Misconception.** "PagedAttention is just a memory layout trick." It is more — **PagedAttention enables $2$ to $4\times$ throughput on the same hardware**, and it is the foundation for prefix-sharing, multi-LoRA serving, and the kind of high-concurrency workloads that production teams actually run. The OS analogy is exact rather than cute: pages, page tables, copy-on-write, swap-out under pressure. Treat the layout idea as the surface and the throughput unlock as the substance.
+**Misconception.** "PagedAttention is just a memory layout trick." It is more, **PagedAttention enables $2$ to $4\times$ throughput on the same hardware**, and it is the foundation for prefix-sharing, multi-LoRA serving, and the kind of high-concurrency workloads that production teams actually run. The OS analogy is exact rather than cute: pages, page tables, copy-on-write, swap-out under pressure. Treat the layout idea as the surface and the throughput unlock as the substance.
 </Callout>
 
 The final section ties the optimizations together and sets up the next two chapters.
 
 ## Exercises
 
-Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default — try the problem first.
+Four exercises that lock in the chapter's machinery. Each is a self-contained problem with a starting template; hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — KV cache memory calculator
+### Exercise 1 (easy): KV cache memory calculator
 
 Implement the KV cache memory formula and compute the cache size for various model sizes and context lengths.
 
@@ -354,12 +354,12 @@ contexts = [1024, 4096, 32768, 131072]
 # - Llama-70B: ~22 GB
 #
 # This is per sequence. Batch 16: multiply by 16.
-# This is why long-context serving is expensive — memory dominates.
+# This is why long-context serving is expensive: memory dominates.
 `}
   packages={[]}
 />
 
-### Exercise 2 (medium) — Naive vs cached decoding
+### Exercise 2 (medium): Naive vs cached decoding
 
 Implement naive decoding (recompute everything per token) and cached decoding (reuse stored K, V). Compare timing.
 
@@ -385,7 +385,7 @@ n_layers = 4
 W = [np.random.normal(0, 0.02, (d_model, d_model)) for _ in range(n_layers)]
 
 def naive_decode_step(all_tokens, weights):
-    """Process ALL tokens through all layers — no cache."""
+    """Process ALL tokens through all layers, no cache."""
     # TODO: simulate naive forward; cost O(seq^2)
     pass
 
@@ -425,7 +425,7 @@ cached_time = time.time() - cached_start
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Speculative speedup formula
+### Exercise 3 (medium): Speculative speedup formula
 
 Implement the speculative decoding speedup formula and verify it matches the widget's behavior.
 
@@ -485,7 +485,7 @@ ALPHA_VALUES = [0.3, 0.5, 0.7, 0.9]
   packages={[]}
 />
 
-### Exercise 4 (hard) — Continuous batching simulator
+### Exercise 4 (hard): Continuous batching simulator
 
 Simulate continuous batching: a fixed-size batch of decode requests where each request finishes at a different time. Track GPU utilization vs naive batching (wait for the longest request to finish before starting a new batch).
 
@@ -604,19 +604,19 @@ def naive_batching(requests):
 
 A modern production inference stack combines:
 
-- A **distilled or quantized model** (Ch 16, Ch 18) — smaller compute and memory base.
-- **KV cache** with **PagedAttention** — efficient algorithmic decode and efficient memory layout.
-- **Continuous batching** — high sustained GPU utilization across variable-length requests.
-- **Flash Attention** — fused, memory-aware kernels that make long context practical.
-- **Speculative decoding** — amortize big-model passes across multiple committed tokens.
-- **Custom sampling logic** (Ch 19) — temperature, top-p, top-k, constrained decoding, JSON-mode.
+- A **distilled or quantized model** (Ch 16, Ch 18), smaller compute and memory base.
+- **KV cache** with **PagedAttention**, efficient algorithmic decode and efficient memory layout.
+- **Continuous batching**: high sustained GPU utilization across variable-length requests.
+- **Flash Attention**, fused, memory-aware kernels that make long context practical.
+- **Speculative decoding**: amortize big-model passes across multiple committed tokens.
+- **Custom sampling logic** (Ch 19), temperature, top-p, top-k, constrained decoding, JSON-mode.
 
-The combined effect on the same hardware is roughly $5\times$ to $10\times$ throughput versus a naive baseline — sometimes more, depending on workload. A $70$B model on a single A100 with a naive stack delivers around $50$ tokens per second; the same hardware running a fully optimized stack delivers $200$ to $500$. **The model is identical. The system around it is different. That is the lever.**
+The combined effect on the same hardware is roughly $5\times$ to $10\times$ throughput versus a naive baseline, sometimes more, depending on workload. A $70$B model on a single A100 with a naive stack delivers around $50$ tokens per second; the same hardware running a fully optimized stack delivers $200$ to $500$. **The model is identical. The system around it is different. That is the lever.**
 
 ### What's next
 
-**Chapter 18** narrows in on a specific category of optimization: **quantization**. Where this chapter targeted wasted computation, Ch 18 targets bits per parameter — INT8, INT4, NF4, AWQ, GPTQ. The compositional story matters: quantization stacks multiplicatively with the inference-stack optimizations here, often giving another $2$ to $4\times$ throughput improvement on top of what this chapter establishes. **Chapter 19** turns to the sampling layer — how the decoder actually picks a token given the logits the model produced. Temperature, top-p, top-k, beam search, structured-output constraints. Together with this chapter, those three chapters make up the full Phase 12 serving stack.
+**Chapter 18** narrows in on a specific category of optimization: **quantization**. Where this chapter targeted wasted computation, Ch 18 targets bits per parameter, INT8, INT4, NF4, AWQ, GPTQ. The compositional story matters: quantization stacks multiplicatively with the inference-stack optimizations here, often giving another $2$ to $4\times$ throughput improvement on top of what this chapter establishes. **Chapter 19** turns to the sampling layer, how the decoder actually picks a token given the logits the model produced. Temperature, top-p, top-k, beam search, structured-output constraints. Together with this chapter, those three chapters make up the full Phase 12 serving stack.
 
 After Phase 12, the curriculum opens into the second half: capabilities (Ch 20–23), safety and evaluation (Ch 24–26), and agents (Ch 27–30). The lessons here will recur: an agent loop is a sequence of inference calls, and the cost economics of every later chapter depend on whether the serving layer underneath them is the naive $5$ tokens-per-second or the production $500$.
 
-Inference optimization is what separates a research artifact from a production system. A trained model is a mathematical object; **serving it efficiently is engineering**. The optimizations covered here — KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention — are not optional flourishes. They are the difference between a $5$-token-per-second toy and a $500$-token-per-second production service on the same chip. **Phase 12 is the chapter cluster where that difference gets paid for**, and Ch 17 is its foundation.
+Inference optimization is what separates a research artifact from a production system. A trained model is a mathematical object; **serving it efficiently is engineering**. The optimizations covered here, KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention, are not optional flourishes. They are the difference between a $5$-token-per-second toy and a $500$-token-per-second production service on the same chip. **Phase 12 is the chapter cluster where that difference gets paid for**, and Ch 17 is its foundation.
