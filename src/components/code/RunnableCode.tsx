@@ -3,9 +3,52 @@ import type { CSSProperties } from 'react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { python } from '@codemirror/lang-python';
+import { tags as t } from '@lezer/highlight';
 import { runPython } from '@lib/pyodide';
 import styles from './RunnableCode.module.css';
+
+/* Token colors mirror Shiki's github-dark-dimmed output so RunnableCode
+ * widgets read identically to the static fenced code blocks Shiki renders
+ * server-side. Hex values are taken from observed Shiki output, not the
+ * design-system palette — keeping the two code surfaces visually identical
+ * across the site. */
+const shikiDimmedHighlight = HighlightStyle.define([
+  { tag: t.comment, color: '#768390', fontStyle: 'italic' },
+  { tag: t.lineComment, color: '#768390', fontStyle: 'italic' },
+  { tag: t.blockComment, color: '#768390', fontStyle: 'italic' },
+  { tag: t.docString, color: '#96D0FF' },
+  { tag: t.string, color: '#96D0FF' },
+  { tag: t.special(t.string), color: '#96D0FF' },
+  { tag: t.regexp, color: '#96D0FF' },
+  { tag: t.escape, color: '#F69D50' },
+  { tag: t.number, color: '#6CB6FF' },
+  { tag: t.bool, color: '#6CB6FF' },
+  { tag: t.null, color: '#6CB6FF' },
+  { tag: t.atom, color: '#6CB6FF' },
+  { tag: t.keyword, color: '#F47067' },
+  { tag: t.controlKeyword, color: '#F47067' },
+  { tag: t.definitionKeyword, color: '#F47067' },
+  { tag: t.moduleKeyword, color: '#F47067' },
+  { tag: t.modifier, color: '#F47067' },
+  { tag: t.operator, color: '#F47067' },
+  { tag: t.operatorKeyword, color: '#F47067' },
+  { tag: t.self, color: '#F47067', fontStyle: 'italic' },
+  { tag: t.function(t.variableName), color: '#6CB6FF' },
+  { tag: t.function(t.propertyName), color: '#6CB6FF' },
+  { tag: t.className, color: '#F69D50' },
+  { tag: t.typeName, color: '#6CB6FF' },
+  { tag: t.namespace, color: '#ADBAC7' },
+  { tag: t.definition(t.variableName), color: '#ADBAC7' },
+  { tag: t.variableName, color: '#ADBAC7' },
+  { tag: t.propertyName, color: '#ADBAC7' },
+  { tag: t.punctuation, color: '#ADBAC7' },
+  { tag: t.bracket, color: '#ADBAC7' },
+  { tag: t.derefOperator, color: '#ADBAC7' },
+  { tag: t.meta, color: '#DCBDFB' },
+  { tag: t.invalid, color: '#FF938A' },
+]);
 
 export interface RunnableCodeProps {
   defaultCode: string;
@@ -43,6 +86,7 @@ export default function RunnableCode({
         lineNumbers(),
         history(),
         python(),
+        syntaxHighlighting(shikiDimmedHighlight),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         EditorView.editable.of(!readonly),
         EditorView.theme(
