@@ -1,40 +1,40 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch08-building-small-llm
-description: Chapters 1-6 built the architecture; Chapter 7 built the data pipeline. This chapter combines them with the training mathematics — cross-entropy loss, AdamW, learning rate schedules, gradient clipping — into a complete, runnable training loop. By the end, you've trained (and sampled from) a small LLM.
+description: Chapters 1-6 built the architecture; Chapter 7 built the data pipeline. This chapter combines them with the training mathematics (cross-entropy loss, AdamW, learning rate schedules, gradient clipping) into a complete, runnable training loop. By the end, you've trained (and sampled from) a small LLM.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { LossCurve, OptimizerComparison } from '@components/widgets';
 
-Seven chapters in, the pieces are on the bench. Chapters 1-6 built the architecture — embeddings, attention, the transformer block, positional encoding. Chapter 7 built the data pipeline — web text filtered, deduplicated, decontaminated into a clean corpus. What is missing is the part where the architecture *learns from* the data. That gap is this chapter.
+Seven chapters in, the pieces are on the bench. Chapters 1-6 built the architecture: embeddings, attention, the transformer block, positional encoding. Chapter 7 built the data pipeline: web text filtered, deduplicated, decontaminated into a clean corpus. What is missing is the part where the architecture *learns from* the data. That gap is this chapter.
 
-The training loop is short. Maybe sixty lines for a small model. But every line carries decisions that took roughly a decade of LLM research to settle. The loss function — cross-entropy on next-token prediction — is settled. The optimizer — AdamW with specific betas — is settled. The schedule — linear warmup into cosine decay — is settled. Gradient clipping at norm $1.0$ is settled. These choices were not obvious in 2017; by 2024 they are the default that every open frontier lab converges on. This chapter is the walk through *why* each one matters.
+The training loop is short. Maybe sixty lines for a small model. But every line carries decisions that took roughly a decade of LLM research to settle. The loss function, cross-entropy on next-token prediction, is settled. The optimizer, AdamW with specific betas, is settled. The schedule, linear warmup into cosine decay, is settled. Gradient clipping at norm $1.0$ is settled. These choices were not obvious in 2017; by 2024 they are the default that every open frontier lab converges on. This chapter is the walk through *why* each one matters.
 
-The chapter's reference implementation is GPT-2-style — a faithful, simplified nanoGPT — that runs on a laptop. After about an hour of training on a small corpus, the model goes from gibberish ("xqz mfn the the the") to grammatical English. The marquee widget in section 7 lets you scrub through that trajectory: watch the loss drop, watch the generated samples improve, watch random noise turn into a working language model in real time.
+The chapter's reference implementation is GPT-2-style, a faithful, simplified nanoGPT, that runs on a laptop. After about an hour of training on a small corpus, the model goes from gibberish ("xqz mfn the the the") to grammatical English. The marquee widget in section 7 lets you scrub through that trajectory: watch the loss drop, watch the generated samples improve, watch random noise turn into a working language model in real time.
 
 The chapter is also the most code-heavy in the tutorial. Six runnable code blocks, each implementing one of the components above. The earlier chapters were "what the model *is*"; this chapter is "how to make it *work*."
 
-## The setup — what we're about to do
+## The setup: what we're about to do
 
-What the reader has, after seven chapters, is a parameterized function. A transformer block (Chapter 5) stacked $N$ times, with positional information either added to the input (sinusoidal or learned) or applied inside attention (RoPE, Chapter 6). A tokenizer (Chapter 3) and embeddings (Chapter 2). A training corpus from Chapter 7 — billions of tokens of curated web text, ready to feed in. The architecture is wired correctly. A forward pass runs cleanly and produces a probability distribution over the vocabulary at every position. What it does *not* do, yet, is anything useful.
+What the reader has, after seven chapters, is a parameterized function. A transformer block (Chapter 5) stacked $N$ times, with positional information either added to the input (sinusoidal or learned) or applied inside attention (RoPE, Chapter 6). A tokenizer (Chapter 3) and embeddings (Chapter 2). A training corpus from Chapter 7, billions of tokens of curated web text, ready to feed in. The architecture is wired correctly. A forward pass runs cleanly and produces a probability distribution over the vocabulary at every position. What it does *not* do, yet, is anything useful.
 
-Every weight matrix in that architecture is still random. The Q, K, V projections inside every attention head; the FFN up- and down-projections; the embedding rows; the layer norm scales. All sampled from a small-variance normal at initialization. The model's outputs reflect that — feed it a prompt and the next-token distribution is nearly uniform, with maybe a slight bias from however the embedding lookup happened to land. The function has the right *shape* to be a language model. It does not yet have the right *values* to be a useful one.
+Every weight matrix in that architecture is still random. The Q, K, V projections inside every attention head; the FFN up- and down-projections; the embedding rows; the layer norm scales. All sampled from a small-variance normal at initialization. The model's outputs reflect that: feed it a prompt and the next-token distribution is nearly uniform, with maybe a slight bias from however the embedding lookup happened to land. The function has the right *shape* to be a language model. It does not yet have the right *values* to be a useful one.
 
 Training is what moves the values. Specifically: training defines a *loss* that measures how badly the model predicts the corpus, computes the *gradient* of that loss with respect to every parameter, and takes a small step in the direction that reduces the loss. Repeat for billions of steps. Slowly the random initialization gets sculpted into weights that produce coherent text. That is the whole game. The chapter unpacks what each of those words means in practice.
 
-The pieces decompose cleanly. A **loss function** measures prediction error per token — cross-entropy on next-token prediction is the canonical choice. An **optimizer** uses the gradient to update parameters — AdamW is the modern default. A **learning rate schedule** controls how big each step is at each point in training — linear warmup into cosine decay is the standard recipe. A few **stability tricks** keep things from blowing up — gradient clipping, mixed precision, gradient accumulation. The full **training loop** assembles these into the iteration that runs for the whole training budget. **Sampling** turns the trained model back into text at inference time.
+The pieces decompose cleanly. A **loss function** measures prediction error per token; cross-entropy on next-token prediction is the canonical choice. An **optimizer** uses the gradient to update parameters; AdamW is the modern default. A **learning rate schedule** controls how big each step is at each point in training; linear warmup into cosine decay is the standard recipe. A few **stability tricks** keep things from blowing up: gradient clipping, mixed precision, gradient accumulation. The full **training loop** assembles these into the iteration that runs for the whole training budget. **Sampling** turns the trained model back into text at inference time.
 
-"Small" is worth pinning down. In 2024, frontier models are tens of billions to roughly a trillion parameters; LLaMA-3 8B is 8 billion. This chapter targets ten million to a hundred million — three to four orders of magnitude smaller. Small models train on a laptop in hours; frontier models train on GPU clusters for weeks. The training *recipe*, though, is the same. The loss is the same loss; the optimizer is the same optimizer; the schedule is the same schedule. What changes at the frontier is the engineering — distributed training, custom kernels, careful failure recovery — covered in Chapters 9 and 10. The mathematics of training are settled, and the small-model recipe in this chapter is the recipe.
+"Small" is worth pinning down. In 2024, frontier models are tens of billions to roughly a trillion parameters; LLaMA-3 8B is 8 billion. This chapter targets ten million to a hundred million, three to four orders of magnitude smaller. Small models train on a laptop in hours; frontier models train on GPU clusters for weeks. The training *recipe*, though, is the same. The loss is the same loss; the optimizer is the same optimizer; the schedule is the same schedule. What changes at the frontier is the engineering (distributed training, custom kernels, careful failure recovery), covered in Chapters 9 and 10. The mathematics of training are settled, and the small-model recipe in this chapter is the recipe.
 
 <Callout type="note">
-This chapter is the most code-heavy in the tutorial. The reference training loop in section 7 is roughly sixty lines of PyTorch that you can run as written, with a tokenizer and dataset loader supplied. If reading PyTorch is not yet second nature, work through the numpy implementations in sections 2, 4, 5, and 6 first — they are the same algorithms in a less opaque framework. The PyTorch capstone in section 7 is the production form; the numpy snippets are the pedagogical form.
+This chapter is the most code-heavy in the tutorial. The reference training loop in section 7 is roughly sixty lines of PyTorch that you can run as written, with a tokenizer and dataset loader supplied. If reading PyTorch is not yet second nature, work through the numpy implementations in sections 2, 4, 5, and 6 first; they are the same algorithms in a less opaque framework. The PyTorch capstone in section 7 is the production form; the numpy snippets are the pedagogical form.
 </Callout>
 
 The first thing training needs is a definition of "wrong." Section 2 is the loss.
 
-## The objective — cross-entropy loss for next-token prediction
+## The objective: cross-entropy loss for next-token prediction
 
 ### The likelihood
 
@@ -42,9 +42,9 @@ A language model is, formally, a probability distribution over sequences. For a 
 
 $$p_\theta(x_1, \ldots, x_T) = \prod_{t=1}^T p_\theta(x_t \mid x_1, \ldots, x_{t-1}).$$
 
-Each factor is the model's predicted distribution for the next token, given all prior tokens. The chain rule of probability makes this factoring exact — no approximation. The architectural choice (causal attention masking, autoregressive generation) is what makes the *computation* of each factor tractable in a single forward pass.
+Each factor is the model's predicted distribution for the next token, given all prior tokens. The chain rule of probability makes this factoring exact, no approximation. The architectural choice (causal attention masking, autoregressive generation) is what makes the *computation* of each factor tractable in a single forward pass.
 
-**Training** is maximum likelihood estimation on this joint. Given a training corpus, find the $\theta$ that assigns the highest probability to the actual text. Equivalently — and more numerically convenient — minimize the *negative log* likelihood:
+**Training** is maximum likelihood estimation on this joint. Given a training corpus, find the $\theta$ that assigns the highest probability to the actual text. Equivalently, and more numerically convenient, minimize the *negative log* likelihood:
 
 <Equation label="8.loss">
 $$\mathcal{L}(\theta) = -\sum_{t=1}^T \log p_\theta(x_t \mid x_1, \ldots, x_{t-1}).$$
@@ -54,23 +54,23 @@ This is one sequence's contribution to the loss. The full training loss averages
 
 ### Cross-entropy per position
 
-At each position $t$, the model produces a vector of logits over the vocabulary — call it $z_t \in \mathbb{R}^V$ where $V$ is the vocabulary size. The softmax of those logits gives the predicted distribution $\hat{p}_t = \softmax(z_t)$. If $y_t$ is the true next token, the loss at position $t$ is $-\log \hat{p}_t[y_t]$ — the negative log probability the model assigns to the correct answer.
+At each position $t$, the model produces a vector of logits over the vocabulary, call it $z_t \in \mathbb{R}^V$ where $V$ is the vocabulary size. The softmax of those logits gives the predicted distribution $\hat{p}_t = \softmax(z_t)$. If $y_t$ is the true next token, the loss at position $t$ is $-\log \hat{p}_t[y_t]$, the negative log probability the model assigns to the correct answer.
 
 A useful reframe: $-\log \hat{p}_t[y_t]$ is the model's *surprise* at token $y_t$. Low surprise (the model already expected this token) means low loss; high surprise (the model was off-base) means high loss. Training is the program of reducing average surprise across every token in the corpus.
 
-In practice, the loss is computed from logits directly rather than from probabilities. Computing softmax explicitly and then taking the log is numerically dicey — small probabilities round to zero in floating point, and $\log(0)$ is $-\infty$. The fused log-softmax + negative-log-likelihood operation uses the log-sum-exp identity:
+In practice, the loss is computed from logits directly rather than from probabilities. Computing softmax explicitly and then taking the log is numerically dicey: small probabilities round to zero in floating point, and $\log(0)$ is $-\infty$. The fused log-softmax + negative-log-likelihood operation uses the log-sum-exp identity:
 
 $$-\log \hat{p}_t[y_t] = -z_t[y_t] + \log\sum_v \exp(z_t[v]),$$
 
 which is numerically stable when paired with the standard max-subtraction trick inside the log-sum-exp. Every modern framework (`torch.nn.functional.cross_entropy`, `optax.softmax_cross_entropy_with_integer_labels`) provides this fused form. You should always use it.
 
-The compute matters. For a batch of $B$ sequences of length $T$ over a vocabulary of size $V$, the loss involves $B \cdot T$ per-position predictions, each over $V$ classes. For GPT-2 — $V \approx 50{,}000$, $T = 1024$, $B = 32$ — that is $32 \cdot 1024 = 32{,}768$ predictions per training step, each a softmax over $50{,}000$ entries. The cross-entropy and the final output projection are a non-trivial fraction of total forward-pass compute, and for very large vocabularies they can dominate. Modern training stacks fuse the projection and the cross-entropy aggressively for this reason.
+The compute matters. For a batch of $B$ sequences of length $T$ over a vocabulary of size $V$, the loss involves $B \cdot T$ per-position predictions, each over $V$ classes. For GPT-2 ($V \approx 50{,}000$, $T = 1024$, $B = 32$), that is $32 \cdot 1024 = 32{,}768$ predictions per training step, each a softmax over $50{,}000$ entries. The cross-entropy and the final output projection are a non-trivial fraction of total forward-pass compute, and for very large vocabularies they can dominate. Modern training stacks fuse the projection and the cross-entropy aggressively for this reason.
 
 ### Why this loss specifically
 
 Cross-entropy is the *calibrated* loss for probabilistic prediction. Minimizing it is equivalent to minimizing the KL divergence between the model's predicted distribution and the empirical one-hot distribution that puts all mass on the true next token. The mathematics says: the model is being asked to match a target distribution, not to merely rank the right answer at the top.
 
-The alternatives have problems. **MSE on logits** treats the output as a regression target — squared error between predicted logits and a target vector. That is the wrong objective: nothing in MSE encodes the constraint that the output should be a probability distribution, and MSE will happily train a model whose logits are correct in scale but uncalibrated in distribution. **Hinge loss** only penalizes the margin between the correct logit and the next-highest; it produces good *classifiers* but bad *probability estimators*. **Contrastive losses** can train good representations but do not directly optimize next-token likelihood, which is what generation actually needs.
+The alternatives have problems. **MSE on logits** treats the output as a regression target, squared error between predicted logits and a target vector. That is the wrong objective: nothing in MSE encodes the constraint that the output should be a probability distribution, and MSE will happily train a model whose logits are correct in scale but uncalibrated in distribution. **Hinge loss** only penalizes the margin between the correct logit and the next-highest; it produces good *classifiers* but bad *probability estimators*. **Contrastive losses** can train good representations but do not directly optimize next-token likelihood, which is what generation actually needs.
 
 Cross-entropy is the right loss because language modeling is, at the bottom, a calibrated probability prediction problem. Generation samples from the predicted distribution; if the distribution is miscalibrated, sampling is bad. Cross-entropy targets the distribution directly, and the empirical record from 2017 onward shows it works.
 
@@ -86,8 +86,8 @@ def softmax(x, axis=-1):
 
 def cross_entropy(logits, targets):
     """
-    logits:  (n, vocab_size) — predicted logits at each position
-    targets: (n,)            — true token indices
+    logits:  (n, vocab_size), predicted logits at each position
+    targets: (n,)           , true token indices
     Returns: average cross-entropy loss (scalar).
     """
     probs = softmax(logits, axis=-1)
@@ -107,26 +107,26 @@ random_baseline = -np.log(1 / vocab_size)
 print(f"Cross-entropy on random logits, random targets: {loss:.4f}")
 print(f"Theoretical baseline (uniform over {vocab_size}):  {random_baseline:.4f}")
 print(f"\\nA random-init language model produces loss ≈ baseline initially.")
-print(f"Training drives this down — well-trained models reach loss < 3 on text.")
+print(f"Training drives this down, well-trained models reach loss < 3 on text.")
 `}
   packages={["numpy"]}
   height={420}
 />
 
 <Callout type="warning">
-"Cross-entropy loss is computed once per sequence" is a tempting simplification and it is wrong. The loss is computed at *every position* in the sequence — for a batch of $B$ sequences of length $T$, that is $B \cdot T$ predictions, each a softmax over the full vocabulary. The per-sequence loss is the *sum* (or average) of those per-position losses. For a typical GPT-2 step ($B = 32$, $T = 1024$, $V \approx 50{,}000$), the cross-entropy and the final output projection together are a meaningful fraction of forward-pass compute — never an afterthought at the end.
+"Cross-entropy loss is computed once per sequence" is a tempting simplification and it is wrong. The loss is computed at *every position* in the sequence, for a batch of $B$ sequences of length $T$, that is $B \cdot T$ predictions, each a softmax over the full vocabulary. The per-sequence loss is the *sum* (or average) of those per-position losses. For a typical GPT-2 step ($B = 32$, $T = 1024$, $V \approx 50{,}000$), the cross-entropy and the final output projection together are a meaningful fraction of forward-pass compute, never an afterthought at the end.
 </Callout>
 
 The loss is a scalar. To reduce it, training needs the gradient of that scalar with respect to every parameter. That is the forward pass and its backward partner.
 
-## The forward pass — tokens to loss
+## The forward pass: tokens to loss
 
 The full forward pass is a sequence of operations that the reader has already met across the previous chapters, now lined up end to end. Token IDs come in; a scalar loss comes out; every intermediate operation contributes a gradient that backprop will compose into a gradient for every parameter.
 
 The pipeline:
 
 1. **Token IDs to embeddings** (Chapter 2). For each token ID $x_t$, look up its row in the embedding matrix $W_E \in \mathbb{R}^{V \times d}$. Output: a sequence of $d$-dimensional vectors, one per token.
-2. **Add positional information** (Chapter 6). Either add a positional encoding to each embedding (sinusoidal or learned), or — for RoPE — leave the input alone and apply rotation inside attention layers later. The chapter's reference implementation uses learned positional embeddings, matching the original GPT-2.
+2. **Add positional information** (Chapter 6). Either add a positional encoding to each embedding (sinusoidal or learned), or, for RoPE, leave the input alone and apply rotation inside attention layers later. The chapter's reference implementation uses learned positional embeddings, matching the original GPT-2.
 3. **Run $N$ transformer blocks** (Chapter 5). Each block does multi-head attention with residual + layer norm, then a feedforward network with residual + layer norm. The block transforms a sequence of $d$-vectors into another sequence of $d$-vectors of the same shape. Stacking $N$ of them gives the model depth.
 4. **Final layer norm**, applied once after the last block. Standard in Pre-LN architectures; helps stabilize the output projection.
 5. **Output projection to logits**. A linear layer $W_O \in \mathbb{R}^{d \times V}$ maps each $d$-vector to a $V$-dimensional logit vector. Output: a tensor of shape $(B, T, V)$.
@@ -136,29 +136,29 @@ The "input shift" is the small but important detail that ties this together for 
 
 ### Parallel prediction across positions
 
-A single forward pass produces $T$ predictions, not one. The output tensor has shape $(B, T, V)$: at every position $t \in \{0, 1, \ldots, T-1\}$, the model emits a full vocabulary distribution over what token should come next. Position $t$'s logits are scored against the actual token at position $t+1$, and the cross-entropy loss sums the per-position losses across all $T$ positions and across all $B$ sequences in the batch. A batch of size $B = 32$ at sequence length $T = 1024$ produces $32 \cdot 1024 = 32{,}768$ supervised training examples per step — not $32$. This density is why next-token prediction is so sample-efficient as a self-supervised objective: every token in the corpus is simultaneously an *input* (it conditions the prediction at every later position) and a *label* (it is the prediction target for the position before it).
+A single forward pass produces $T$ predictions, not one. The output tensor has shape $(B, T, V)$: at every position $t \in \{0, 1, \ldots, T-1\}$, the model emits a full vocabulary distribution over what token should come next. Position $t$'s logits are scored against the actual token at position $t+1$, and the cross-entropy loss sums the per-position losses across all $T$ positions and across all $B$ sequences in the batch. A batch of size $B = 32$ at sequence length $T = 1024$ produces $32 \cdot 1024 = 32{,}768$ supervised training examples per step, not $32$. This density is why next-token prediction is so sample-efficient as a self-supervised objective: every token in the corpus is simultaneously an *input* (it conditions the prediction at every later position) and a *label* (it is the prediction target for the position before it).
 
-Each of those $T$ predictions sees a *different amount* of context. Position $0$'s prediction is computed from just one token of context. Position $1$'s prediction is computed from two tokens. Position $T - 1$'s prediction is computed from the full preceding sequence of $T$ tokens. The "how do we reconcile different positions having different context lengths" question dissolves once you see that this is exactly the design: the model is trained simultaneously on prediction problems of every difficulty, from "predict the second token given only the first" (hard, often ambiguous, high loss) to "predict the next token given a thousand tokens of preceding context" (much easier, lower loss). Averaging the loss across all positions teaches the model to be useful at every context length it will face during generation — including the very short prefixes it sees at the start of a generation, where there is little to condition on, and the long prefixes it sees deep into a response.
+Each of those $T$ predictions sees a *different amount* of context. Position $0$'s prediction is computed from just one token of context. Position $1$'s prediction is computed from two tokens. Position $T - 1$'s prediction is computed from the full preceding sequence of $T$ tokens. The "how do we reconcile different positions having different context lengths" question dissolves once you see that this is exactly the design: the model is trained simultaneously on prediction problems of every difficulty, from "predict the second token given only the first" (hard, often ambiguous, high loss) to "predict the next token given a thousand tokens of preceding context" (much easier, lower loss). Averaging the loss across all positions teaches the model to be useful at every context length it will face during generation, including the very short prefixes it sees at the start of a generation, where there is little to condition on, and the long prefixes it sees deep into a response.
 
-**Causal masking** is the mechanism that makes this parallel training honest. Without intervention, the attention mechanism from Chapter 4 would let position $5$ freely attend to position $6$'s key and value — that is, it would let the model's prediction *at* position $5$ peek directly at the very token it is supposed to be predicting. The model would learn a trivial "look one to the right" function and the training signal would be worthless. The causal mask prevents this by zeroing out the attention weights from each position to all *later* positions. In practice, before the softmax inside the attention block, the model adds a triangular mask that sets the pre-softmax attention scores to $-\infty$ for all pairs $(t, t')$ with $t' > t$; after the softmax, those entries become exactly zero, and so position $t$'s attention output depends only on positions $0, 1, \ldots, t$. Causal masking is what lets a single forward pass legitimately compute $T$ predictions in parallel: each position is forced to predict from a causally-restricted prefix that exactly matches the situation it would face at inference time.
+**Causal masking** is the mechanism that makes this parallel training honest. Without intervention, the attention mechanism from Chapter 4 would let position $5$ freely attend to position $6$'s key and value, that is, it would let the model's prediction *at* position $5$ peek directly at the very token it is supposed to be predicting. The model would learn a trivial "look one to the right" function and the training signal would be worthless. The causal mask prevents this by zeroing out the attention weights from each position to all *later* positions. In practice, before the softmax inside the attention block, the model adds a triangular mask that sets the pre-softmax attention scores to $-\infty$ for all pairs $(t, t')$ with $t' > t$; after the softmax, those entries become exactly zero, and so position $t$'s attention output depends only on positions $0, 1, \ldots, t$. Causal masking is what lets a single forward pass legitimately compute $T$ predictions in parallel: each position is forced to predict from a causally-restricted prefix that exactly matches the situation it would face at inference time.
 
-A useful mental picture: a forward pass is $T$ separate prediction problems running side by side, sharing weights and sharing the computation graph up to the final per-position projection that produces each position's logits. Causal masking is what severs the lateral information flow that would otherwise let those $T$ problems trivially leak labels into each other. The cost of the masking is essentially nothing — a static triangular mask added before softmax, the same mask reused at every layer and every step of training — and the benefit is the entire reason transformers train so efficiently: $T$-fold supervision from a single forward-backward pass.
+A useful mental picture: a forward pass is $T$ separate prediction problems running side by side, sharing weights and sharing the computation graph up to the final per-position projection that produces each position's logits. Causal masking is what severs the lateral information flow that would otherwise let those $T$ problems trivially leak labels into each other. The cost of the masking is essentially nothing, a static triangular mask added before softmax, the same mask reused at every layer and every step of training, and the benefit is the entire reason transformers train so efficiently: $T$-fold supervision from a single forward-backward pass.
 
 <Callout type="note">
-The causal mask is what differentiates the **decoder-only** transformer used for language modeling from the **encoder** transformer used for tasks like BERT-style masked language modeling. Encoders attend bidirectionally — every position sees every other position — because their objective ("fill in this masked token given the surrounding context") is *not* next-token prediction. Decoders attend causally because their objective *is* next-token prediction, and bidirectional attention would trivially leak the label. The same attention mechanism powers both; the mask is the architectural switch that selects which kind of model you are training.
+The causal mask is what differentiates the **decoder-only** transformer used for language modeling from the **encoder** transformer used for tasks like BERT-style masked language modeling. Encoders attend bidirectionally, every position sees every other position, because their objective ("fill in this masked token given the surrounding context") is *not* next-token prediction. Decoders attend causally because their objective *is* next-token prediction, and bidirectional attention would trivially leak the label. The same attention mechanism powers both; the mask is the architectural switch that selects which kind of model you are training.
 </Callout>
 
-The backward pass is the mirror image of the forward. Auto-differentiation (Chapter 1) walks the computation graph backward from the loss scalar, applying the chain rule at each operation. Cross-entropy's gradient with respect to logits is $\hat{p}_t - \mathbf{1}_{y_t}$ — the predicted distribution minus the one-hot true distribution. That tidy expression flows backward through the output projection, through the final layer norm, through the stack of blocks, all the way down to the embedding matrix. At each parameter, the chain rule accumulates the parameter's contribution to the loss. After backward, every weight in the model has an attached gradient and the optimizer can step.
+The backward pass is the mirror image of the forward. Auto-differentiation (Chapter 1) walks the computation graph backward from the loss scalar, applying the chain rule at each operation. Cross-entropy's gradient with respect to logits is $\hat{p}_t - \mathbf{1}_{y_t}$, the predicted distribution minus the one-hot true distribution. That tidy expression flows backward through the output projection, through the final layer norm, through the stack of blocks, all the way down to the embedding matrix. At each parameter, the chain rule accumulates the parameter's contribution to the loss. After backward, every weight in the model has an attached gradient and the optimizer can step.
 
-Memory is the constraint that dominates this whole computation. For backprop to work, the framework must keep the activations produced during forward — every block's outputs, every attention's keys and values, every intermediate — so they are available when their gradients are needed. The memory for those activations grows linearly with depth, linearly with sequence length, and roughly linearly with batch size. For a 100M-parameter model at sequence length $1024$ and batch size $32$, the activations alone can run into the gigabytes. This is why **gradient checkpointing** (recompute activations on the backward instead of storing them) and **mixed precision** (store activations in 16-bit instead of 32-bit) matter at scale. Section 6 covers mixed precision; Chapter 10 covers checkpointing and the rest of the memory tooling.
+Memory is the constraint that dominates this whole computation. For backprop to work, the framework must keep the activations produced during forward, every block's outputs, every attention's keys and values, every intermediate, so they are available when their gradients are needed. The memory for those activations grows linearly with depth, linearly with sequence length, and roughly linearly with batch size. For a 100M-parameter model at sequence length $1024$ and batch size $32$, the activations alone can run into the gigabytes. This is why **gradient checkpointing** (recompute activations on the backward instead of storing them) and **mixed precision** (store activations in 16-bit instead of 32-bit) matter at scale. Section 6 covers mixed precision; Chapter 10 covers checkpointing and the rest of the memory tooling.
 
 <Callout type="note">
-**Weight tying.** Most modern transformers (including the chapter's reference) tie the **input embedding matrix** $W_E$ and the **output projection matrix** $W_O$ — the same parameters serve both lookup and unembedding, just transposed. The intuition is that both matrices live in the "token meaning" space, and there is no good reason to learn the same information twice. The savings are real: at GPT-2 scale, weight tying drops about $50$M parameters with no measured cost to quality. Llama and later open models keep this convention.
+**Weight tying.** Most modern transformers (including the chapter's reference) tie the **input embedding matrix** $W_E$ and the **output projection matrix** $W_O$, the same parameters serve both lookup and unembedding, just transposed. The intuition is that both matrices live in the "token meaning" space, and there is no good reason to learn the same information twice. The savings are real: at GPT-2 scale, weight tying drops about $50$M parameters with no measured cost to quality. Llama and later open models keep this convention.
 </Callout>
 
 That is the forward pass at the level of operations. The full implementation is the capstone code in section 7; it composes the building blocks from prior chapters with the loss from section 2 and runs them end to end. With the loss computable and gradients available, the next question is how to take steps.
 
-## The optimizer — from SGD to Adam to AdamW
+## The optimizer: from SGD to Adam to AdamW
 
 ### Why not SGD
 
@@ -166,11 +166,11 @@ Stochastic gradient descent is the textbook starting point. At each step, with g
 
 $$\theta_{t+1} = \theta_t - \alpha g_t.$$
 
-Subtract the gradient, scaled by a learning rate. Simple, universal, theoretically well-understood. SGD works fine for many problems — image classification with CNNs, for instance, was trained with SGD + momentum for years. It does not work well for transformers, and the reasons are specific.
+Subtract the gradient, scaled by a learning rate. Simple, universal, theoretically well-understood. SGD works fine for many problems, image classification with CNNs, for instance, was trained with SGD + momentum for years. It does not work well for transformers, and the reasons are specific.
 
 **Adaptive scale is missing.** SGD applies the same learning rate to every parameter. Inside a transformer, different parameters need wildly different update magnitudes: the embedding rows for rare tokens see almost no gradient signal and need large updates when they do; the layer norm scales get strong signal every step and want small updates. A single learning rate that works for both is hard to find, and tuning the rate becomes prohibitively expensive at scale.
 
-**No momentum.** Vanilla SGD has no memory of prior gradients. Each step is determined by the current minibatch alone. For transformers, gradients across minibatches are noisy — different sequences in different batches give wildly different per-parameter signals. Plain SGD bounces around in response, and convergence suffers. Momentum-SGD ($m_t = \beta m_{t-1} + g_t$, $\theta_{t+1} = \theta_t - \alpha m_t$) partly fixes this by averaging gradients across steps, but it still leaves the adaptive-scale problem.
+**No momentum.** Vanilla SGD has no memory of prior gradients. Each step is determined by the current minibatch alone. For transformers, gradients across minibatches are noisy: different sequences in different batches give wildly different per-parameter signals. Plain SGD bounces around in response, and convergence suffers. Momentum-SGD ($m_t = \beta m_{t-1} + g_t$, $\theta_{t+1} = \theta_t - \alpha m_t$) partly fixes this by averaging gradients across steps, but it still leaves the adaptive-scale problem.
 
 **Tuning sensitivity at scale.** Even with momentum, SGD on a transformer requires careful per-layer or per-parameter learning rate scheduling. Practitioners report that getting SGD to train a transformer to GPT-2-class loss values requires substantial tuning that adaptive optimizers do for free. Past a few hundred million parameters, almost no one tries.
 
@@ -178,7 +178,7 @@ The modern transformer recipe is Adam (Kingma & Ba 2014, [arxiv.org/abs/1412.698
 
 ### Adam
 
-Adam maintains, for every parameter, two extra state variables: the first moment $m_t$ (an exponentially weighted moving average of the gradient — the momentum-like term) and the second moment $v_t$ (an exponentially weighted moving average of the *squared* gradient — the adaptive-rate term).
+Adam maintains, for every parameter, two extra state variables: the first moment $m_t$ (an exponentially weighted moving average of the gradient, the momentum-like term) and the second moment $v_t$ (an exponentially weighted moving average of the *squared* gradient, the adaptive-rate term).
 
 The updates:
 
@@ -193,15 +193,15 @@ The parameter update uses the bias-corrected estimates:
 
 $$\theta_{t+1} = \theta_t - \alpha \cdot \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}.$$
 
-Two properties of this formula are doing the work. **Direction smoothing**: $\hat{m}_t$ averages over recent gradients, damping the noise that single-batch SGD would propagate. **Per-parameter adaptive scale**: $\sqrt{\hat{v}_t}$ normalizes by historical gradient magnitude, so a parameter with consistently large gradients gets *smaller* effective steps and a parameter with consistently rare gradients gets *larger* effective steps. The result is that Adam needs much less learning-rate tuning than SGD — the optimizer figures out the per-parameter scale on its own.
+Two properties of this formula are doing the work. **Direction smoothing**: $\hat{m}_t$ averages over recent gradients, damping the noise that single-batch SGD would propagate. **Per-parameter adaptive scale**: $\sqrt{\hat{v}_t}$ normalizes by historical gradient magnitude, so a parameter with consistently large gradients gets *smaller* effective steps and a parameter with consistently rare gradients gets *larger* effective steps. The result is that Adam needs much less learning-rate tuning than SGD: the optimizer figures out the per-parameter scale on its own.
 
 The Adam defaults from the original paper are $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$. Transformer practice has shifted: $\beta_2 = 0.95$ is now standard for LLMs, on the empirical observation that the lower $\beta_2$ adapts faster to gradient magnitude changes and produces better-trained models.
 
-### AdamW — decoupled weight decay
+### AdamW: decoupled weight decay
 
 Adam plus L2 regularization should, in principle, be a small modification: add $\lambda \theta$ to the gradient before the optimizer step, and the optimizer behaves as if minimizing $\mathcal{L} + \frac{\lambda}{2} \|\theta\|^2$. This is exactly what most implementations did from 2014 to 2017, and it is exactly what AdamW (Loshchilov & Hutter 2017) showed is wrong.
 
-The problem is subtle. The L2 gradient $\lambda \theta$ gets added to the data gradient $g_t$, the sum gets squared and accumulated in $v_t$, and then the update is divided by $\sqrt{\hat{v}_t}$. The L2 contribution gets divided by the same $\sqrt{\hat{v}_t}$ that the data gradient is divided by, which means the *effective weight decay rate* becomes parameter-specific — large for parameters with small $\hat{v}_t$, small for parameters with large $\hat{v}_t$. That is not what L2 regularization is supposed to do. L2 regularization is supposed to apply a uniform shrinkage; Adam + L2 applies a non-uniform shrinkage shaped by gradient history.
+The problem is subtle. The L2 gradient $\lambda \theta$ gets added to the data gradient $g_t$, the sum gets squared and accumulated in $v_t$, and then the update is divided by $\sqrt{\hat{v}_t}$. The L2 contribution gets divided by the same $\sqrt{\hat{v}_t}$ that the data gradient is divided by, which means the *effective weight decay rate* becomes parameter-specific, large for parameters with small $\hat{v}_t$, small for parameters with large $\hat{v}_t$. That is not what L2 regularization is supposed to do. L2 regularization is supposed to apply a uniform shrinkage; Adam + L2 applies a non-uniform shrinkage shaped by gradient history.
 
 AdamW's fix is to apply weight decay as a separate, decoupled step:
 
@@ -215,7 +215,7 @@ The first term is the decoupled decay: shrink $\theta$ by a constant factor $(1 
 
 Empirically AdamW produces measurably better-trained models than Adam + L2 at the same nominal hyperparameters. The Loshchilov-Hutter paper showed the gap clearly on image classification; subsequent transformer practice (GPT-3, LLaMA, Mistral, every open frontier model) confirmed it for language modeling. The convention has flipped: AdamW is the default, Adam-plus-L2 is the historical mistake, and weight decay rates for LLMs are now meaningfully higher ($\lambda = 0.1$ is standard) than they were in pre-2018 practice.
 
-<WidgetFrame title="Optimizer comparison" caption="Three optimizers navigating the same ill-conditioned 2D loss landscape: SGD, Adam, and AdamW. The function has 10× more curvature in x than y. Watch how SGD oscillates badly, Adam smooths the path via adaptive scaling, and AdamW takes the same smooth path but ends at a point slightly pulled toward the origin — the visible effect of decoupled weight decay. Click any optimizer card to focus on it.">
+<WidgetFrame title="Optimizer comparison" caption="Three optimizers navigating the same ill-conditioned 2D loss landscape: SGD, Adam, and AdamW. The function has 10× more curvature in x than y. Watch how SGD oscillates badly, Adam smooths the path via adaptive scaling, and AdamW takes the same smooth path but ends at a point slightly pulled toward the origin, the visible effect of decoupled weight decay. Click any optimizer card to focus on it.">
   <OptimizerComparison client:visible />
 </WidgetFrame>
 
@@ -271,12 +271,12 @@ print(f"With weight_decay = 0 the converged value would be exactly 3.")
 </Callout>
 
 <Callout type="aside">
-The Adam paper's default $\beta_2 = 0.999$ is *not* the LLM default. Modern transformer training uses $\beta_2 = 0.95$. The lower value makes $\hat{v}_t$ adapt faster to gradient magnitude changes, which empirically helps transformers converge better — especially at the beginning of training, when gradient statistics are shifting rapidly. The convention is consistent enough across open implementations (nanoGPT, GPT-NeoX, Llama codebases) to be treated as standard. $\beta_1 = 0.9$ stays unchanged.
+The Adam paper's default $\beta_2 = 0.999$ is *not* the LLM default. Modern transformer training uses $\beta_2 = 0.95$. The lower value makes $\hat{v}_t$ adapt faster to gradient magnitude changes, which empirically helps transformers converge better, especially at the beginning of training, when gradient statistics are shifting rapidly. The convention is consistent enough across open implementations (nanoGPT, GPT-NeoX, Llama codebases) to be treated as standard. $\beta_1 = 0.9$ stays unchanged.
 </Callout>
 
 The learning rate $\alpha$ in AdamW is not a constant. It changes at every step, following a fixed schedule. That schedule is the next section.
 
-## Learning rate schedules — warmup + cosine decay
+## Learning rate schedules: warmup + cosine decay
 
 The peak learning rate is a hyperparameter, and it depends on model size. Empirically, $\alpha_{\max} \approx 6 \cdot 10^{-4}$ works for $\sim 125$M-parameter models; $\alpha_{\max} \approx 3 \cdot 10^{-4}$ for $\sim 1.3$B; $\alpha_{\max} \approx 1 \cdot 10^{-4}$ for $7$B and above. The pattern is that larger models want smaller peak rates, which holds across most published recipes from GPT-2 onward. The chapter's reference model is small (around 50M parameters), and the configuration uses $\alpha_{\max} = 6 \cdot 10^{-4}$.
 
@@ -286,11 +286,11 @@ The schedule has two phases. A **linear warmup** ramps the learning rate from ze
 $$\alpha(t) = \begin{cases} \alpha_{\max} \cdot \dfrac{t}{W} & \text{if } t < W \\ \alpha_{\min} + \dfrac{1}{2}(\alpha_{\max} - \alpha_{\min})\left(1 + \cos\!\left(\pi \cdot \dfrac{t - W}{T - W}\right)\right) & \text{if } W \leq t \leq T \end{cases}$$
 </Equation>
 
-**Warmup.** At step zero, every parameter in the model is random. The gradient at step zero is, correspondingly, garbage — high variance, partly because the loss landscape near random initialization has steep features, partly because batch statistics dominate when no parameter has been refined yet. Taking a full-size optimizer step on that gradient frequently destabilizes training (loss spikes, NaN propagation, parameter blowups). Linear warmup starts at $\alpha = 0$, so the first step takes essentially no step, and the rate grows linearly until step $W$ when the model has "found a reasonable region" of parameter space and the full peak rate is safe. Warmup was originally introduced (Goyal et al. 2017, [arxiv.org/abs/1706.02677](https://arxiv.org/abs/1706.02677)) for large-batch training, where the problem is most acute; the lesson generalized and is now standard at every batch size.
+**Warmup.** At step zero, every parameter in the model is random. The gradient at step zero is, correspondingly, garbage, high variance, partly because the loss landscape near random initialization has steep features, partly because batch statistics dominate when no parameter has been refined yet. Taking a full-size optimizer step on that gradient frequently destabilizes training (loss spikes, NaN propagation, parameter blowups). Linear warmup starts at $\alpha = 0$, so the first step takes essentially no step, and the rate grows linearly until step $W$ when the model has "found a reasonable region" of parameter space and the full peak rate is safe. Warmup was originally introduced (Goyal et al. 2017, [arxiv.org/abs/1706.02677](https://arxiv.org/abs/1706.02677)) for large-batch training, where the problem is most acute; the lesson generalized and is now standard at every batch size.
 
 **Cosine decay.** After warmup, the rate decays following a half-cosine: a smooth, monotonic curve from $\alpha_{\max}$ down to $\alpha_{\min}$. The intuition: late in training, the model is close to a good minimum and wants to fine-tune with small steps; cosine provides that without the abrupt transitions of step-decay schedules (which have been shown to cause loss "step changes" right at the boundary). Cosine annealing was introduced by Loshchilov & Hutter 2016 ([arxiv.org/abs/1608.03983](https://arxiv.org/abs/1608.03983)) and has been the default transformer schedule since.
 
-**Typical values.** Warmup of $W = 2000$ steps for medium-scale models is standard; very large models use up to $10{,}000$. The floor $\alpha_{\min}$ is conventionally about $10\%$ of $\alpha_{\max}$ — small enough to fine-tune, large enough to keep making progress. The total steps $T$ is the training budget, chosen to consume the available training tokens at the chosen batch size. For a $50$M model trained on $1$B tokens with $32$k tokens per step, $T = 1$B$/32$k $\approx 31{,}000$ steps; for the chapter's demo configuration ($T = 100{,}000$) that would be a $3.2$B-token budget.
+**Typical values.** Warmup of $W = 2000$ steps for medium-scale models is standard; very large models use up to $10{,}000$. The floor $\alpha_{\min}$ is conventionally about $10\%$ of $\alpha_{\max}$, small enough to fine-tune, large enough to keep making progress. The total steps $T$ is the training budget, chosen to consume the available training tokens at the chosen batch size. For a $50$M model trained on $1$B tokens with $32$k tokens per step, $T = 1$B$/32$k $\approx 31{,}000$ steps; for the chapter's demo configuration ($T = 100{,}000$) that would be a $3.2$B-token budget.
 
 <RunnableCode
   client:visible
@@ -328,20 +328,20 @@ print(f"Ratio (max / min):                           {lr_schedule(2000) / lr_sch
 />
 
 <Callout type="note">
-Warmup is now considered essential for transformer training, but it was not always seen that way. Goyal et al. 2017 introduced linear warmup specifically for *large-batch* training, where naive scaling of the learning rate caused divergence. The lesson turned out to generalize: warmup helps at every batch size, and skipping it produces noticeably worse models even when training does not visibly diverge. The empirical conclusion has held for nearly a decade — never skip warmup for transformer training, even when you think you can.
+Warmup is now considered essential for transformer training, but it was not always seen that way. Goyal et al. 2017 introduced linear warmup specifically for *large-batch* training, where naive scaling of the learning rate caused divergence. The lesson turned out to generalize: warmup helps at every batch size, and skipping it produces noticeably worse models even when training does not visibly diverge. The empirical conclusion has held for nearly a decade, never skip warmup for transformer training, even when you think you can.
 </Callout>
 
-The schedule controls *step size*. There is also the question of what happens when a step would be too large in a different sense — when an outlier batch produces a gradient much bigger than usual. That is the next section's stability story.
+The schedule controls *step size*. There is also the question of what happens when a step would be too large in a different sense, when an outlier batch produces a gradient much bigger than usual. That is the next section's stability story.
 
-## Training stability — clipping, mixed precision, accumulation
+## Training stability: clipping, mixed precision, accumulation
 
 Three stability techniques are non-negotiable in modern transformer training. None of them changes the loss or the optimizer; each one keeps a particular failure mode from killing the run.
 
 ### Gradient clipping
 
-Outlier batches happen. Some particular minibatch — maybe one with an unusually long sequence, maybe one with unusual content — produces a gradient that is much larger than the typical gradient. Without intervention, that gradient triggers a much larger parameter update, which in turn destabilizes the model: the loss spikes upward at the next step, sometimes recovers, sometimes propagates into NaN or Inf values and the run is dead.
+Outlier batches happen. Some particular minibatch, maybe one with an unusually long sequence, maybe one with unusual content, produces a gradient that is much larger than the typical gradient. Without intervention, that gradient triggers a much larger parameter update, which in turn destabilizes the model: the loss spikes upward at the next step, sometimes recovers, sometimes propagates into NaN or Inf values and the run is dead.
 
-The fix is to bound the gradient norm. Before the optimizer step, compute $\|g\|_2$ — the L2 norm of the *full* gradient (concatenated across all parameters). If it exceeds a threshold $c$, scale the entire gradient down to norm $c$:
+The fix is to bound the gradient norm. Before the optimizer step, compute $\|g\|_2$, the L2 norm of the *full* gradient (concatenated across all parameters). If it exceeds a threshold $c$, scale the entire gradient down to norm $c$:
 
 $$g \leftarrow g \cdot \min\!\left(1, \frac{c}{\|g\|_2}\right).$$
 
@@ -349,11 +349,11 @@ The direction is preserved; the magnitude is capped. Standard $c = 1.0$ for tran
 
 ### Mixed precision
 
-Modern hardware (NVIDIA Tensor Cores from Volta onward, TPUs, every recent GPU generation) executes FP16 or BF16 matrix multiplications much faster than FP32. Mixed-precision training (Micikevicius et al. 2018, [arxiv.org/abs/1710.03740](https://arxiv.org/abs/1710.03740)) uses this: forward and backward passes run in FP16 or BF16, which halves memory bandwidth and roughly doubles matmul throughput. The optimizer state — the master copies of the parameters, the AdamW first and second moments — stays in FP32. The hardware does the matmuls in low precision; the optimizer does the updates in high precision. The result: faster training, less memory, no accuracy loss versus pure FP32.
+Modern hardware (NVIDIA Tensor Cores from Volta onward, TPUs, every recent GPU generation) executes FP16 or BF16 matrix multiplications much faster than FP32. Mixed-precision training (Micikevicius et al. 2018, [arxiv.org/abs/1710.03740](https://arxiv.org/abs/1710.03740)) uses this: forward and backward passes run in FP16 or BF16, which halves memory bandwidth and roughly doubles matmul throughput. The optimizer state, the master copies of the parameters, the AdamW first and second moments, stays in FP32. The hardware does the matmuls in low precision; the optimizer does the updates in high precision. The result: faster training, less memory, no accuracy loss versus pure FP32.
 
-The non-negotiable detail is the FP32 master weights. Pure FP16 throughout loses too much precision in the optimizer state: the second moment $v_t$ accumulates products of small numbers, and FP16's narrow representable range makes that accumulation drift. Training silently degrades — the loss curve looks fine on the first pass, but the trained model is worse than a pure-FP32 training run would have produced. The mix is what makes mixed precision work; FP16 alone does not.
+The non-negotiable detail is the FP32 master weights. Pure FP16 throughout loses too much precision in the optimizer state: the second moment $v_t$ accumulates products of small numbers, and FP16's narrow representable range makes that accumulation drift. Training silently degrades: the loss curve looks fine on the first pass, but the trained model is worse than a pure-FP32 training run would have produced. The mix is what makes mixed precision work; FP16 alone does not.
 
-BF16 (bfloat16) has the same number of exponent bits as FP32, just fewer mantissa bits. It has worse precision than FP16 in the typical range but a much wider representable range. For LLM training, BF16 has effectively replaced FP16 because the dynamic range matters more than precision — gradient values vary across many orders of magnitude, and FP16 sometimes underflows or overflows in a way that BF16 does not. On A100, H100, TPU v4+, BF16 is the modern default.
+BF16 (bfloat16) has the same number of exponent bits as FP32, just fewer mantissa bits. It has worse precision than FP16 in the typical range but a much wider representable range. For LLM training, BF16 has effectively replaced FP16 because the dynamic range matters more than precision: gradient values vary across many orders of magnitude, and FP16 sometimes underflows or overflows in a way that BF16 does not. On A100, H100, TPU v4+, BF16 is the modern default.
 
 ### Gradient accumulation
 
@@ -369,9 +369,9 @@ torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 optimizer.step()
 ```
 
-Dividing the loss by `accum_steps` is the part that occasionally trips people up. The backward pass accumulates gradients into `.grad` automatically — calling `.backward()` four times sums four gradients. To match the gradient that a single batch of size $32$ would have produced, each of the eight micro-batch losses needs to contribute $1/8$ of the gradient. Hence the division.
+Dividing the loss by `accum_steps` is the part that occasionally trips people up. The backward pass accumulates gradients into `.grad` automatically, calling `.backward()` four times sums four gradients. To match the gradient that a single batch of size $32$ would have produced, each of the eight micro-batch losses needs to contribute $1/8$ of the gradient. Hence the division.
 
-Gradient accumulation has no downsides at the loss level — the trained model is identical to one trained at the same effective batch size on bigger hardware — but it has compute downsides: $8$ micro-batches take more wall-clock time than one batch of equivalent size on hardware that can hold it. The technique exists because memory is the binding constraint more often than compute.
+Gradient accumulation has no downsides at the loss level (the trained model is identical to one trained at the same effective batch size on bigger hardware), but it has compute downsides: $8$ micro-batches take more wall-clock time than one batch of equivalent size on hardware that can hold it. The technique exists because memory is the binding constraint more often than compute.
 
 <RunnableCode
   client:visible
@@ -405,7 +405,7 @@ print(f"Without clipping, the outlier would produce a 100x larger optimizer step
 />
 
 <Callout type="warning">
-"Mixed precision is just FP16" is the misconception that has cost real training runs. Mixed precision uses FP16 or BF16 for the *forward and backward passes* — the parts that benefit from faster matmuls — but keeps the **master weights and optimizer state in FP32**. Without the FP32 state, the AdamW second moment $v_t$ accumulates floating-point error, and the trained model silently underperforms. PyTorch's `torch.cuda.amp` and `bfloat16` autocast machinery, and JAX's mixed-precision tooling, all enforce this mix automatically — but only if you use them as intended. Implementing "mixed precision" by casting everything to FP16 manually is a route to bad models.
+"Mixed precision is just FP16" is the misconception that has cost real training runs. Mixed precision uses FP16 or BF16 for the *forward and backward passes*, the parts that benefit from faster matmuls, but keeps the **master weights and optimizer state in FP32**. Without the FP32 state, the AdamW second moment $v_t$ accumulates floating-point error, and the trained model silently underperforms. PyTorch's `torch.cuda.amp` and `bfloat16` autocast machinery, and JAX's mixed-precision tooling, all enforce this mix automatically, but only if you use them as intended. Implementing "mixed precision" by casting everything to FP16 manually is a route to bad models.
 </Callout>
 
 The loss, the optimizer, the schedule, and the stability tools are all the pieces. The next section is the loop that wires them together.
@@ -416,7 +416,7 @@ The loss, the optimizer, the schedule, and the stability tools are all the piece
 
 The training loop is shorter than the prose explaining it. At each step, the loop:
 
-1. **Get a batch.** The data loader produces input tokens `x` and target tokens `y` (shape `(B, T)` each — `y` is `x` shifted by one position).
+1. **Get a batch.** The data loader produces input tokens `x` and target tokens `y` (shape `(B, T)` each, `y` is `x` shifted by one position).
 2. **Update the learning rate** according to the schedule.
 3. **Forward pass.** Run the model on `x`, get logits of shape `(B, T, V)`.
 4. **Compute loss.** Cross-entropy of logits against `y`, averaged over all $B \cdot T$ positions.
@@ -426,11 +426,11 @@ The training loop is shorter than the prose explaining it. At each step, the loo
 8. **Log periodically.** Step number, learning rate, training loss; every few thousand steps, validation loss.
 9. **Repeat** for the configured number of total steps.
 
-That is the entire control flow. A "step" is one optimizer update — one pass through the nine items above. The total number of training tokens is `B * T * total_steps`. For GPT-2 small ($B = 32$, $T = 1024$, $\text{total\_steps} = 100{,}000$), the loop processes roughly $3.3$B tokens total — about $20$ tokens per parameter at GPT-2's $124$M, which is in the Chinchilla scaling regime (Chapter 9 covers the derivation).
+That is the entire control flow. A "step" is one optimizer update, one pass through the nine items above. The total number of training tokens is `B * T * total_steps`. For GPT-2 small ($B = 32$, $T = 1024$, $\text{total\_steps} = 100{,}000$), the loop processes roughly $3.3$B tokens total, about $20$ tokens per parameter at GPT-2's $124$M, which is in the Chinchilla scaling regime (Chapter 9 covers the derivation).
 
 ### Running the loop
 
-A trained reader has, after reading the prose so far, an architecture from Chapter 5 and a tokenized corpus from Chapter 7. With those two and a `TrainConfig`, the reference implementation runs end to end. The code below is intentionally close to nanoGPT — minimal, runnable, and structured to make every step traceable to the prose.
+A trained reader has, after reading the prose so far, an architecture from Chapter 5 and a tokenized corpus from Chapter 7. With those two and a `TrainConfig`, the reference implementation runs end to end. The code below is intentionally close to nanoGPT, minimal, runnable, and structured to make every step traceable to the prose.
 
 <WidgetFrame title="Training trajectory" caption="A small character-level transformer training on Tiny Shakespeare for 5000 steps. The loss curve drops from random baseline (~4.4) to ~1.2. Sample text generations at 9 snapshots show the model progressing from pure random characters to coherent Shakespeare-style dialogue. Scrub through training to watch the model improve, or hit Play to auto-advance.">
   <LossCurve client:visible />
@@ -439,9 +439,9 @@ A trained reader has, after reading the prose so far, an architecture from Chapt
 <RunnableCode
   client:visible
   defaultCode={`# A simplified nanoGPT-style training loop.
-# Assumes:  model        — any GPT-style decoder-only transformer
-#           train_data   — provides .get_batch() -> (x, y) of shape (B, T)
-#           cfg          — a TrainConfig instance
+# Assumes:  model       : any GPT-style decoder-only transformer
+#           train_data  : provides .get_batch() -> (x, y) of shape (B, T)
+#           cfg         : a TrainConfig instance
 
 import math
 import torch
@@ -457,7 +457,7 @@ class TrainConfig:
     log_interval = 100
 
 def lr_at(step, cfg):
-    """Linear warmup into cosine decay — the standard transformer schedule."""
+    """Linear warmup into cosine decay, the standard transformer schedule."""
     if step < cfg.warmup_steps:
         return cfg.max_lr * (step / cfg.warmup_steps)
     progress = (step - cfg.warmup_steps) / (cfg.total_steps - cfg.warmup_steps)
@@ -516,15 +516,15 @@ print("Reference training loop loaded. See comments for usage.")
   height={620}
 />
 
-A few details in the code are worth pointing at explicitly. The **parameter-group split** (`decay` and `no_decay`) is the convention that weight decay applies only to matrices (`p.dim() >= 2`) and never to biases or layer-norm scales. Biases and norm scales are one-dimensional; decaying them tends to hurt performance because they are meant to take arbitrary task-driven values. Splitting param groups is one line of bookkeeping in PyTorch and worth getting right. The **betas** `(0.9, 0.95)` reflect the LLM convention (not Adam's $0.999$ default). The **input shift** is implicit — `train_data.get_batch()` is expected to return `(x, y)` already paired, with `y` being `x` shifted by one position. The **logits reshape** `logits.view(-1, V)` flattens the batch and time dimensions into one — `F.cross_entropy` expects `(N, V)` and `(N,)`, where `N = B*T`.
+A few details in the code are worth pointing at explicitly. The **parameter-group split** (`decay` and `no_decay`) is the convention that weight decay applies only to matrices (`p.dim() >= 2`) and never to biases or layer-norm scales. Biases and norm scales are one-dimensional; decaying them tends to hurt performance because they are meant to take arbitrary task-driven values. Splitting param groups is one line of bookkeeping in PyTorch and worth getting right. The **betas** `(0.9, 0.95)` reflect the LLM convention (not Adam's $0.999$ default). The **input shift** is implicit, `train_data.get_batch()` is expected to return `(x, y)` already paired, with `y` being `x` shifted by one position. The **logits reshape** `logits.view(-1, V)` flattens the batch and time dimensions into one, `F.cross_entropy` expects `(N, V)` and `(N,)`, where `N = B*T`.
 
 <Callout type="note">
-The reference is GPT-2-style — no RoPE, learned positional embeddings, GELU activations in the FFN, LayerNorm rather than RMSNorm. A modern LLaMA-style implementation would substitute RoPE inside attention (Chapter 6), SwiGLU in the FFN, and RMSNorm. The training loop itself does not change. Same loss, same optimizer, same schedule, same clip — the architecture details swap out, the loop stays the same. This is part of why the recipe is called "settled": the optimizer side of training has been stable across a decade of architectural revision.
+The reference is GPT-2-style: no RoPE, learned positional embeddings, GELU activations in the FFN, LayerNorm rather than RMSNorm. A modern LLaMA-style implementation would substitute RoPE inside attention (Chapter 6), SwiGLU in the FFN, and RMSNorm. The training loop itself does not change. Same loss, same optimizer, same schedule, same clip. The architecture details swap out; the loop stays the same. This is part of why the recipe is called "settled": the optimizer side of training has been stable across a decade of architectural revision.
 </Callout>
 
-The trained model has a forward pass and a probability distribution over the vocabulary at every position. Generating text from it is one more set of choices — about how to convert that distribution into actual sampled tokens.
+The trained model has a forward pass and a probability distribution over the vocabulary at every position. Generating text from it is one more set of choices, about how to convert that distribution into actual sampled tokens.
 
-## Generation — sampling from the trained model
+## Generation: sampling from the trained model
 
 ### The autoregressive inference loop
 
@@ -532,11 +532,11 @@ Generation runs the trained model in a loop, emitting one token at a time. The m
 
 The iteration is: prompt $\to$ forward pass on the prompt $\to$ take logits at the last position $\to$ sample one new token $\to$ append it to the sequence $\to$ run the forward pass again on the now-one-longer sequence $\to$ take logits at the new last position $\to$ sample $\to$ append. Repeat until a stop token or a length budget is hit. After $K$ generated tokens, the model has been run $K$ times, each pass on a progressively longer input. Greedy decoding (next), temperature, and top-$p$ all live inside the "sample one new token" step; the loop around them is the same.
 
-The naive cost is dramatic. Each iteration runs the *entire* model on the *entire* sequence so far — every transformer block, every attention head, every FFN, all the way up to the output projection — and uses only the last position's output. The first $P$ positions in the $(k+1)$-th step did effectively the same computation they did on the $k$-th step; almost all of it is redundant work. For a prompt of length $P$ and $K$ generated tokens, the naive total cost scales roughly as $\sum_{k=0}^{K-1}(P + k) \approx K \cdot (P + K/2)$ forward-pass-tokens — quadratic in $K$ and dominated by repeated re-derivation of identical hidden states from identical prefixes.
+The naive cost is dramatic. Each iteration runs the *entire* model on the *entire* sequence so far, every transformer block, every attention head, every FFN, all the way up to the output projection, and uses only the last position's output. The first $P$ positions in the $(k+1)$-th step did effectively the same computation they did on the $k$-th step; almost all of it is redundant work. For a prompt of length $P$ and $K$ generated tokens, the naive total cost scales roughly as $\sum_{k=0}^{K-1}(P + k) \approx K \cdot (P + K/2)$ forward-pass-tokens, quadratic in $K$ and dominated by repeated re-derivation of identical hidden states from identical prefixes.
 
-The fix is **KV caching**, covered in Chapter 17. The intuition: attention's keys and values for past tokens do not change once they are computed — they depend only on prior tokens, and prior tokens are by definition no longer changing — so a serving stack stores those keys and values and only computes fresh keys, queries, and values for the *new* token at each step. With a KV cache, each decode step does work proportional to *one* token's contribution to attention against the stored cache, plus a single-token-wide FFN and projection, rather than re-running the whole model on the whole sequence. The asymptotic improvement is roughly the difference between $O(K^2)$ and $O(K)$ total work for $K$ generated tokens, and the wall-clock factor is comfortably $100\times$ to $1000\times$ at long context. Chapter 17 walks through the implementation, the memory cost (the cache itself is huge at long context), and how it shapes everything downstream — batching, paged memory, speculative decoding.
+The fix is **KV caching**, covered in Chapter 17. The intuition: attention's keys and values for past tokens do not change once they are computed, they depend only on prior tokens, and prior tokens are by definition no longer changing, so a serving stack stores those keys and values and only computes fresh keys, queries, and values for the *new* token at each step. With a KV cache, each decode step does work proportional to *one* token's contribution to attention against the stored cache, plus a single-token-wide FFN and projection, rather than re-running the whole model on the whole sequence. The asymptotic improvement is roughly the difference between $O(K^2)$ and $O(K)$ total work for $K$ generated tokens, and the wall-clock factor is comfortably $100\times$ to $1000\times$ at long context. Chapter 17 walks through the implementation, the memory cost (the cache itself is huge at long context), and how it shapes everything downstream, batching, paged memory, speculative decoding.
 
-For this chapter, the takeaway is: yes, the naive generation loop in the next subsection runs the full model on the full prefix at every step. That is what the math says to do, and the small-scale demo code in this chapter does exactly that — it is correct, it is slow, and it is the right starting point. Real serving stacks do something much smarter, and that story is Chapter 17.
+For this chapter, the takeaway is: yes, the naive generation loop in the next subsection runs the full model on the full prefix at every step. That is what the math says to do, and the small-scale demo code in this chapter does exactly that, it is correct, it is slow, and it is the right starting point. Real serving stacks do something much smarter, and that story is Chapter 17.
 
 ### Greedy decoding
 
@@ -549,7 +549,7 @@ for _ in range(max_new_tokens):
     tokens = torch.cat([tokens, next_token], dim=-1)
 ```
 
-Greedy is deterministic — same prompt, same output every time. It is also boring and frequently degenerate. The model's argmax is often a high-probability common token; the next argmax is often the same token; after a few steps the output collapses into repetitive loops ("The cat sat on the mat. The cat sat on the mat. The cat sat...") because greedy decoding finds the model's preferred filler and gets stuck there. Greedy is rarely the right choice for open-ended generation.
+Greedy is deterministic: same prompt, same output every time. It is also boring and frequently degenerate. The model's argmax is often a high-probability common token; the next argmax is often the same token; after a few steps the output collapses into repetitive loops ("The cat sat on the mat. The cat sat on the mat. The cat sat...") because greedy decoding finds the model's preferred filler and gets stuck there. Greedy is rarely the right choice for open-ended generation.
 
 ### Temperature
 
@@ -557,13 +557,13 @@ Temperature reshapes the distribution before sampling. Before applying softmax, 
 
 $$\hat{p}_t[v] = \frac{\exp(z_t[v] / T)}{\sum_{v'} \exp(z_t[v'] / T)}.$$
 
-At $T = 1$, the distribution is unchanged. At $T < 1$, the distribution sharpens — high-probability tokens get even more probability, low-probability tokens lose theirs. At $T \to 0$, the distribution collapses onto the argmax (greedy decoding is the limit). At $T > 1$, the distribution flattens — high and low probabilities move toward uniform. At $T \to \infty$, the distribution becomes uniform.
+At $T = 1$, the distribution is unchanged. At $T < 1$, the distribution sharpens, high-probability tokens get even more probability, low-probability tokens lose theirs. At $T \to 0$, the distribution collapses onto the argmax (greedy decoding is the limit). At $T > 1$, the distribution flattens, high and low probabilities move toward uniform. At $T \to \infty$, the distribution becomes uniform.
 
 Typical generation temperatures sit between $0.7$ and $1.0$ for general text. Lower temperatures (around $0.2$ to $0.5$) are used for code generation, where there is usually a single correct continuation and randomness hurts. Higher temperatures ($1.0$ to $1.2$) are sometimes used for creative writing, where surprise is a feature.
 
 ### Top-k and top-p (nucleus) sampling
 
-Temperature alone is not enough — even at temperature $1$, sampling from the full vocabulary distribution occasionally produces very low-probability tokens that derail the generation. Two filtering schemes address this.
+Temperature alone is not enough, even at temperature $1$, sampling from the full vocabulary distribution occasionally produces very low-probability tokens that derail the generation. Two filtering schemes address this.
 
 **Top-k** keeps only the $k$ most likely tokens at each step, masks the rest to probability zero, renormalizes, and samples from the resulting distribution. The hyperparameter $k$ is typically $40$ or $50$. Top-k caps the tail at a fixed size regardless of how peaked or flat the underlying distribution is.
 
@@ -579,7 +579,7 @@ def softmax(x, axis=-1):
 
 def sample_next_token(logits, temperature=0.7, top_p=0.9):
     """
-    logits: (vocab_size,) — model output for one position
+    logits: (vocab_size,), model output for one position
     Returns: a single sampled token index.
     """
     # 1. Apply temperature
@@ -613,31 +613,31 @@ for i in range(10):
     print(f"  sample {i + 1}: token {sample}")
 
 print(f"\\nMostly token 5 (the model's confident choice), with occasional")
-print(f"alternates from the top of the distribution — the temperature/top-p mix.")
+print(f"alternates from the top of the distribution, the temperature/top-p mix.")
 `}
   packages={["numpy"]}
   height={520}
 />
 
 <Callout type="aside">
-Production chat-tuned models typically sample at temperature $\approx 1.0$ with top-p $\approx 0.95$ for general conversational output, and at temperature $\approx 0.2$ to $0.5$ for code or precise factual output. The values are deployment-time choices, not training-time choices — the model is trained with a fixed cross-entropy objective, and the sampler is configured at inference. This is part of why the same trained model can be exposed as "creative mode" or "precise mode" by an application: the underlying weights are identical, only the sampling parameters differ.
+Production chat-tuned models typically sample at temperature $\approx 1.0$ with top-p $\approx 0.95$ for general conversational output, and at temperature $\approx 0.2$ to $0.5$ for code or precise factual output. The values are deployment-time choices, not training-time choices: the model is trained with a fixed cross-entropy objective, and the sampler is configured at inference. This is part of why the same trained model can be exposed as "creative mode" or "precise mode" by an application: the underlying weights are identical, only the sampling parameters differ.
 </Callout>
 
 That covers the inference side. The model that section 7's loop produced now turns into text. The chapter has, in eight sections, walked from a random-initialized transformer to a generating language model. The remaining question is what to do at larger scale.
 
-## What we've built — and what's next
+## What we've built: and what's next
 
-Eight chapters in, the parts add up. Chapters 1-6 specify the architecture: embeddings, attention, the transformer block, positional encoding. Chapter 7 specifies the data: filtered, deduplicated, decontaminated web text. This chapter specifies the training: cross-entropy on next-token prediction, AdamW with $(\beta_1, \beta_2) = (0.9, 0.95)$ and weight decay $0.1$, linear warmup into cosine decay, gradient clipping at norm $1.0$, mixed precision for memory and speed, and a sixty-line training loop that runs all of it. Architecture plus data plus training equals a working — small — language model.
+Eight chapters in, the parts add up. Chapters 1-6 specify the architecture: embeddings, attention, the transformer block, positional encoding. Chapter 7 specifies the data: filtered, deduplicated, decontaminated web text. This chapter specifies the training: cross-entropy on next-token prediction, AdamW with $(\beta_1, \beta_2) = (0.9, 0.95)$ and weight decay $0.1$, linear warmup into cosine decay, gradient clipping at norm $1.0$, mixed precision for memory and speed, and a sixty-line training loop that runs all of it. Architecture plus data plus training equals a working, small, language model.
 
-"Small" is doing real work in that sentence. The chapter's reference is $10$M to $100$M parameters, trained on $1$GB to maybe $10$GB of text, runnable on a single GPU in hours. A frontier model in 2024 is hundreds of billions of parameters, trained on tens of trillions of tokens, on a cluster of thousands of GPUs for weeks. The numerical gap is enormous; the *recipe* gap is small. The same cross-entropy. The same AdamW with $\beta_2 = 0.95$. The same warmup-plus-cosine schedule. The same clip at $1.0$. What changes at scale is the engineering — how to shard a model across many GPUs without bottlenecking on network communication, how to write the matmul kernels that the architecture leans on, how to recover from inevitable hardware failures over week-long runs. The mathematics of training does not change.
+"Small" is doing real work in that sentence. The chapter's reference is $10$M to $100$M parameters, trained on $1$GB to maybe $10$GB of text, runnable on a single GPU in hours. A frontier model in 2024 is hundreds of billions of parameters, trained on tens of trillions of tokens, on a cluster of thousands of GPUs for weeks. The numerical gap is enormous; the *recipe* gap is small. The same cross-entropy. The same AdamW with $\beta_2 = 0.95$. The same warmup-plus-cosine schedule. The same clip at $1.0$. What changes at scale is the engineering: how to shard a model across many GPUs without bottlenecking on network communication, how to write the matmul kernels that the architecture leans on, how to recover from inevitable hardware failures over week-long runs. The mathematics of training does not change.
 
-The next two chapters cover that engineering. Chapter 9 covers **scaling laws** (how to choose model size and dataset size given a compute budget — the Chinchilla derivation, the empirical scaling exponents) and **distributed training** (how to shard parameters, activations, and optimizer state across many GPUs without losing the recipe). Chapter 10 covers **training infrastructure** (GPU clusters, custom CUDA and Triton kernels for the bottleneck operations, the systems engineering that frontier-scale training rests on). Both chapters build on this one — they take the recipe as given and scale it.
+The next two chapters cover that engineering. Chapter 9 covers **scaling laws** (how to choose model size and dataset size given a compute budget, the Chinchilla derivation, the empirical scaling exponents) and **distributed training** (how to shard parameters, activations, and optimizer state across many GPUs without losing the recipe). Chapter 10 covers **training infrastructure** (GPU clusters, custom CUDA and Triton kernels for the bottleneck operations, the systems engineering that frontier-scale training rests on). Both chapters build on this one; they take the recipe as given and scale it.
 
 ## Exercises
 
-Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; the runnable code lets you iterate without leaving the page. Hints are collapsed — try the problem first.
+Four exercises that build on the chapter's machinery. Each is a self-contained problem with a starting template; the runnable code lets you iterate without leaving the page. Hints are collapsed; try the problem first.
 
-### Exercise 1 (easy) — Cross-entropy from logits
+### Exercise 1 (easy): Cross-entropy from logits
 
 Implement cross-entropy loss for next-token prediction. Verify it matches the theoretical random baseline ($-\log(1/V)$ for a uniform distribution over $V$ classes) when the logits are random and the targets are random.
 
@@ -656,8 +656,8 @@ np.random.seed(42)
 
 def cross_entropy(logits, targets):
     """
-    logits: (n, V) — predicted logits at each position
-    targets: (n,) — true token indices
+    logits: (n, V), predicted logits at each position
+    targets: (n,), true token indices
     Returns: average cross-entropy loss (scalar)
     """
     # TODO: implement
@@ -683,12 +683,12 @@ targets = np.random.randint(0, V, n)
 # best_targets = np.argmax(logits, axis=-1)
 # loss_best = cross_entropy(logits, best_targets)
 # print(f"\\nIf we always 'predict correctly': loss = {loss_best:.4f}")
-# (should be < log(V) — even random logits have some max-logit class)
+# (should be < log(V): even random logits have some max-logit class)
 `}
   packages={["numpy"]}
 />
 
-### Exercise 2 (medium) — Implement AdamW from scratch
+### Exercise 2 (medium): Implement AdamW from scratch
 
 Implement AdamW with bias correction. Verify your implementation converges on a simple quadratic, and observe that weight decay biases the convergence point toward the origin.
 
@@ -725,7 +725,7 @@ class AdamW:
         pass
 
 # Test 1: convergence on (x - 3)^2 with weight_decay = 0
-print("=== Test 1: no weight decay — should converge to x = 3 ===")
+print("=== Test 1: no weight decay, should converge to x = 3 ===")
 params = np.array([0.0])
 opt = AdamW(params.shape, lr=0.1, weight_decay=0.0)
 for step in range(200):
@@ -735,7 +735,7 @@ print(f"Final x = {params[0]:.4f} (expected: 3.0)")
 
 # Test 2: same problem, with weight_decay = 0.05
 # Weight decay should pull x slightly toward 0
-print("\\n=== Test 2: weight_decay = 0.05 — convergence point pulled toward 0 ===")
+print("\\n=== Test 2: weight_decay = 0.05, convergence point pulled toward 0 ===")
 params = np.array([0.0])
 opt = AdamW(params.shape, lr=0.1, weight_decay=0.05)
 for step in range(200):
@@ -747,7 +747,7 @@ print("(The exact value depends on the equilibrium between gradient pull and dec
   packages={["numpy"]}
 />
 
-### Exercise 3 (medium) — Warmup + cosine schedule
+### Exercise 3 (medium): Warmup + cosine schedule
 
 Implement the warmup + cosine decay LR schedule. Verify it ramps to peak at the warmup boundary, decays smoothly, and reaches the minimum floor at total_steps.
 
@@ -811,7 +811,7 @@ min_lr = 6e-5
   packages={["numpy"]}
 />
 
-### Exercise 4 (hard) — Tiny end-to-end training loop
+### Exercise 4 (hard): Tiny end-to-end training loop
 
 Train a *very* small character-level transformer on a tiny corpus end-to-end. The scaffolding (data, model class, hyperparameters) is provided; you implement the training loop and verify the loss drops.
 
