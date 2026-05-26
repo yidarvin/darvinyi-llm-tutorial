@@ -225,6 +225,11 @@ export default function RunnableCode({
         >
           Reset
         </button>
+        {!readonly && (
+          <span className={styles.editableTag} aria-hidden="true">
+            Editable — click to modify
+          </span>
+        )}
       </div>
 
       {(output || error) && (

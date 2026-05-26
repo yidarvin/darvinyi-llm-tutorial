@@ -107,6 +107,21 @@
   cursor: not-allowed;
 }
 
+/* Affordance label — signals that the editor accepts edits.
+ * Pushed to the right side of the toolbar via margin-left: auto. */
+.editableTag {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+@media (max-width: 520px) {
+  .editableTag { display: none; }
+}
+
 .spinner {
   display: inline-block;
   width: 12px;
