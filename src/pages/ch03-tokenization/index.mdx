@@ -10,15 +10,15 @@ import { BPETraining, TokenizerComparison } from '@components/widgets';
 
 Chapter 2 ended with the embedding lookup: integer token IDs in, dense vectors out. Where those integer token IDs come from was a question we deferred.
 
-This chapter answers it. A tokenizer sits between raw text — bytes on disk, characters on a screen — and the integer IDs that Chapter 2's embedding layer can look up. Every modern language model has one of these somewhere upstream of the embedding table. The bridge looks inconsequential: a few hundred lines of code, a few kilobytes of data on disk, no learnable parameters once trained. It is also where most of the surprising behavior of large language models comes from.
+This chapter answers it. A tokenizer sits between raw text, bytes on disk, characters on a screen, and the integer IDs that Chapter 2's embedding layer can look up. Every modern language model has one of these somewhere upstream of the embedding table. The bridge looks inconsequential: a few hundred lines of code, a few kilobytes of data on disk, no learnable parameters once trained. It is also where most of the surprising behavior of large language models comes from.
 
 By the end of this chapter, a reader who has been wondering why GPT-4 is bad at long-form arithmetic, why a Korean prompt costs more than the same English content on a per-token API, or what *SolidGoldMagikarp* was about will have answers. The answers are all the same word: tokenization.
 
 ## Why tokenize
 
-A neural network reads numerical tensors. Chapter 2 showed how to turn integer token IDs into the dense vectors that the rest of the network actually consumes — the embedding lookup is a row-indexing operation into a learnable matrix $E \in \R^{|V| \times d}$. The chapter started, however, with "given a sequence of token IDs," and that handwave is the thing this chapter unwinds.
+A neural network reads numerical tensors. Chapter 2 showed how to turn integer token IDs into the dense vectors that the rest of the network actually consumes: the embedding lookup is a row-indexing operation into a learnable matrix $E \in \R^{|V| \times d}$. The chapter started, however, with "given a sequence of token IDs," and that handwave is the thing this chapter unwinds.
 
-The upstream operation is tokenization. Its job is to take a string of bytes — raw input text — and produce a sequence of integers in $\{0, 1, \ldots, |V|-1\}$, the token IDs the embedding layer indexes. The mapping is deterministic and finite: every input string produces exactly one tokenized output, and the output is a sequence of IDs from a fixed vocabulary $V$.
+The upstream operation is tokenization. Its job is to take a string of bytes, raw input text, and produce a sequence of integers in $\{0, 1, \ldots, |V|-1\}$, the token IDs the embedding layer indexes. The mapping is deterministic and finite: every input string produces exactly one tokenized output, and the output is a sequence of IDs from a fixed vocabulary $V$.
 
 <Equation>
 $$
@@ -26,37 +26,37 @@ $$
 $$
 </Equation>
 
-The tokenizer is trained once on a representative corpus before the model itself is trained, then frozen for the model's lifetime. It is not a layer that participates in backprop. Its "parameters" — the vocabulary, the merge rules, the regex used to split text — are written once and never updated. Once the model is trained, the tokenizer is part of the model's contract with the world; you cannot swap it without retraining the model from scratch.
+The tokenizer is trained once on a representative corpus before the model itself is trained, then frozen for the model's lifetime. It is not a layer that participates in backprop. Its "parameters", the vocabulary, the merge rules, the regex used to split text, are written once and never updated. Once the model is trained, the tokenizer is part of the model's contract with the world; you cannot swap it without retraining the model from scratch.
 
-The choice of tokenizer shapes vocab size, sequence length, training cost, inference cost, and a surprising amount of downstream behavior — performance on numbers, asymmetry between languages, the model's reaction to weird Unicode, and a long tail of edge cases the rest of the chapter walks through. Skipping it the way many tutorials do (treating the tokenizer as a black box that produces "tokens" and moving on) hides much of what makes LLMs feel idiosyncratic.
+The choice of tokenizer shapes vocab size, sequence length, training cost, inference cost, and a surprising amount of downstream behavior: performance on numbers, asymmetry between languages, the model's reaction to weird Unicode, and a long tail of edge cases the rest of the chapter walks through. Skipping it the way many tutorials do (treating the tokenizer as a black box that produces "tokens" and moving on) hides much of what makes LLMs feel idiosyncratic.
 
 <Callout type="note">
-The same tokenizer is used at training time and at inference time. Pre-training turns the training corpus into token IDs once; inference turns each user prompt into token IDs the same way. Mismatched tokenization between the two — a different vocabulary, a different merge order, a different whitespace convention — silently corrupts every input the model sees. This is why HuggingFace pins the tokenizer to the model in its "tokenizer + model" pairing. They are not separable components, even though they live in different files on disk.
+The same tokenizer is used at training time and at inference time. Pre-training turns the training corpus into token IDs once; inference turns each user prompt into token IDs the same way. Mismatched tokenization between the two (a different vocabulary, a different merge order, a different whitespace convention) silently corrupts every input the model sees. This is why HuggingFace pins the tokenizer to the model in its "tokenizer + model" pairing. They are not separable components, even though they live in different files on disk.
 </Callout>
 
 The two reflexive approaches to tokenization are word-level (one token per whitespace-separated word) and character-level (one token per character). Both fail in different ways. The next section shows how, and motivates the subword tokenization that took over from 2015 onward.
 
-## Naïve attempts — character-level and word-level
+## Naïve attempts: character-level and word-level
 
 The first reaction to "how do I turn text into integers" is one of two ideas. Both have appeared in real systems, and both have specific failure modes that motivated everything that came later.
 
 ### Character-level: too long
 
-Map each Unicode character to a unique integer. The vocabulary is the set of characters seen in training — anywhere from 26 (lowercase English letters) to roughly 150,000 (the full Unicode plane), depending on how aggressive you are about coverage.
+Map each Unicode character to a unique integer. The vocabulary is the set of characters seen in training, anywhere from 26 (lowercase English letters) to roughly 150,000 (the full Unicode plane), depending on how aggressive you are about coverage.
 
-The case for character-level is real. The vocabulary is small and bounded. Every possible input string is representable — no out-of-vocabulary problem to handle, no special unknown token to design around. Implementation is trivial: a lookup table from `ord(char)` to a small integer.
+The case for character-level is real. The vocabulary is small and bounded. Every possible input string is representable, no out-of-vocabulary problem to handle, no special unknown token to design around. Implementation is trivial: a lookup table from `ord(char)` to a small integer.
 
-The case against is sequence length. Attention compute scales with $\text{seq}^2$ — Chapter 4 makes this precise — so doubling the sequence quadruples the compute. Character-level tokenization gives a sequence that is 4–5 times longer than a competitive subword tokenizer would, which is 16–25× more attention compute for the same content. The numbers are too unfavorable to ignore.
+The case against is sequence length. Attention compute scales with $\text{seq}^2$ (Chapter 4 makes this precise), so doubling the sequence quadruples the compute. Character-level tokenization gives a sequence that is 4–5 times longer than a competitive subword tokenizer would, which is 16–25× more attention compute for the same content. The numbers are too unfavorable to ignore.
 
-A context window of 4096 tokens, at one token per character, fits about 700 words of English — small enough that the entire chapter you are reading would not fit in one pass. The same 4096-token budget at GPT-4's tokenizer fits roughly 3000 words. Character-level pays for its simplicity by inflating every sequence the model has to process.
+A context window of 4096 tokens, at one token per character, fits about 700 words of English, small enough that the entire chapter you are reading would not fit in one pass. The same 4096-token budget at GPT-4's tokenizer fits roughly 3000 words. Character-level pays for its simplicity by inflating every sequence the model has to process.
 
-Character-level tokenization still appears in narrow domains where the alphabet is small and structure matters at the character scale — some music generation models, some DNA models, the early ByT5 line. It does not appear in production text LLMs.
+Character-level tokenization still appears in narrow domains where the alphabet is small and structure matters at the character scale: some music generation models, some DNA models, the early ByT5 line. It does not appear in production text LLMs.
 
 ### Word-level: too brittle
 
 Split text on whitespace and punctuation; each word is a token. Vocabulary is the set of distinct words in the training corpus.
 
-The pros are intuitive. Tokens carry meaning a reader can name. Sequences are short — one token per word is the natural unit. A 2010-era NLP researcher would recognize the representation immediately.
+The pros are intuitive. Tokens carry meaning a reader can name. Sequences are short, one token per word is the natural unit. A 2010-era NLP researcher would recognize the representation immediately.
 
 The cons are several, all serious. *Vocabulary explosion*: every new corpus has new words, so the vocabulary is effectively unbounded. Truncating to a fixed top-$|V|$ words by frequency leaves a long tail of rare words unrepresented. *Out-of-vocabulary at inference*: any word in the prompt that did not appear during training becomes a special `<UNK>` token; the model has lost the actual content of that position. *Morphological brittleness*: a word-level tokenizer trained on English treats *walk*, *walks*, *walked*, *walking* as four unrelated tokens; it has no representation that lets them share structure. Finnish or Turkish, with hundreds of inflected forms per stem, breaks the scheme entirely. *Code and punctuation*: where do `{`, `}`, `def`, `return`, and `__init__` go? They are not whitespace-separated words in any natural sense.
 
@@ -80,18 +80,18 @@ print(word_tokenize("the dog barked at the cat"))  # 'dog', 'barked', 'at' are O
 The fix that took over from 2015 onward is *subword* tokenization: split words into pieces. Frequent words become single tokens; rare words become several tokens, ideally along morpheme-like boundaries (*unhappiness* → *un* + *happi* + *ness*). The vocabulary is fixed at training time but covers an effectively unbounded input space through composition. The dominant algorithm is BPE.
 
 <Callout type="aside">
-In early-2010s NLP, word-level tokenizers shipped a huge `<UNK>` problem. Pre-trained word embeddings like word2vec and GloVe had the same issue — vectors existed for the words in the training vocabulary and nothing else. The subword revolution that began with Sennrich et al. 2015 made `<UNK>` a historical artifact in production systems, but it took a few years to fully displace word-level approaches.
+In early-2010s NLP, word-level tokenizers shipped a huge `<UNK>` problem. Pre-trained word embeddings like word2vec and GloVe had the same issue, vectors existed for the words in the training vocabulary and nothing else. The subword revolution that began with Sennrich et al. 2015 made `<UNK>` a historical artifact in production systems, but it took a few years to fully displace word-level approaches.
 </Callout>
 
-## BPE — byte-pair encoding
+## BPE: byte-pair encoding
 
-Byte-pair encoding is the dominant subword tokenization algorithm. It was invented in 1994 by Philip Gage as a *compression* algorithm — a way to shrink files by replacing the most frequent byte pairs with new codes. Sennrich, Haddow, and Birch (2015, [arxiv.org/abs/1508.07909](https://arxiv.org/abs/1508.07909)) noticed the same idea works as a tokenizer: instead of compressing bytes for storage, compress them into the vocabulary of a language model. GPT-2, GPT-3, GPT-4, LLaMA, Mistral, and most of the modern open-source landscape use some variant of it.
+Byte-pair encoding is the dominant subword tokenization algorithm. It was invented in 1994 by Philip Gage as a *compression* algorithm, a way to shrink files by replacing the most frequent byte pairs with new codes. Sennrich, Haddow, and Birch (2015, [arxiv.org/abs/1508.07909](https://arxiv.org/abs/1508.07909)) noticed the same idea works as a tokenizer: instead of compressing bytes for storage, compress them into the vocabulary of a language model. GPT-2, GPT-3, GPT-4, LLaMA, Mistral, and most of the modern open-source landscape use some variant of it.
 
 ### The merge-greedy idea
 
-Start with a base alphabet — one token per character, or one token per byte, depending on the variant. Look at the corpus. Find the most frequent adjacent pair of tokens. Replace every occurrence of that pair with a new single token; add it to the vocabulary. Look at the corpus again — now slightly different, because some pairs have collapsed. Find the new most-frequent pair. Repeat until the vocabulary reaches the desired size.
+Start with a base alphabet, one token per character, or one token per byte, depending on the variant. Look at the corpus. Find the most frequent adjacent pair of tokens. Replace every occurrence of that pair with a new single token; add it to the vocabulary. Look at the corpus again, now slightly different, because some pairs have collapsed. Find the new most-frequent pair. Repeat until the vocabulary reaches the desired size.
 
-The intuition is straightforward. The most frequent pairs are mostly things like *t*+*h*, *i*+*n*, *e*+*r* — building blocks of common English bigrams. After a few merges, you have tokens for *th*, *in*, *er*. After a few hundred, you have *the*, *ing*, *tion*, *and*. After a few thousand, frequent whole words like *the*, *of*, and *with* are single tokens. Rare words and made-up proper nouns are several tokens each, falling back on subword and ultimately byte-level pieces.
+The intuition is straightforward. The most frequent pairs are mostly things like *t*+*h*, *i*+*n*, *e*+*r*, building blocks of common English bigrams. After a few merges, you have tokens for *th*, *in*, *er*. After a few hundred, you have *the*, *ing*, *tion*, *and*. After a few thousand, frequent whole words like *the*, *of*, and *with* are single tokens. Rare words and made-up proper nouns are several tokens each, falling back on subword and ultimately byte-level pieces.
 
 Two implementations matter, both short and both worth seeing.
 
@@ -99,7 +99,7 @@ Two implementations matter, both short and both worth seeing.
 
 Given a corpus and a target vocab size $V$, BPE training produces an ordered list of merge operations $[(a_1, b_1) \to c_1, (a_2, b_2) \to c_2, \ldots]$, plus the resulting vocabulary. The loop:
 
-1. Pre-tokenize the corpus into "word-units" (the regex split that section 6 introduces). Within each word-unit, split into base tokens — bytes or characters.
+1. Pre-tokenize the corpus into "word-units" (the regex split that section 6 introduces). Within each word-unit, split into base tokens, bytes or characters.
 2. Build a frequency table over distinct word-tuples: many copies of the same word in the corpus collapse to one entry with a count, which keeps the inner loop fast.
 3. Iterate. Each iteration: count every adjacent pair across all word-tuples (weighted by frequency), find the most-frequent pair, create a new token by concatenating the pair, and rewrite every word-tuple to replace that pair with the new token. Repeat until the vocabulary reaches $V$ tokens.
 
@@ -119,17 +119,17 @@ Encoding takes a new piece of text and the trained merge list and produces a seq
 
 1. Pre-tokenize the input into word-units with the same regex used at training time.
 2. For each word-unit, split into base tokens (bytes or characters).
-3. Repeatedly scan for adjacent pairs that match any of the learned merges. Among matching pairs, apply the one with the *lowest* merge index — the merge learned first during training. Repeat until no learned pair is present.
+3. Repeatedly scan for adjacent pairs that match any of the learned merges. Among matching pairs, apply the one with the *lowest* merge index, the merge learned first during training. Repeat until no learned pair is present.
 
 <Callout type="insight">
-BPE encoding applies merges in *learned order*, not in *local frequency order*. The merge with index 1 — the very first merge learned during training, which by construction was the most-frequent pair in the corpus — has the highest priority at encoding time. The merge with index 30,000 is applied only after every lower-index merge has been considered.
+BPE encoding applies merges in *learned order*, not in *local frequency order*. The merge with index 1, the very first merge learned during training, which by construction was the most-frequent pair in the corpus, has the highest priority at encoding time. The merge with index 30,000 is applied only after every lower-index merge has been considered.
 
 This sounds backward at first. Why not pick whichever merge produces the largest single token, or the rarest local pair, or some other clever heuristic? The answer is that the training-time merge order is the only ordering that guarantees the encoder reproduces the same segmentation the training corpus had. Any other priority gives a different segmentation, which the model was never trained on. Greedy-by-learned-order is the contract between training and inference.
 </Callout>
 
 ### A toy example
 
-Train BPE on a tiny corpus and watch the first few merges emerge. The corpus is the kind that fits in a tweet — a handful of sentences with repeated tokens — chosen to make the first merges easy to read off.
+Train BPE on a tiny corpus and watch the first few merges emerge. The corpus is the kind that fits in a tweet, a handful of sentences with repeated tokens, chosen to make the first merges easy to read off.
 
 <WidgetFrame title="BPE training" caption="Watch BPE learn merges step by step on a small corpus. Each merge picks the most frequent adjacent pair; the vocabulary grows by one token each step.">
   <BPETraining client:visible />
@@ -196,17 +196,17 @@ for (pair, merged) in merges[:8]:
   height={540}
 />
 
-The first merge on this corpus is usually *t* + *h* — the most frequent adjacent pair, because *the* appears six times. The second is *th* + *e*, collapsing *the* into a single token. From there, common bigrams in the corpus get pulled together in roughly frequency order. With a larger corpus, the same algorithm produces the vocabularies that ship with GPT-2 and LLaMA — same loop, different scale.
+The first merge on this corpus is usually *t* + *h*, the most frequent adjacent pair, because *the* appears six times. The second is *th* + *e*, collapsing *the* into a single token. From there, common bigrams in the corpus get pulled together in roughly frequency order. With a larger corpus, the same algorithm produces the vocabularies that ship with GPT-2 and LLaMA, same loop, different scale.
 
 There is a problem with the version above. The base alphabet is bytes, which sidesteps an issue character-level BPE has with Unicode. The next section makes that explicit.
 
-## Byte-level BPE — handling all unicode
+## Byte-level BPE: handling all unicode
 
-Character-level BPE has a subtle but fatal problem at inference time. The base vocabulary contains every character seen during training. If a user prompt contains a character the training corpus never saw — a Korean syllable for an English-trained tokenizer, a Cyrillic letter for a Chinese-trained one, a math symbol for a tokenizer trained on tweets — the encoder has no token for it. The character is genuinely out-of-vocabulary, and the same `<UNK>` problem that doomed word-level tokenization reappears at the character scale.
+Character-level BPE has a subtle but fatal problem at inference time. The base vocabulary contains every character seen during training. If a user prompt contains a character the training corpus never saw (a Korean syllable for an English-trained tokenizer, a Cyrillic letter for a Chinese-trained one, a math symbol for a tokenizer trained on tweets), the encoder has no token for it. The character is genuinely out-of-vocabulary, and the same `<UNK>` problem that doomed word-level tokenization reappears at the character scale.
 
-Radford et al. (2019, the GPT-2 paper) fixed this with one decision: operate on UTF-8 bytes, not on characters. UTF-8 is a variable-length encoding in which every Unicode character — every emoji, every Hangul syllable, every Arabic letter, every CJK ideograph — is represented as a sequence of one to four bytes. The total alphabet is 256 (every possible byte value), and every string is convertible to bytes losslessly. The base vocabulary of a byte-level BPE is the 256 bytes, with $V - 256$ learned merges on top.
+Radford et al. (2019, the GPT-2 paper) fixed this with one decision: operate on UTF-8 bytes, not on characters. UTF-8 is a variable-length encoding in which every Unicode character, every emoji, every Hangul syllable, every Arabic letter, every CJK ideograph, is represented as a sequence of one to four bytes. The total alphabet is 256 (every possible byte value), and every string is convertible to bytes losslessly. The base vocabulary of a byte-level BPE is the 256 bytes, with $V - 256$ learned merges on top.
 
-The consequence is immediate: there is no OOV. Any string the user types decomposes into bytes, every byte is in the vocabulary by construction, and BPE merges combine them into whatever tokens the training distribution has provided. A string in a language the tokenizer never saw still encodes — it just encodes inefficiently, with many tokens per character, because no merges learned during training apply.
+The consequence is immediate: there is no OOV. Any string the user types decomposes into bytes, every byte is in the vocabulary by construction, and BPE merges combine them into whatever tokens the training distribution has provided. A string in a language the tokenizer never saw still encodes; it just encodes inefficiently, with many tokens per character, because no merges learned during training apply.
 
 <Equation>
 $$
@@ -214,7 +214,7 @@ $$
 $$
 </Equation>
 
-BPE on bytes is otherwise the same algorithm as BPE on characters. The training loop is identical (count adjacent pairs, merge the most frequent, repeat); the encoder is identical (apply merges in learned order). Only the base alphabet changes. Modern tokenizers — GPT-2, GPT-3, GPT-4, LLaMA, Mistral, Code Llama — all use byte-level BPE in some form.
+BPE on bytes is otherwise the same algorithm as BPE on characters. The training loop is identical (count adjacent pairs, merge the most frequent, repeat); the encoder is identical (apply merges in learned order). Only the base alphabet changes. Modern tokenizers (GPT-2, GPT-3, GPT-4, LLaMA, Mistral, Code Llama) all use byte-level BPE in some form.
 
 The trade-off is the asymmetry between languages. UTF-8 represents ASCII characters in one byte each, so English text averages roughly one byte per character before merges. Korean characters take three bytes each in UTF-8; Hindi characters take three; emoji take four. Before any merges learn to combine them, the same number of "characters" produces three or four times as many tokens in those languages.
 
@@ -242,33 +242,33 @@ Merges learned during training partially close the gap. A tokenizer trained on a
 The structural result: an English prompt and a Korean prompt with the same character count produce very different token counts. English averages roughly 4 characters per token on GPT-4's tokenizer; Korean averages around 1.5. The same 1000 characters of content becomes 250 tokens of English or 670 tokens of Korean. On per-token pricing, the Korean prompt costs nearly three times as much as the English one for the same information density.
 
 <Callout type="warning">
-"BPE handles all languages equally well" is wrong. BPE is biased toward whatever languages dominate the training corpus. When the corpus is 95% English — as it is for most commercial tokenizers — the resulting tokenizer is highly efficient on English and progressively less efficient on every language with less representation. The OpenAI API's per-token pricing therefore charges Korean, Hindi, Arabic, and Thai users substantially more per character of input than English users. This is not a moral judgment; it is a structural property of byte-level BPE trained on English-heavy data, and it is one of the most consequential effects tokenization has on downstream user experience.
+"BPE handles all languages equally well" is wrong. BPE is biased toward whatever languages dominate the training corpus. When the corpus is 95% English, as it is for most commercial tokenizers, the resulting tokenizer is highly efficient on English and progressively less efficient on every language with less representation. The OpenAI API's per-token pricing therefore charges Korean, Hindi, Arabic, and Thai users substantially more per character of input than English users. This is not a moral judgment; it is a structural property of byte-level BPE trained on English-heavy data, and it is one of the most consequential effects tokenization has on downstream user experience.
 </Callout>
 
 BPE is one algorithm. The next section walks through the two others that show up in production.
 
-## Other tokenizers — WordPiece and Unigram LM
+## Other tokenizers: WordPiece and Unigram LM
 
 BPE is not the only subword tokenization algorithm in production use. Two others appear in major model families and are worth being able to distinguish.
 
-**WordPiece** is BPE with a different merge criterion. The algorithm structure is identical — initialize a base alphabet, iteratively merge token pairs, repeat until the vocabulary is full — but the scoring function for picking which pair to merge is different. BPE merges the pair that occurs most *frequently* in the corpus. WordPiece merges the pair that, when treated as a new token, most increases the corpus's likelihood under a unigram language model. The pair score is roughly
+**WordPiece** is BPE with a different merge criterion. The algorithm structure is identical, initialize a base alphabet, iteratively merge token pairs, repeat until the vocabulary is full, but the scoring function for picking which pair to merge is different. BPE merges the pair that occurs most *frequently* in the corpus. WordPiece merges the pair that, when treated as a new token, most increases the corpus's likelihood under a unigram language model. The pair score is roughly
 
 $$
 \text{score}(a, b) = \frac{\text{count}(a, b)}{\text{count}(a) \cdot \text{count}(b)},
 $$
 
-which rewards pairs whose joint frequency is high relative to the product of their marginals — pairs that "really do" go together, rather than pairs that happen to co-occur because both halves are individually common.
+which rewards pairs whose joint frequency is high relative to the product of their marginals, pairs that "really do" go together, rather than pairs that happen to co-occur because both halves are individually common.
 
-In practice, WordPiece and BPE produce similar tokenizations on most inputs but disagree at the margins. WordPiece is used by the BERT family — BERT itself, DistilBERT, MobileBERT, ELECTRA — and by Google's earlier neural machine translation work, where it was introduced (Wu et al. 2016, [arxiv.org/abs/1609.08144](https://arxiv.org/abs/1609.08144)). BERT's WordPiece tokenizer also uses a different convention for whitespace and word boundaries: subword continuation pieces are prefixed with `##` (so *tokenization* might tokenize as `token`, `##ization`), rather than including a leading space as part of the next token.
+In practice, WordPiece and BPE produce similar tokenizations on most inputs but disagree at the margins. WordPiece is used by the BERT family, BERT itself, DistilBERT, MobileBERT, ELECTRA, and by Google's earlier neural machine translation work, where it was introduced (Wu et al. 2016, [arxiv.org/abs/1609.08144](https://arxiv.org/abs/1609.08144)). BERT's WordPiece tokenizer also uses a different convention for whitespace and word boundaries: subword continuation pieces are prefixed with `##` (so *tokenization* might tokenize as `token`, `##ization`), rather than including a leading space as part of the next token.
 
 **Unigram LM** is a different algorithm entirely. Kudo (2018, [arxiv.org/abs/1804.10959](https://arxiv.org/abs/1804.10959)) starts not from a small alphabet that gets merged upward, but from a *large* candidate vocabulary that gets pruned downward:
 
-1. Build a large initial vocabulary of subword candidates — typically every substring of every word in the corpus, up to a length limit.
+1. Build a large initial vocabulary of subword candidates, typically every substring of every word in the corpus, up to a length limit.
 2. Score each candidate as a unigram language model: how likely is the corpus under the assumption that each token is drawn independently from a multinomial over the vocabulary?
 3. Iteratively remove the candidates whose removal hurts the corpus likelihood least, until the vocabulary reaches the target size.
 4. At encoding time, find the segmentation of the input that maximizes the unigram likelihood.
 
-Unigram LM has two useful properties BPE lacks. First, the encoder is *probabilistic* in a way that admits multiple valid segmentations per input — a feature called *subword regularization*, used as a form of data augmentation during model training. Second, the algorithm naturally supports *byte fallback*: if a word cannot be segmented from the learned vocabulary, fall back to its raw bytes, guaranteeing no-OOV in the same way byte-level BPE does. Unigram LM is used by T5, mT5, ALBERT, XLNet, and Mistral.
+Unigram LM has two useful properties BPE lacks. First, the encoder is *probabilistic* in a way that admits multiple valid segmentations per input, a feature called *subword regularization*, used as a form of data augmentation during model training. Second, the algorithm naturally supports *byte fallback*: if a word cannot be segmented from the learned vocabulary, fall back to its raw bytes, guaranteeing no-OOV in the same way byte-level BPE does. Unigram LM is used by T5, mT5, ALBERT, XLNet, and Mistral.
 
 Practical map of which model family uses which tokenizer:
 
@@ -284,7 +284,7 @@ This is the answer to the frequent question, "Why can't I use BERT's tokenizer w
 
 The three algorithms share one upstream step: the regex that breaks input text into "word-units" before subword tokenization proper. That step is the topic of the next section.
 
-## Pre-tokenization — the regex before the algorithm
+## Pre-tokenization: the regex before the algorithm
 
 The BPE description so far has assumed the input arrives as "a corpus split into words." What "split into words" means is not obvious. Whitespace? Punctuation? Apostrophes? Newlines? The boundary between *what* and *what's*? The boundary between `def` and `(`?
 
@@ -298,14 +298,14 @@ PAT = r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)
 
 Six alternatives, in order:
 
-- `'s|'t|'re|'ve|'m|'ll|'d` — English contraction suffixes, always their own token.
-- ` ?\p{L}+` — a sequence of one or more letters, optionally preceded by a single space.
-- ` ?\p{N}+` — a sequence of one or more digits, optionally preceded by a single space.
-- ` ?[^\s\p{L}\p{N}]+` — a run of punctuation or symbols (anything that is not whitespace, letter, or digit), optionally preceded by a single space.
-- `\s+(?!\S)` — a run of whitespace not followed by a non-whitespace character (trailing whitespace at line end).
-- `\s+` — any other run of whitespace.
+- `'s|'t|'re|'ve|'m|'ll|'d`, English contraction suffixes, always their own token.
+- ` ?\p{L}+`, a sequence of one or more letters, optionally preceded by a single space.
+- ` ?\p{N}+`, a sequence of one or more digits, optionally preceded by a single space.
+- ` ?[^\s\p{L}\p{N}]+`, a run of punctuation or symbols (anything that is not whitespace, letter, or digit), optionally preceded by a single space.
+- `\s+(?!\S)`, a run of whitespace not followed by a non-whitespace character (trailing whitespace at line end).
+- `\s+`, any other run of whitespace.
 
-The most consequential design choice is the optional leading space in the word, number, and punctuation alternatives. The pattern ` ?\p{L}+` greedily captures the space *before* a word as part of that word's word-unit. So the input `Hello world` produces the word-units `['Hello', ' world']`, with the second unit including its leading space. After BPE runs, `Hello` and `world` have different token IDs from ` Hello` and ` world` — the leading-space variants are distinct vocabulary entries.
+The most consequential design choice is the optional leading space in the word, number, and punctuation alternatives. The pattern ` ?\p{L}+` greedily captures the space *before* a word as part of that word's word-unit. So the input `Hello world` produces the word-units `['Hello', ' world']`, with the second unit including its leading space. After BPE runs, `Hello` and `world` have different token IDs from ` Hello` and ` world`: the leading-space variants are distinct vocabulary entries.
 
 This is the structural reason GPT-style tokenizers list `the` and ` the` as different tokens. The space-prefix-token convention encodes word position information directly in the token ID: a token starting mid-sentence carries its leading space; a token at the start of a line does not. Models trained on this convention learn the distinction; it carries a small amount of positional information the model can use, without requiring any separate machinery to represent it.
 
@@ -334,33 +334,33 @@ for s in samples:
   height={340}
 />
 
-Reading the output shows the leading-space convention in action: `' world'`, `' not'`, `' gonna'`, `' do'`, `' it'` — each with its leading space attached. The runs of punctuation and whitespace get their own units; the contractions (`'m`, `'t`) split off from their host word.
+Reading the output shows the leading-space convention in action: `' world'`, `' not'`, `' gonna'`, `' do'`, `' it'`, each with its leading space attached. The runs of punctuation and whitespace get their own units; the contractions (`'m`, `'t`) split off from their host word.
 
 <Callout type="note">
-The third-party `regex` package (`pip install regex`) is used here instead of the standard library's `re` because the GPT-2 regex relies on Unicode property classes — `\p{L}` for "any letter," `\p{N}` for "any number." Stdlib `re` does not implement these, so reproducing the GPT-2 pre-tokenization with `re` alone requires a much messier set of explicit Unicode ranges. Every production BPE implementation reaches for `regex` for this reason.
+The third-party `regex` package (`pip install regex`) is used here instead of the standard library's `re` because the GPT-2 regex relies on Unicode property classes, `\p{L}` for "any letter," `\p{N}` for "any number." Stdlib `re` does not implement these, so reproducing the GPT-2 pre-tokenization with `re` alone requires a much messier set of explicit Unicode ranges. Every production BPE implementation reaches for `regex` for this reason.
 </Callout>
 
-GPT-4's tokenizer (the `cl100k_base` encoding shipped with `tiktoken`) uses a slightly different regex that keeps short numbers as single units and handles a broader set of Unicode categories. The conceptual structure is the same — split first, BPE second.
+GPT-4's tokenizer (the `cl100k_base` encoding shipped with `tiktoken`) uses a slightly different regex that keeps short numbers as single units and handles a broader set of Unicode categories. The conceptual structure is the same: split first, BPE second.
 
 ## Special tokens
 
-The BPE algorithm produces tokens from frequencies in the training corpus. Models need additional tokens for *meta-events* — boundaries, separators, document markers — that are not naturally words and therefore would not emerge from frequency-based merges. These are added to the vocabulary by hand, typically at the start or end of the ID range.
+The BPE algorithm produces tokens from frequencies in the training corpus. Models need additional tokens for *meta-events*, boundaries, separators, document markers, that are not naturally words and therefore would not emerge from frequency-based merges. These are added to the vocabulary by hand, typically at the start or end of the ID range.
 
 The common special tokens across modern LMs:
 
-- `<|endoftext|>` (GPT-2 and GPT-3) — marks the end of a document, used as a boundary token when concatenating multiple documents into a single training stream.
-- `<bos>` and `<eos>` (beginning and end of sequence) — start and stop markers used by many models.
-- `<pad>` — padding token used to extend short sequences to a fixed length so they can be batched together. The loss is masked on padding positions so the model never trains to predict them.
-- `<unk>` — unknown token, for tokenizers that can produce OOV. Byte-level BPE eliminates the need for one by construction.
-- `<|im_start|>` and `<|im_end|>` (the "ChatML" convention used by ChatGPT and adopted by many open-source chat models) — message boundaries that mark which turn belongs to which role in a multi-turn conversation.
-- `[CLS]` and `[SEP]` (BERT) — classifier input token and sequence separator, specific to the BERT family.
+- `<|endoftext|>` (GPT-2 and GPT-3), marks the end of a document, used as a boundary token when concatenating multiple documents into a single training stream.
+- `<bos>` and `<eos>` (beginning and end of sequence), start and stop markers used by many models.
+- `<pad>`, padding token used to extend short sequences to a fixed length so they can be batched together. The loss is masked on padding positions so the model never trains to predict them.
+- `<unk>`, unknown token, for tokenizers that can produce OOV. Byte-level BPE eliminates the need for one by construction.
+- `<|im_start|>` and `<|im_end|>` (the "ChatML" convention used by ChatGPT and adopted by many open-source chat models), message boundaries that mark which turn belongs to which role in a multi-turn conversation.
+- `[CLS]` and `[SEP]` (BERT), classifier input token and sequence separator, specific to the BERT family.
 
-The model learns what each special token *means* the same way it learns what `the` means: by observing it in context during training. A `<|im_start|>` token has no inherent definition; its meaning comes from millions of training examples in which it preceded a chat turn. A model fine-tuned with a new special token whose ID was randomly initialized has to learn the embedding for that token from scratch — the rest of the model has no prior on what the new ID should mean.
+The model learns what each special token *means* the same way it learns what `the` means: by observing it in context during training. A `<|im_start|>` token has no inherent definition; its meaning comes from millions of training examples in which it preceded a chat turn. A model fine-tuned with a new special token whose ID was randomly initialized has to learn the embedding for that token from scratch, the rest of the model has no prior on what the new ID should mean.
 
-This is the structural reason prompt formatting matters as much as it does. When a user sends a prompt formatted differently from how the model was trained — wrong special tokens, missing system message wrapper, leading-space convention reversed — the model is in a slightly off-distribution state. The behaviors that show up in *that* state were not directly trained for; they emerge from how the model generalizes. Sometimes the generalization is graceful and the model behaves nearly as well. Sometimes it is brittle and the model behaves erratically. The variance is what makes "exact prompt format matters" a load-bearing rule for production deployments.
+This is the structural reason prompt formatting matters as much as it does. When a user sends a prompt formatted differently from how the model was trained (wrong special tokens, missing system message wrapper, leading-space convention reversed), the model is in a slightly off-distribution state. The behaviors that show up in *that* state were not directly trained for; they emerge from how the model generalizes. Sometimes the generalization is graceful and the model behaves nearly as well. Sometimes it is brittle and the model behaves erratically. The variance is what makes "exact prompt format matters" a load-bearing rule for production deployments.
 
 <Callout type="aside">
-The chat formats used by ChatGPT, Claude, Gemini, and the open-source chat-tuned models are not freeform text wrappers. They are specific token sequences — `<|im_start|>system`, `<|im_end|>`, `<|im_start|>user`, and so on — that the model was trained to recognize as turn boundaries. The text between the special tokens is conventional content; the tokens themselves carry the conversation structure. This is the structural reason "prompt formatting matters" is not a stylistic claim but a literal one about the input tokens the model is reading.
+The chat formats used by ChatGPT, Claude, Gemini, and the open-source chat-tuned models are not freeform text wrappers. They are specific token sequences, `<|im_start|>system`, `<|im_end|>`, `<|im_start|>user`, and so on, that the model was trained to recognize as turn boundaries. The text between the special tokens is conventional content; the tokens themselves carry the conversation structure. This is the structural reason "prompt formatting matters" is not a stylistic claim but a literal one about the input tokens the model is reading.
 </Callout>
 
 ## The long tail of consequences
@@ -369,11 +369,11 @@ Tokenization is an algorithm, but its consequences are empirical, and they show 
 
 ### Number tokenization and arithmetic
 
-GPT-2's BPE tokenizer splits the string `"100"` into the tokens `[' 1', '00']`. The string `"100000"` becomes `[' 100', '000']`. The exact split depends on which digit sequences happened to be frequent in the BPE training corpus — completely arbitrary from the perspective of arithmetic.
+GPT-2's BPE tokenizer splits the string `"100"` into the tokens `[' 1', '00']`. The string `"100000"` becomes `[' 100', '000']`. The exact split depends on which digit sequences happened to be frequent in the BPE training corpus, completely arbitrary from the perspective of arithmetic.
 
-A model whose tokenizer fragments numbers this way does not see `1234` as a single quantity. It sees a sequence of two or three tokens whose joint meaning has to be reconstructed by attention. *Multiply 432 by 17* becomes a problem in which the model first has to figure out that `' 432'` is one token whose "value" is the integer 432, that `' 17'` is one token whose "value" is the integer 17, and then perform multiplication — all in a representation that was not designed for it.
+A model whose tokenizer fragments numbers this way does not see `1234` as a single quantity. It sees a sequence of two or three tokens whose joint meaning has to be reconstructed by attention. *Multiply 432 by 17* becomes a problem in which the model first has to figure out that `' 432'` is one token whose "value" is the integer 432, that `' 17'` is one token whose "value" is the integer 17, and then perform multiplication, all in a representation that was not designed for it.
 
-The empirical consequence is that GPT-2 and GPT-3 were notably bad at multi-digit arithmetic. GPT-4 improved partly by adopting a tokenizer (`cl100k_base`) that keeps 1-, 2-, and 3-digit numbers as single tokens; longer numbers still split, but more consistently and along digit-count boundaries. The model still makes arithmetic errors on long numbers, and tokenization is a substantial part of the reason. It is not the *only* reason — multi-step arithmetic also stresses the model's ability to track intermediate state — but the tokenizer puts a structural ceiling on how cleanly the model can represent numerical inputs in the first place.
+The empirical consequence is that GPT-2 and GPT-3 were notably bad at multi-digit arithmetic. GPT-4 improved partly by adopting a tokenizer (`cl100k_base`) that keeps 1-, 2-, and 3-digit numbers as single tokens; longer numbers still split, but more consistently and along digit-count boundaries. The model still makes arithmetic errors on long numbers, and tokenization is a substantial part of the reason. It is not the *only* reason; multi-step arithmetic also stresses the model's ability to track intermediate state. But the tokenizer puts a structural ceiling on how cleanly the model can represent numerical inputs in the first place.
 
 ### Language asymmetry
 
@@ -381,13 +381,13 @@ The byte-level BPE asymmetry from section 4 has a direct economic consequence. E
 
 The asymmetry exists because BPE training corpora are dominated by English and other high-resource European languages. The tokenizer learns efficient merges for the bigrams that dominate those corpora; the merges for other languages are sparser, so non-English text bottoms out closer to the raw-byte representation. Petrov et al. (2023, [arxiv.org/abs/2305.15425](https://arxiv.org/abs/2305.15425)) measured this across 17 tokenizers and confirmed the pattern across nearly every language other than English.
 
-The downstream effects are several. Non-English users pay more per character of input on commercial APIs. Their effective context window — measured in characters of content — is shorter. Their inference latency is higher (more tokens to attend over). And the model's *quality* on those languages tends to lag, because the same character of training data produced more tokens of supervision in English but fewer elsewhere.
+The downstream effects are several. Non-English users pay more per character of input on commercial APIs. Their effective context window, measured in characters of content, is shorter. Their inference latency is higher (more tokens to attend over). And the model's *quality* on those languages tends to lag, because the same character of training data produced more tokens of supervision in English but fewer elsewhere.
 
 ### Glitch tokens
 
-`SolidGoldMagikarp` was a Reddit username that appeared frequently in the corpus used to train GPT-2's tokenizer. BPE assigned it a dedicated token ID. By the time GPT-2 itself was trained — on a different, more curated corpus — the username had been filtered out. The embedding row for that token ID existed in the model's embedding table but was never updated by training. It remained near its random initialization for the model's entire lifetime.
+`SolidGoldMagikarp` was a Reddit username that appeared frequently in the corpus used to train GPT-2's tokenizer. BPE assigned it a dedicated token ID. By the time GPT-2 itself was trained, on a different, more curated corpus, the username had been filtered out. The embedding row for that token ID existed in the model's embedding table but was never updated by training. It remained near its random initialization for the model's entire lifetime.
 
-When prompts containing `SolidGoldMagikarp` reached GPT-2 and GPT-3, the model's response was unpredictable — sometimes garbled, sometimes confidently wrong, sometimes a topic shift to gold or Pokémon. Rumbelow and Watkins (2023, [the original LessWrong post](https://www.lesswrong.com/posts/aPeJE8bSo6rAFoLqg/solidgoldmagikarp-plus-prompt-generation)) catalogued hundreds of similar "glitch tokens" in GPT-2 and GPT-3 — orphaned vocabulary entries from rare Reddit usernames, gaming jargon, and other artifacts of the BPE training corpus that did not survive the model training corpus.
+When prompts containing `SolidGoldMagikarp` reached GPT-2 and GPT-3, the model's response was unpredictable, sometimes garbled, sometimes confidently wrong, sometimes a topic shift to gold or Pokémon. Rumbelow and Watkins (2023, [the original LessWrong post](https://www.lesswrong.com/posts/aPeJE8bSo6rAFoLqg/solidgoldmagikarp-plus-prompt-generation)) catalogued hundreds of similar "glitch tokens" in GPT-2 and GPT-3, orphaned vocabulary entries from rare Reddit usernames, gaming jargon, and other artifacts of the BPE training corpus that did not survive the model training corpus.
 
 Modern tokenizers are more careful about this. The `cl100k_base` vocabulary used by GPT-4 has substantially fewer glitch tokens, partly because the BPE training corpus was filtered with more care and partly because the model training corpus was less aggressively divergent. But the class of problem is structural: BPE assigns tokens based on frequency in its own training data; the model assigns meaning based on frequency in *its* training data; when the two diverge, orphaned tokens remain.
 
@@ -397,7 +397,7 @@ Modern tokenizers are more careful about this. The `cl100k_base` vocabulary used
 
 The widget below shows the same input text tokenized under different tokenizers, with the token boundaries colored. The contrast between English, Korean, and code under GPT-2 and GPT-4's tokenizers is the easiest way to see the consequences for yourself.
 
-<WidgetFrame title="Compare tokenizers" caption="See how the same text breaks into tokens under three real tokenizers — GPT-2 (byte-level BPE), GPT-4 (cl100k_base), and SentencePiece (T5). Notice how token counts differ across languages and content types.">
+<WidgetFrame title="Compare tokenizers" caption="See how the same text breaks into tokens under three real tokenizers, GPT-2 (byte-level BPE), GPT-4 (cl100k_base), and SentencePiece (T5). Notice how token counts differ across languages and content types.">
   <TokenizerComparison client:visible />
 </WidgetFrame>
 
@@ -463,9 +463,9 @@ The numbers that appeared in the corpus tokenize cleanly. The numbers that did n
 
 ## Exercises
 
-The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default — try the problem first.
+The exercises build on the chapter. Each is a self-contained problem with a starting template. Hints are collapsed by default; try the problem first.
 
-### Exercise 1 (easy) — Examine BPE merges on a custom corpus
+### Exercise 1 (easy): Examine BPE merges on a custom corpus
 
 Train BPE on a small corpus of your choice (5–10 sentences) and examine the first 10 merges learned. Confirm that high-frequency character pairs in the corpus appear in the first few merges.
 
@@ -504,7 +504,7 @@ for sentence in my_corpus:
   packages={[]}
 />
 
-### Exercise 2 (medium) — Implement BPE encoding
+### Exercise 2 (medium): Implement BPE encoding
 
 After training BPE (exercise 1), implement the encoding function: given a new string, apply the learned merges in priority order to produce a sequence of tokens.
 
@@ -537,7 +537,7 @@ The key idea: at each step, look for the available merge with the lowest *learne
   packages={[]}
 />
 
-### Exercise 3 (medium) — Quantify language asymmetry
+### Exercise 3 (medium): Quantify language asymmetry
 
 Take the same BPE tokenizer (trained on English text in exercise 1) and tokenize three short sentences: one in English, one in Korean (use Google Translate if needed), and one in Russian. Report bytes-per-token for each. Comment on the result.
 
@@ -564,12 +564,12 @@ sentences = {
 #   - tokenize with your trained tokenizer
 #   - compute token count
 #   - report bytes/token
-# TODO: comment on the asymmetry — which language is most "expensive" per character?
+# TODO: comment on the asymmetry: which language is most "expensive" per character?
 `}
   packages={[]}
 />
 
-### Exercise 4 (hard) — Implement WordPiece
+### Exercise 4 (hard): Implement WordPiece
 
 WordPiece is BPE's likelihood-based cousin (used by BERT). Instead of merging the most *frequent* pair, WordPiece merges the pair that most increases the unigram language model's likelihood. Implement a simple version: at each step, score each candidate pair by `count(a, b) / (count(a) * count(b))` and merge the highest-scoring pair.
 
@@ -609,8 +609,8 @@ def train_wordpiece(words, vocab_size=270):
 
 The pipeline is now complete. Text comes in; the tokenizer splits it into byte sequences using its pre-tokenization regex, runs BPE merges in learned order, and emits a sequence of integer token IDs. The embedding layer from Chapter 2 looks up the rows of $E$ corresponding to those IDs. The output is a sequence of dense vectors in $\R^{T \times d}$, ready for whatever the rest of the model wants to do with them.
 
-What the rest of the model does, in every modern LLM, is *attention*. Each transformer layer takes the sequence of vectors from the layer below, lets every position look at every other position, and refines each vector based on what it sees. After twelve such layers (or seventy, or two hundred), the vector at position $t$ has absorbed information from every other position — the static input embedding has been turned into a context-dependent representation of "what the token at position $t$ means here."
+What the rest of the model does, in every modern LLM, is *attention*. Each transformer layer takes the sequence of vectors from the layer below, lets every position look at every other position, and refines each vector based on what it sees. After twelve such layers (or seventy, or two hundred), the vector at position $t$ has absorbed information from every other position, the static input embedding has been turned into a context-dependent representation of "what the token at position $t$ means here."
 
-Sequence length is the dimension along which attention happens. The longer the sequence, the more positions each position has to attend to, and the more compute the attention step requires (it scales with $\text{seq}^2$, as Chapter 4 derives). Tokenization sets the sequence length for any given amount of text. A more efficient tokenizer — fewer tokens per character of content — means shorter sequences, which means cheaper attention. This is one reason an English-optimized tokenizer makes the model feel faster on English than on Korean: there is genuinely less compute per character of input.
+Sequence length is the dimension along which attention happens. The longer the sequence, the more positions each position has to attend to, and the more compute the attention step requires (it scales with $\text{seq}^2$, as Chapter 4 derives). Tokenization sets the sequence length for any given amount of text. A more efficient tokenizer, fewer tokens per character of content, means shorter sequences, which means cheaper attention. This is one reason an English-optimized tokenizer makes the model feel faster on English than on Korean: there is genuinely less compute per character of input.
 
-Chapter 4 takes that sequence of embedded tokens as its starting point. The pre-tokenizer regex, the BPE merge table, the byte-level vocabulary — all the machinery from this chapter — disappears behind the words "given a sequence of token embeddings." That handwave is the thing this chapter unwound. The next chapter does the same for attention.
+Chapter 4 takes that sequence of embedded tokens as its starting point. The pre-tokenizer regex, the BPE merge table, the byte-level vocabulary, all the machinery from this chapter, disappears behind the words "given a sequence of token embeddings." That handwave is the thing this chapter unwound. The next chapter does the same for attention.
