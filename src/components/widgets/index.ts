@@ -27,6 +27,7 @@ export { default as SFTLossMasking } from './ch13/SFTLossMasking';
 export { default as ChatTemplateComparison } from './ch13/ChatTemplateComparison';
 export { default as PreferenceLearningPipeline } from './ch14/PreferenceLearningPipeline';
 export { default as DPOLossLandscape } from './ch14/DPOLossLandscape';
+export { default as PPOClipExplorer } from './ch14/PPOClipExplorer';
 export { default as LoRAArchitecture } from './ch15/LoRAArchitecture';
 export { default as ParameterBudgetCalculator } from './ch15/ParameterBudgetCalculator';
 export { default as TemperatureScaling } from './ch16/TemperatureScaling';

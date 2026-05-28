@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch14-alignment
-description: Preference optimization, the algorithmic centerpiece of post-training. Where SFT (Chapter 13) taught the model to respond, this chapter teaches it to respond well. Covers classical RLHF (reward model + PPO with KL constraint), Direct Preference Optimization (DPO, the math trick that skips RL entirely), DPO variants (IPO, KTO, ORPO, SimPO), and the recent RLVR breakthrough (RL with Verifiable Rewards, what powered DeepSeek-R1 and OpenAI o1's reasoning capabilities). The chapter's pedagogical centerpiece is the DPO derivation, a closed-form solution to a KL-regularized RL objective becomes a supervised loss on preference pairs. Two-topic chapter walking classical and modern alignment.
+description: Preference optimization, the algorithmic centerpiece of post-training. Where SFT (Chapter 13) taught the model to respond, this chapter teaches it to respond well. The chapter frames generation as a token-level MDP and walks four method families as answers to one weight-and-leash problem, classical RLHF (reward model + PPO with KL folded into the reward), DPO (the closed-form offline collapse), GRPO (critic-free, with a group-relative Monte Carlo baseline), and RLVR (a deterministic verifier as the reward, powering DeepSeek-R1 and o1 reasoning). Two pedagogical centerpieces, the DPO derivation and a synthesis showing all four methods are reweighted next-token prediction with a leash to the reference.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { PreferenceLearningPipeline, DPOLossLandscape } from '@components/widgets';
+import { PreferenceLearningPipeline, DPOLossLandscape, PPOClipExplorer } from '@components/widgets';
 
 Chapter 13 left you with an SFT'd model. It follows the chat template, knows it is the assistant side of a conversation, and produces grammatical responses to instructions. What it does *not* know is how to produce *good* responses. Ask it a hard question and it may confidently invent an answer. Ask it for help on something edgy and it may refuse harmlessly or comply harmfully. The format is there; the quality and the alignment are not.
 
 **Preference optimization** fills that gap. The premise is operational, not theoretical: humans cannot easily *demonstrate* the best response to an open-ended question, but they can readily *compare* two responses and pick the better one. Collect a dataset of preference pairs, instruction plus a chosen response plus a rejected response, and train the model to produce more chosen-like outputs and fewer rejected-like ones. The mechanics of *how* to do that turn out to be where this chapter lives.
 
-Three families of methods divide the space. **Classical RLHF** (Christiano et al. 2017; InstructGPT 2022) trains a reward model on preferences and then optimizes the policy with PPO against the reward, constrained by a KL penalty back toward the SFT model. **DPO** (Rafailov et al. 2023) is the mathematical insight that the KL-regularized RL objective has a *closed-form* solution that reparameterizes into a supervised loss, no reward model, no PPO, no on-policy sampling. **RLVR** (DeepSeek-R1, o1, late 2024 – early 2025) extends RL to settings where the reward is *objectively verifiable*, math correctness, code tests passing, theorem-prover validity, and bootstraps long-chain reasoning from a verifier alone, without any human-labeled reward. This chapter walks all three.
+Four families of methods divide the space. **Classical RLHF** (Christiano et al. 2017; InstructGPT 2022) trains a reward model on preferences and then optimizes the policy with PPO against the reward, constrained by a KL penalty back toward the SFT model. **DPO** (Rafailov et al. 2023) is the mathematical insight that the KL-regularized RL objective has a *closed-form* solution that reparameterizes into a supervised loss, no reward model, no PPO loop, no on-policy sampling. **GRPO** (DeepSeekMath 2024) keeps the on-policy RL setup but drops PPO's learned value function, using an empirical group mean as the baseline; this halves the model count and pairs naturally with verifiable rewards. **RLVR** (DeepSeek-R1, o1, late 2024 – early 2025) is the reward-design move: replace the learned reward model with a deterministic verifier, math correctness, code tests passing, theorem-prover validity, and bootstrap long-chain reasoning from the verifier alone. This chapter walks all four, and the next section sets up the token-level frame that makes them instances of one idea.
 
 ## The setup: SFT teaches format, not quality
 
@@ -23,8 +23,32 @@ The reason SFT cannot address quality is structural. Every example in an SFT dat
 Preference data provides that signal at low cost. Asking a human "which of these two responses is better?" is far easier than asking them to write the ideal response from scratch. Inter-rater agreement is imperfect (typical 65–75% on real preference data), but the signal is real and aggregates well across raters. Once the preference dataset exists, the question is how to turn it into a training signal. The three families of methods correspond to three different answers, and the bridge from Chapter 13 is the SFT model itself, which becomes the *reference policy* that every preference method stays close to.
 
 <Callout type="note">
-**Two-topic chapter.** Sections 2–4 cover **classical RLHF**, the original recipe, still used at frontier labs: train a reward model on preference pairs, then run PPO against it with a KL constraint back to the SFT model. Sections 5–7 cover **modern alternatives**, DPO (now the open-source default), the DPO variant zoo (IPO, KTO, ORPO, SimPO), and RLVR (the 2024–2025 reasoning breakthrough). Sections 8–9 cover practical pathologies and the production stack. The structural pivot is between sections 4 and 5: section 4 ends with the KL-regularized RL objective, and section 5 opens by deriving the supervised loss that is equivalent to it.
+**Four families, one frame.** The next section sets up the token-level MDP that turns every later method into an answer to two questions: *how do you weight each token, and how do you keep the model near the reference?* The chapter then walks four answers in turn, classical **RLHF** (reward model + PPO with KL folded into the reward), **DPO** (the closed-form offline collapse), **GRPO** (critic-free, with a group-relative Monte Carlo baseline), and **RLVR** (a verifier as reward), and synthesizes them near the end as instances of one reweighted-cross-entropy pattern. The final sections cover practical pathologies and the production stack.
 </Callout>
+
+## Generation as a token-level MDP
+
+The choice this chapter asks you to make, how to turn preference data into model updates, has a useful skeleton underneath. Drawing it once, in the language of reinforcement learning, makes the rest of the chapter (PPO, DPO, GRPO, RLVR) look like four answers to the same two questions rather than four unrelated algorithms.
+
+An autoregressive language model generating a completion $y = (y_1, \ldots, y_T)$ for a prompt $x$ defines a Markov decision process where the state is *the prompt plus the tokens generated so far*, the action is the *next token*, the transition is *deterministic* (you append the token, and nothing else happens), and the policy is *exactly the model's next-token softmax*:
+
+$$s_t = (x, y_1, \ldots, y_{t-1}), \quad a_t = y_t, \quad \pi_\theta(a_t \mid s_t) = p_\theta(y_t \mid x, y_{<t})$$
+
+Two features of this MDP are unusual and they drive most of the design choices in the rest of the chapter. The first is that **the only randomness is the policy's own sampling**: the environment does not branch, so "exploration" is whatever diversity the policy puts in its own samples (temperature, top-$p$, group size). The second is that **the reward is sparse and terminal**: a reward model or verifier looks at the *finished* response and emits a single scalar; nothing scores individual tokens directly. A correct final answer has to credit however many intermediate reasoning tokens produced it, and none of those tokens can be individually judged. This is the *credit-assignment* problem, and every algorithm in this chapter is partly a story about how it handles it.
+
+The log-probability of a completion factorizes over tokens:
+
+$$\log \pi_\theta(y \mid x) = \sum_{t=1}^{T} \log \pi_\theta(y_t \mid x, y_{<t})$$
+
+This is why everything in the chapter ultimately reduces to per-token terms. The chapter's organizing claim, which the synthesis section returns to, is that all of the methods we are about to study are doing the same thing at the token level: **maximizing $\log \pi_\theta(y_t \mid s_t)$ with a per-token weight that depends on how good $y_t$ turned out to be, subject to a leash that prevents the policy from drifting too far from the reference.** Supervised fine-tuning (Chapter 13) is the trivial case where the weight is $1$ on every gold token and there is no leash. Every other method differs in how it computes the weight and where it attaches the leash.
+
+That framing gives the chapter its two organizing questions. *How do you compute the per-token weight?* PPO answers with a learned value function plus generalized advantage estimation. DPO answers with the implicit reward $\beta \log(\pi_\theta(y \mid x) / \pi_{\text{ref}}(y \mid x))$ inside a preference loss. GRPO answers with an empirical group mean as the baseline, broadcast back to every token of each sampled completion. RLVR answers by replacing the learned reward with a deterministic verifier. *How do you keep the model near the reference?* All four answer with a KL constraint to a frozen $\pi_{\text{ref}}$, but they place it differently: PPO folds it into the per-token reward, DPO bakes it into the loss through the implicit-reward parameterization, and GRPO adds it as an explicit term in the loss with the k3 estimator.
+
+<Callout type="note">
+**Why this framing matters.** Without it, the methods look unrelated: PPO is "RL with a critic," DPO is "a clever supervised loss," GRPO is "PPO without the critic," RLVR is "a reward function." Inside the framing, they are four points on one map. The synthesis section near the end makes the map explicit; the sections in between plot the points.
+</Callout>
+
+The rest of the chapter walks the four answers in order. The next section starts with the data (preferences and the Bradley-Terry reward model) before turning to the first answer (PPO).
 
 ## Preference data and the Bradley-Terry model
 
@@ -32,7 +56,7 @@ Preference data provides that signal at low cost. Asking a human "which of these
 
 A preference example is a tuple $(x, y_w, y_l)$. $x$ is the prompt or conversation context. $y_w$, *winner*, also called *chosen*, is the preferred response. $y_l$, *loser*, also called *rejected*, is the dispreferred one. The labels come from a rater: shown $x$ and two candidate responses $y_1, y_2$, the rater picks which is better, and that choice determines which one is $y_w$ and which is $y_l$. The two candidates typically come from the same model at different temperatures, or from two different models, or from one model with one of the two responses lightly edited. The construction matters less than the contrast: the dataset records that *one is preferred*, and the magnitude of preference is not recorded.
 
-The data is noisier than it looks. **Inter-rater agreement is typically 65–75%**: different humans disagree on which response is better, especially on open-ended or edgy queries. Some of that disagreement is genuine value diversity; some is bias. The most-studied biases are **length** (longer responses are preferred even when they should not be), **confidence** (assertive phrasing rates higher than equivalent hedged phrasing), and **formatting** (responses with lists, headers, or markdown structure beat the same content as plain prose). These biases propagate. A reward model trained on this data inherits them; a policy trained against that reward model inherits them again. The chapter returns to the consequences in section 8.
+The data is noisier than it looks. **Inter-rater agreement is typically 65–75%**: different humans disagree on which response is better, especially on open-ended or edgy queries. Some of that disagreement is genuine value diversity; some is bias. The most-studied biases are **length** (longer responses are preferred even when they should not be), **confidence** (assertive phrasing rates higher than equivalent hedged phrasing), and **formatting** (responses with lists, headers, or markdown structure beat the same content as plain prose). These biases propagate. A reward model trained on this data inherits them; a policy trained against that reward model inherits them again. The chapter returns to the consequences in section 11.
 
 ### The Bradley-Terry model
 
@@ -86,13 +110,13 @@ print("After training, reward differences map to preference probabilities via si
 **Misconception.** "Preference data is objective." False: **inter-rater agreement on preference data is typically only 65–75%.** Different raters disagree because of different values, biases, and judgments. Systematic biases compound: *length* (longer responses preferred), *confidence* (assertive phrasing preferred), *formatting* (lists and headers preferred). Reward models trained on this data inherit every one of these biases, and policies trained against those reward models inherit them again. The signal is real and useful, but it is not a clean read of "human preference": it is preference *as filtered through these specific raters under these specific biases.*
 </Callout>
 
-With a reward model in hand, the next question is how to *use* it. Section 3 covers the classical answer: PPO.
+With a reward model in hand, the next question is how to *use* it. Section 4 covers the classical answer: PPO.
 
 ## Classical RLHF: reward model + PPO
 
 ### The three-stage recipe
 
-The Ouyang et al. (2022) InstructGPT paper crystallized the canonical RLHF recipe, the three-stage pipeline that produced ChatGPT and most chat models since. Stage 1 is **SFT** (Chapter 13), which produces a starting policy $\pi_{\text{SFT}}$ that knows it is a chatbot. Stage 2 is **reward modeling**: train $r_\phi(x, y)$ on a fresh preference dataset using the Bradley-Terry loss from section 2. Stage 3 is **PPO fine-tuning**: optimize a policy $\pi_\theta$, initialized from $\pi_{\text{SFT}}$, to maximize the learned reward $r_\phi$, while penalizing divergence from $\pi_{\text{SFT}}$ via a KL constraint. Each stage uses a different dataset and a different optimizer state; the SFT model is the bridge between them.
+The Ouyang et al. (2022) InstructGPT paper crystallized the canonical RLHF recipe, the three-stage pipeline that produced ChatGPT and most chat models since. Stage 1 is **SFT** (Chapter 13), which produces a starting policy $\pi_{\text{SFT}}$ that knows it is a chatbot. Stage 2 is **reward modeling**: train $r_\phi(x, y)$ on a fresh preference dataset using the Bradley-Terry loss from section 3. Stage 3 is **PPO fine-tuning**: optimize a policy $\pi_\theta$, initialized from $\pi_{\text{SFT}}$, to maximize the learned reward $r_\phi$, while penalizing divergence from $\pi_{\text{SFT}}$ via a KL constraint. Each stage uses a different dataset and a different optimizer state; the SFT model is the bridge between them.
 
 ### The optimization objective
 
@@ -100,29 +124,126 @@ The objective combines a reward term and a KL term:
 
 $$\max_{\pi_\theta} \; \mathbb{E}_{x \sim \mathcal{D}, \; y \sim \pi_\theta(\cdot \mid x)} \left[ r_\phi(x, y) \right] - \beta \cdot D_{KL}(\pi_\theta(\cdot \mid x) \,\|\, \pi_{\text{ref}}(\cdot \mid x))$$
 
-In words: the policy *wants* high reward but is *penalized* for drifting from the reference policy $\pi_{\text{ref}}$, typically $\pi_{\text{SFT}}$, the frozen SFT model. The temperature $\beta$ controls the trade-off. Small $\beta$ lets the policy chase reward aggressively, accepting large KL; large $\beta$ keeps the policy close to the SFT model, accepting smaller reward gains. Section 4 zooms in on the KL constraint specifically; for now, take it as a regularizer.
+In words: the policy *wants* high reward but is *penalized* for drifting from the reference policy $\pi_{\text{ref}}$, typically $\pi_{\text{SFT}}$, the frozen SFT model. The temperature $\beta$ controls the trade-off. Small $\beta$ lets the policy chase reward aggressively, accepting large KL; large $\beta$ keeps the policy close to the SFT model, accepting smaller reward gains. Section 5 zooms in on the KL constraint specifically; for now, take it as a regularizer.
 
-### PPO mechanics, briefly
+### The starting point: policy gradients
 
-The objective is an RL one: the policy generates responses, the reward model scores them, the gradients update the policy. Because the policy is generating its own training data as it learns, the optimization is **on-policy**, and naive policy-gradient methods are unstable: a single bad batch with high variance gradients can collapse the policy. PPO (Schulman et al. 2017) is the workhorse algorithm that handles this. Its core trick is a **clipped surrogate objective**: rather than directly applying the policy-gradient update, PPO computes the *ratio* of the new policy probability to the old policy probability for each sampled action, clips that ratio at $1 \pm \epsilon$ (typically $\epsilon = 0.2$), and takes the gradient of the clipped quantity. The clip prevents any single update from moving the policy too far in one step.
+The objective above is an RL one: the policy generates responses, the reward model scores them, the gradients update the policy. Because the policy is generating its own training data as it learns, the optimization is **on-policy**. The starting point for this kind of optimization is the **policy gradient theorem**, which expresses the gradient of expected reward as an expectation of per-token score-function gradients weighted by an advantage:
 
-The full PPO update has more moving parts than the chapter has room for: a value function (a second head on the policy or a separate critic) for variance reduction, **Generalized Advantage Estimation** (GAE) for bias-variance trade-off on the value estimates, multiple gradient steps per batch of rollouts, separate hyperparameters for the value-function loss and the entropy bonus. The full algorithm is a specialty topic; see Schulman et al. (2017) for the original derivation and any modern RLHF codebase (TRL, OpenRLHF) for production implementations. What matters for this chapter is the *shape* of the algorithm: generate responses with $\pi_\theta$, score them with $r_\phi$, and update $\pi_\theta$ with a clipped policy-gradient step toward higher reward, subject to the KL constraint.
+$$\nabla_\theta J(\theta) = \mathbb{E}_{x, \, y \sim \pi_\theta} \left[ \sum_{t=1}^{T} \nabla_\theta \log \pi_\theta(y_t \mid s_t) \cdot A_t \right]$$
+
+Read this carefully. **The gradient on each token is (advantage) times (gradient of token log-prob).** That is the cross-entropy gradient from SFT with a per-token weight $A_t$ attached: positive advantage pushes the log-probability of that token up at that state; negative advantage pushes it down. The rest of PPO is machinery to estimate $A_t$ stably and to keep each update from moving the policy too far.
+
+The naive instantiation is **REINFORCE**: set $A_t$ to the trajectory's total reward, take one gradient step per batch of rollouts, repeat. Two problems. First, variance is huge: every token in a high-reward trajectory is pushed up, including the irrelevant ones. Second, you can only take *one* gradient step per rollout, because after one update the samples were drawn from a now-stale policy, biasing the estimator. Generating rollouts from a multi-billion-parameter model is the expensive step in this whole pipeline; one gradient step per rollout is wasteful. PPO fixes both, in that order.
+
+### Importance sampling and the clipped surrogate
+
+PPO lets you take *multiple* gradient steps on each batch of rollouts by reweighting with an importance ratio, and bounds the per-step policy change with a clip. Let $\pi_{\theta_{\text{old}}}$ denote the policy snapshot at the start of this PPO iteration, the one that generated the current batch of rollouts. The per-token ratio is
+
+$$r_t(\theta) = \frac{\pi_\theta(y_t \mid s_t)}{\pi_{\theta_{\text{old}}}(y_t \mid s_t)}$$
+
+and PPO's **clipped surrogate objective** is
+
+$$L^{\text{CLIP}}(\theta) = \mathbb{E}_t \left[ \min\left( r_t(\theta) \cdot A_t, \; \text{clip}(r_t(\theta), \, 1 - \epsilon, \, 1 + \epsilon) \cdot A_t \right) \right]$$
+
+with $\epsilon \approx 0.2$. The ratio reweights stale samples so the same batch supports two to four epochs of updates; the clip bounds the per-step move so no single update destabilizes the policy. The $\min$ of clipped and unclipped looks fiddly but does exactly one job: it makes the bound *one-sided*. Walking the cases makes this concrete.
+
+<WidgetFrame title="PPO clipped surrogate" caption="The clipped surrogate $L^{\text{CLIP}}$ as a function of the per-token ratio $r_t(\theta)$, for a chosen advantage $A_t$ and clip range $\epsilon$. Green band: gradient is active (the line region). Red band: gradient is zero (the flat region, where the clip is binding). Slide $A_t$ from positive to negative and watch the flat region jump from the right side ($r > 1+\epsilon$) to the left side ($r < 1-\epsilon$).">
+  <PPOClipExplorer client:visible />
+</WidgetFrame>
+
+*Case $A_t > 0$ (good token, push up).* When $r_t \in [1 - \epsilon, \, 1 + \epsilon]$, the clip does nothing and both terms equal $r_t \cdot A_t$. Once $r_t > 1 + \epsilon$, the clipped term saturates at $(1 + \epsilon) \cdot A_t$, which is smaller than the unclipped term, so the $\min$ picks it: **the objective flatlines and the gradient is zero**. Translation: PPO lets you raise a good token's probability up to about $1 + \epsilon$ times its old probability, then it stops, on the grounds that you are extrapolating past the data you actually sampled. Conversely, if an earlier minibatch overshot and drove $r_t < 1 - \epsilon$, the unclipped term $r_t \cdot A_t$ becomes the smaller one and the $\min$ picks *it* over the clipped, keeping the gradient active so the policy can pull the probability back up. The clip caps reward-seeking; it never blocks error correction.
+
+*Case $A_t < 0$ (bad token, push down).* Mirror image. Once $r_t < 1 - \epsilon$, the gradient is zero (you have already lowered this token's probability enough). If an earlier update accidentally raised $r_t$ above $1 + \epsilon$, the gradient stays active to push it back down. Same one-sided shape: PPO stops you from over-decreasing, but it always lets you correct.
+
+This piecewise gating is the whole content of "PPO is conservative." It is not a trust-region constraint imposed externally; it is a piecewise-linear objective whose gradient turns on or off depending on how far $\pi_\theta$ has moved from $\pi_{\theta_{\text{old}}}$ on the current token.
+
+<RunnableCode client:visible>
+```python
+import numpy as np
+
+epsilon = 0.2
+
+def clipped_surrogate(r, A, eps=epsilon):
+    """L_CLIP at a single token: min(r*A, clip(r, 1-eps, 1+eps) * A)."""
+    return min(r * A, float(np.clip(r, 1 - eps, 1 + eps) * A))
+
+print("Good token (A = +1.0):")
+for r in [0.70, 0.90, 1.00, 1.15, 1.30, 1.50]:
+    L = clipped_surrogate(r, +1.0)
+    flat = "  flat (clip active)" if r > 1 + epsilon else ""
+    print(f"  r = {r:.2f}   L_CLIP = {L:+.3f}{flat}")
+
+print("\nGood token: objective rises with r, then saturates at 1+eps = 1.20.")
+print("Past saturation the gradient is zero: PPO refuses to extrapolate past the data.")
+
+print("\nBad token (A = -1.0):")
+for r in [0.50, 0.70, 0.80, 1.00, 1.20, 1.50]:
+    L = clipped_surrogate(r, -1.0)
+    flat = "  flat (clip active)" if r < 1 - epsilon else ""
+    print(f"  r = {r:.2f}   L_CLIP = {L:+.3f}{flat}")
+
+print("\nBad token: objective falls as r drops, then saturates at -(1-eps) = -0.80.")
+print("Past saturation the gradient is zero: don't over-decrease a bad token's probability.")
+print("\nBut if a prior epoch overshot, the *unclipped* branch is selected by the min")
+print("and the gradient stays active in the corrective direction. That is the whole trick.")
+```
+</RunnableCode>
+
+### Advantage estimation: the critic and GAE
+
+The advantage $A_t$ still needs a baseline. Without one, every token in a trajectory whose total reward was $0.8$ gets pushed up by $0.8$, even the mediocre middle tokens. The standard fix is to learn a **value function** $V_\phi(s_t)$, a second model (the **critic**), typically the policy with a scalar head, often initialized from the reward model. The critic predicts the expected return from state $s_t$. Subtracting $V(s_t)$ from the realized return turns "this trajectory was good" into "this token did better than expected from this state," which is the signal you actually want and which cuts gradient variance by roughly an order of magnitude.
+
+The PPO-standard estimator is **Generalized Advantage Estimation** (GAE), an exponentially-weighted sum of one-step TD residuals:
+
+$$\delta_t = r_t + \gamma \, V(s_{t+1}) - V(s_t), \qquad A_t^{\text{GAE}} = \sum_{l = 0}^{\infty} (\gamma \lambda)^l \, \delta_{t + l}$$
+
+$\lambda \in [0, 1]$ trades bias against variance: $\lambda = 0$ is single-step TD (low variance, high bias), $\lambda = 1$ is full Monte Carlo (the opposite). $\gamma$ is the discount, typically close to $1$ for LLM episodes since they are short. The critic is trained alongside the policy by regression toward the empirical returns $R_t = A_t + V_{\text{old}}(s_t)$:
+
+$$L^{\text{VF}}(\phi) = \mathbb{E}_t \left[ (V_\phi(s_t) - R_t)^2 \right]$$
+
+The full PPO loss is then three terms,
+
+$$L^{\text{PPO}} = L^{\text{CLIP}} - c_1 \, L^{\text{VF}} + c_2 \, H(\pi_\theta)$$
+
+clipped surrogate (maximized), value loss (minimized), and an entropy bonus on $\pi_\theta$ (maximized, to keep the policy from collapsing to determinism mid-training).
+
+### Where the KL lives: per-token reward shaping
+
+The KL penalty from the optimization objective is not a separate loss term in PPO; it is *applied to the reward signal at every token*. Concretely, the reward each token receives during the GAE computation is
+
+$$r_t = -\beta \cdot \log \frac{\pi_\theta(y_t \mid s_t)}{\pi_{\text{ref}}(y_t \mid s_t)} \; + \; R(x, y) \cdot \mathbb{1}[t = T]$$
+
+For every token before the last, the reward is just the per-token KL penalty (negative when the policy moved away from $\pi_{\text{ref}}$ on this token). At the final token only, the reward model's scalar score $R(x, y)$ is added on top. This is the part of PPO most worth holding in your head at the token level: the *dense* signal across tokens is the per-token KL, which keeps generations coherent because every token is gently pulled toward the reference distribution, and the *sparse* signal at one token is the reward model's score, deposited at EOS and then smeared back over earlier tokens by GAE's discounted sum. The credit-assignment problem from section 2 gets resolved jointly by the critic (which learns to predict expected return at each state), GAE (which converts the sparse end-of-sequence reward into per-token advantages), and the clip (which keeps the resulting updates within the trust region). $\beta$ is often controlled adaptively to hit a target KL: raise it when the policy drifts too far, lower it when the policy is barely moving.
+
+### The four-model system and the rollout loop
+
+The full PPO-RLHF setup keeps **four models** resident at training time:
+
+| Model | Role | Trained? |
+|---|---|---|
+| Policy $\pi_\theta$ | the actor being optimized | yes |
+| Value $V_\phi$ | critic / baseline | yes |
+| Reward $r_\phi$ | scores completions | frozen (trained earlier in stage 2) |
+| Reference $\pi_{\text{ref}}$ | KL anchor, the SFT checkpoint | frozen |
+
+Two models receive gradients; two are forward-only. Memory and compute scale with that footprint, and that footprint is the main reason most open-source teams chose DPO and frontier teams still pay the price for PPO. The training loop given the pieces is straightforward to describe. Sample a batch of prompts. Generate completions with $\pi_\theta$ (sequential decoding, slow). Score with $r_\phi$, compute per-token KL against $\pi_{\text{ref}}$, run GAE through the critic to get advantages. Do two to four epochs of minibatch SGD on $L^{\text{PPO}}$, with the importance ratio $r_t(\theta)$ correcting for $\pi_\theta$ drifting from $\pi_{\theta_{\text{old}}}$ across epochs. Copy $\theta \to \theta_{\text{old}}$. Repeat.
 
 <WidgetFrame title="Preference learning pipeline" caption="The data flow from a preference pair to a trained policy, comparing classical RLHF and DPO pipelines side-by-side. Same preference data; two algorithmic paths. RLHF has a two-stage pipeline (reward model + PPO); DPO collapses to one stage (direct loss). Click any step for details on what it trains, what's frozen, and what's needed.">
   <PreferenceLearningPipeline client:visible />
 </WidgetFrame>
 
 <Callout type="aside">
-**PPO is operationally heavy.** Running PPO requires keeping the trained policy $\pi_\theta$ *and* the frozen reference $\pi_{\text{ref}}$ in memory simultaneously, twice the parameter footprint of SFT. It also requires *generating* rollouts during training, which is sequential decoding rather than batched teacher-forcing, and *scoring* each rollout with the reward model in a third forward pass. The wall-clock cost per gradient step is several times that of SFT. Frontier labs (OpenAI, Anthropic, Google) still run PPO at scale because they have the infrastructure and because PPO sometimes achieves higher peak performance than the alternatives. **Most open-source teams switched to DPO** (section 5) precisely because PPO is operationally expensive, not because the math is harder.
+**PPO is operationally heavy.** Running PPO requires keeping the trained policy $\pi_\theta$ *and* the frozen reference $\pi_{\text{ref}}$ in memory simultaneously, twice the parameter footprint of SFT, plus the value head and the reward model on top. It also requires *generating* rollouts during training, which is sequential decoding rather than batched teacher-forcing, and *scoring* each rollout with the reward model in a third forward pass. The wall-clock cost per gradient step is several times that of SFT. Frontier labs (OpenAI, Anthropic, Google) still run PPO at scale because they have the infrastructure and because PPO sometimes achieves higher peak performance than the alternatives. **Most open-source teams switched to DPO** (section 6) precisely because PPO is operationally expensive, not because the math is harder.
 </Callout>
 
-Section 4 zooms in on the KL constraint, what it does, why it matters, and what happens without it.
+Section 5 zooms in on the KL constraint, what it does, why it matters, and what happens without it.
 
 ## The KL constraint
 
 ### Why the constraint matters
 
-The reward model is an imperfect proxy for human preference. Section 2 noted that reward-model accuracy on held-out human preferences is typically only $65$–$75$%. The remaining $25$–$35$% is noise: the RM gets a sizable fraction of comparisons *wrong*, and the wrongs are not random; they cluster around the biases the RM inherited from preference data. Optimizing aggressively against an imperfect proxy is dangerous. Without a constraint, the policy will exploit the *errors* of the reward model: it will find out-of-distribution responses that score artificially high on the RM but are not actually preferred by humans. This is **reward hacking**, and it is the central failure mode of unconstrained RLHF.
+The reward model is an imperfect proxy for human preference. Section 3 noted that reward-model accuracy on held-out human preferences is typically only $65$–$75$%. The remaining $25$–$35$% is noise: the RM gets a sizable fraction of comparisons *wrong*, and the wrongs are not random; they cluster around the biases the RM inherited from preference data. Optimizing aggressively against an imperfect proxy is dangerous. Without a constraint, the policy will exploit the *errors* of the reward model: it will find out-of-distribution responses that score artificially high on the RM but are not actually preferred by humans. This is **reward hacking**, and it is the central failure mode of unconstrained RLHF.
 
 The KL constraint is the standard defense. By penalizing $D_{KL}(\pi_\theta \,\|\, \pi_{\text{ref}})$, the optimization is forced to stay in the *vicinity* of the SFT model in policy space. Any response with high probability under $\pi_\theta$ must also have non-trivial probability under $\pi_{\text{ref}}$, otherwise the KL penalty explodes. This rules out the most extreme reward-hacking failure modes, where the policy finds bizarre responses far from the SFT distribution that fool the RM. The constraint is, in Goodhart's-law terms: *as soon as you make the RM the target rather than a measure, the RM will degrade; stay close enough to the original distribution that we know the responses are still recognizable.*
 
@@ -136,7 +257,7 @@ Choosing $\beta$ is a calibration exercise. Too small ($\beta < 0.01$) and rewar
 **Misconception.** "More RL is always better." False: **reward hacking** kicks in past a certain point. The policy starts exploiting the reward model's weaknesses rather than improving genuinely. **Length bias** is the most common manifestation: the RM mildly prefers longer responses, and optimizing against it amplifies that mild preference into the policy producing responses two or three times longer than necessary. Empirically RLHF benefits saturate at around $10$K–$100$K preference pairs; past that, more training does not produce better human preference, and unattended runs slide into reward-hacked failure modes. The KL constraint slows the slide; it does not eliminate it.
 </Callout>
 
-Section 5 is the chapter's centerpiece. The DPO derivation shows that the entire pipeline of section 3 (train an RM, run PPO, hold both models in memory, generate rollouts) has a much simpler equivalent: a supervised loss on preference pairs.
+Section 6 is the chapter's first mathematical centerpiece. The DPO derivation shows that the entire pipeline of section 4 (train an RM, run PPO, hold both models in memory, generate rollouts) has a much simpler equivalent when you do the math: a supervised loss on preference pairs. In the token-level frame from section 2, DPO is the *offline* instance of the same weight-and-leash problem PPO solves online; the leash this section established stays exactly where it is, but baked into the implicit reward inside the loss instead of folded into a per-token signal.
 
 ## DPO: direct preference optimization
 
@@ -144,7 +265,7 @@ The chapter's pedagogical centerpiece. The DPO derivation (Rafailov et al. 2023)
 
 ### The closed-form optimal policy
 
-Start with the RLHF objective from section 3 (reward maximization minus $\beta$ times KL). This is a constrained optimization over the policy $\pi_\theta(y \mid x)$ for each fixed $x$. A standard variational argument (Lagrange multipliers on the per-context probability constraint $\sum_y \pi_\theta(y \mid x) = 1$) shows that the constrained optimum has the form
+Start with the RLHF objective from section 4 (reward maximization minus $\beta$ times KL). This is a constrained optimization over the policy $\pi_\theta(y \mid x)$ for each fixed $x$. A standard variational argument (Lagrange multipliers on the per-context probability constraint $\sum_y \pi_\theta(y \mid x) = 1$) shows that the constrained optimum has the form
 
 $$\pi^*(y \mid x) = \frac{1}{Z(x)} \, \pi_{\text{ref}}(y \mid x) \exp\!\left(\frac{1}{\beta} r(x, y)\right)$$
 
@@ -160,7 +281,7 @@ The reward equals $\beta$ times the log-ratio of optimal to reference policy, pl
 
 ### Substituting into Bradley-Terry
 
-The Bradley-Terry preference model from section 2 says the probability of preferring $y_w$ over $y_l$ is the sigmoid of the reward *difference*. Substitute the expression for $r$ in terms of $\pi^*$:
+The Bradley-Terry preference model from section 3 says the probability of preferring $y_w$ over $y_l$ is the sigmoid of the reward *difference*. Substitute the expression for $r$ in terms of $\pi^*$:
 
 $$P(y_w \succ y_l \mid x) = \sigma\!\left( \beta \log \frac{\pi^*(y_w \mid x)}{\pi_{\text{ref}}(y_w \mid x)} - \beta \log \frac{\pi^*(y_l \mid x)}{\pi_{\text{ref}}(y_l \mid x)} \right)$$
 
@@ -232,7 +353,7 @@ print("The training policy itself parameterizes the implicit reward.")
 **Misconception.** "DPO is just RLHF without RL." Subtler than that. **DPO avoids the explicit RL loop, the reward model, and on-policy sampling, but its loss function encodes the same optimization.** The math is equivalent (the derivation shows the closed-form optimum is the same object); the algorithm is different. DPO works because the *policy itself* parameterizes the implicit reward, you do not *skip* the RLHF optimization, you *reformulate* it as a supervised problem on policy log-ratios. The implicit-reward quantity $\beta \log(\pi_\theta / \pi_{\text{ref}})$ is doing exactly the same work the explicit reward model was doing in RLHF; the difference is that you train it directly via the policy weights rather than as a separate model.
 </Callout>
 
-The DPO formulation has spawned a family of related methods. Section 6 covers four of the most cited.
+The DPO formulation has spawned a family of related methods. Section 7 covers four of the most cited.
 
 ## DPO variants: IPO, KTO, ORPO, SimPO
 
@@ -246,6 +367,16 @@ The DPO formulation has spawned a family of related methods. Section 6 covers fo
 
 **SimPO** (Simple Preference Optimization, Meng et al. 2024) drops the reference model and uses *length-normalized* log probabilities directly. The implicit reward becomes $(1/|y|) \log \pi_\theta(y \mid x)$, sum of token log-probs divided by sequence length, rather than DPO's log-ratio against a reference. Two consequences: SimPO uses half the memory (no $\pi_{\text{ref}}$ to keep loaded), and the length normalization directly addresses the **length bias** that DPO inherits from preference data. Empirically competitive with DPO at lower complexity.
 
+The four variants stacked next to each other, with DPO as the baseline for comparison:
+
+| Variant | Data format | Reference model | Loss shape | Length handling |
+|---|---|---|---|---|
+| **DPO** | $(x, y_w, y_l)$ pairs | required | sigmoid log-likelihood on implicit-reward difference | none (inherits length bias) |
+| **IPO** | $(x, y_w, y_l)$ pairs | required | squared error on implicit-reward difference | none |
+| **KTO** | $(x, y, \text{good/bad})$ tuples | required | prospect-theory value function (asymmetric gains/losses) | none |
+| **ORPO** | $(x, y_w, y_l)$ pairs | **not required** | SFT log-likelihood + odds-ratio penalty (single stage from base) | none |
+| **SimPO** | $(x, y_w, y_l)$ pairs | **not required** | sigmoid on length-normalized log-probs | **built in** (divide by $|y|$) |
+
 ### Which to use
 
 DPO is the default. It is well-studied, stable across hyperparameters, and supported by every alignment library (TRL, Axolotl, OpenRLHF). Start there. Switch to **SimPO** if you are seeing length-bias problems and want to drop the reference model, it is simpler and slightly cheaper. Switch to **KTO** when you only have single-response ratings rather than pairwise comparisons (deployed-model thumbs-up/down feedback is the canonical case). Switch to **ORPO** when you want a single-stage pipeline directly from a base model. Switch to **IPO** when your preference labels are highly deterministic (an unusual regime, most real preference data has substantial rater disagreement).
@@ -254,21 +385,61 @@ DPO is the default. It is well-studied, stable across hyperparameters, and suppo
 **The variant space is large and evolves quickly.** Beyond IPO, KTO, ORPO, and SimPO, others exist (DPOP, RPO, IRPO, sDPO, R-DPO, and an ongoing stream of new papers). The four covered here are the most cited *conceptually distinct* variants as of late 2024. The key axes of difference: (1) whether they use a reference model, (2) whether they take pairs or single-response ratings, (3) what their loss shape is (sigmoid log-likelihood vs squared-error vs odds-ratio), and (4) whether they handle length normalization. Pick one (DPO is the safe default) and learn it well; the variants are easy to switch into once you understand the base method.
 </Callout>
 
-Section 7 turns to the most recent breakthrough in the space, RLVR, which is *not* a DPO variant but a return to RL with a critical change: the reward signal comes from an objective verifier, not a learned model.
+The next two sections return to RL with two changes layered on PPO. Section 8 introduces **GRPO**, which keeps PPO's clipped surrogate but drops the value function: sample a group of completions per prompt and use the group's mean reward as the baseline directly. Section 9 then changes the reward source itself, replacing the learned reward model with a deterministic verifier (**RLVR**). The combination of those two changes, GRPO plus RLVR, is what DeepSeek used to train R1.
+
+## GRPO: critic-free policy optimization
+
+PPO works, but the four-model footprint is expensive: policy, value, reward, reference, two of them trained. The value function is the most fragile of the four. Critics for LLMs are hard to fit; their predictions are noisy; and the GAE math leans on them more than it should. **GRPO** (Group Relative Policy Optimization, Shao et al. 2024, DeepSeek-Math) removes the value function entirely. The importance ratio and clip from PPO stay; the baseline is computed empirically per prompt instead of being learned.
+
+### The group baseline
+
+For each prompt $x$ in the batch, sample a **group** of $G$ completions $\{y_1, \ldots, y_G\}$ from $\pi_{\theta_{\text{old}}}$. Score them all with a reward function (a learned reward model or a verifier, GRPO is agnostic), getting rewards $R_1, \ldots, R_G$. The per-completion advantage is the reward standardized within the group:
+
+$$A_i = \frac{R_i - \text{mean}(R_1, \ldots, R_G)}{\text{std}(R_1, \ldots, R_G)}$$
+
+In the outcome-supervised variant (the one R1 uses), this single scalar $A_i$ is then **broadcast to every token** of completion $y_i$. Every token of an above-average completion gets positive advantage; every token of a below-average one gets negative. The credit-assignment problem from section 2 gets resolved by ignoring it: at training time, GRPO acts as if every token in the completion shares responsibility for the final reward equally.
+
+This is legitimate because the group mean is a Monte Carlo estimate of $V(x)$, the exact quantity PPO's critic was trying to approximate. With $G$ on the order of $8$ to $64$ samples per prompt, the empirical mean is already a reasonable baseline, and as $G$ grows the variance of the advantage estimate falls. You traded a learned function approximator for empirical samples drawn fresh per prompt: more rollouts per prompt, no critic to train. For LLM-scale models this is usually a good trade because the critic was the wobbly part of the four-model system.
+
+### The GRPO objective
+
+GRPO uses the same clipped surrogate as PPO with the group-relative advantage, and places the KL penalty differently: as an *explicit term in the loss* rather than folded into the per-token reward. Let $r_{i,t}(\theta) = \pi_\theta(y_{i,t} \mid s_{i,t}) / \pi_{\theta_{\text{old}}}(y_{i,t} \mid s_{i,t})$ as before. The objective is
+
+$$L^{\text{GRPO}} = \mathbb{E}\!\left[ \frac{1}{G} \sum_{i=1}^{G} \frac{1}{|y_i|} \sum_{t=1}^{|y_i|} \min\!\left( r_{i,t}(\theta) \cdot A_i, \; \text{clip}(r_{i,t}, 1-\epsilon, 1+\epsilon) \cdot A_i \right) - \beta \, D_{KL}\!\left( \pi_\theta \,\|\, \pi_{\text{ref}} \right) \right]$$
+
+The KL uses Schulman's **k3 estimator**, which is always positive and lower variance than the naive log-ratio:
+
+$$D_{KL} \approx \frac{\pi_{\text{ref}}}{\pi_\theta} - \log \frac{\pi_{\text{ref}}}{\pi_\theta} - 1$$
+
+The substantive difference from PPO: PPO folds the KL into the per-token reward (so the KL contributes to advantages via GAE); GRPO puts it directly in the loss as a separate term (so the gradient on KL flows through the explicit derivative of $D_{KL}$). Both prevent drift; the location changes how the gradients arrive.
+
+Two edge cases bite in practice and are worth holding alongside the math.
+
+*Dead groups.* If every completion in the group gets the same reward (all correct or all wrong on a math problem, for example), then $\text{std}(R) = 0$ and the standardized advantage is undefined; in practice $A_i$ collapses to zero and the group contributes no gradient. This is not a bug, it is the algorithm telling you that the prompt is currently too easy or too hard for the model to learn from. Some training pipelines (notably DAPO) detect this and resample more prompts to keep batches informative.
+
+*Length and difficulty bias.* The $1/|y_i|$ token-mean inside the sum penalizes per-token loss on long wrong completions less than on short wrong ones, which biases training toward verbosity. The $1/\text{std}(R)$ standardization scales gradients up on prompts where the group happens to have low variance, biasing training toward "consistent" prompts at the expense of hard ones. **Dr. GRPO** (Liu et al. 2025) removes both biases: sum the per-token losses without dividing by length, and use the un-standardized $R_i - \text{mean}(R)$ as the advantage. The corrected version is what most recent reasoning-model recipes use.
+
+### Why GRPO pairs naturally with reasoning
+
+The group baseline does something subtle that fits reasoning training. Consider a hard math problem the model currently solves $3$ times out of $8$. The three correct attempts get advantage $> 0$; the five wrong attempts get advantage $< 0$. **The standardization automatically calibrates for problem difficulty.** An easy prompt where the model nails it $8/8$ produces zero advantage (no learning, this is the dead-group case in the positive direction), and a too-hard prompt where the model misses $0/8$ also produces zero (dead group, negative direction). The signal lives precisely on prompts the model is *uncertain* about, the same prompts where there is the most room to improve.
+
+That property is what makes GRPO the natural partner for verifiable rewards in the next section. When the reward function is a binary correctness check, the group splits cleanly into "the few that worked" and "the many that did not," and the policy is pushed toward whatever reasoning trace the working completions used. The next section turns to that reward design choice.
 
 ## RLVR: RL with verifiable rewards
 
 ### When rewards are objective
 
-Classical RLHF uses a *learned* reward model to approximate human preferences. The signal is noisy by construction, section 2's $65$–$75$% inter-rater agreement, propagated through a model whose own held-out accuracy is in the same range. RL is famously sensitive to reward noise; much of the operational complexity of RLHF (the KL constraint, the conservative $\beta$, the iterative RM updates) exists to compensate for that noise.
+Classical RLHF uses a *learned* reward model to approximate human preferences. The signal is noisy by construction, section 3's $65$–$75$% inter-rater agreement, propagated through a model whose own held-out accuracy is in the same range. RL is famously sensitive to reward noise; much of the operational complexity of RLHF (the KL constraint, the conservative $\beta$, the iterative RM updates) exists to compensate for that noise.
 
 But not every task has noisy rewards. For some tasks the reward is *objectively verifiable*: math problems have answers you can check against ground truth; programs have tests they either pass or fail; theorems have proofs a verifier either accepts or rejects; chess games have a win/loss/draw outcome. For tasks like these, the "reward function" can be a *verifier*, a calculator, a compiler, a theorem prover, a game referee, and there is nothing learned about it. The reward is correct by construction.
 
-RLVR, **RL with Verifiable Rewards**, uses these verifiable rewards directly in place of a learned reward model. The PPO-style optimization is the same as classical RLHF; the difference is that $r(x, y)$ is replaced by a deterministic checker. *Because the reward signal is not noisy*, RL works much better. The policy can chase the reward harder; the KL constraint can be relaxed; reward hacking is harder because the verifier *is* the truth about the answer (you cannot fool a calculator into accepting a wrong number).
+RLVR, **RL with Verifiable Rewards**, uses these verifiable rewards directly in place of a learned reward model. The point worth emphasizing is that **RLVR is a reward-design choice, not an optimization algorithm**: you can pair it with PPO, with GRPO from section 8, or with anything else that consumes a scalar $r(x, y)$. The choice that produced R1 was **GRPO + RLVR**, and that combination is what people usually mean colloquially when they say "RLVR" in 2025: a group of $G$ completions per prompt, a verifier scoring each completion, and a clipped GRPO update with the group-relative advantage broadcast across the tokens of each sampled trace. *Because the reward signal is not noisy*, RL works much better than under a learned reward model. The policy can chase the reward harder; the KL leash can be relaxed; reward hacking is structurally harder because the verifier *is* the truth about the answer (you cannot fool a calculator into accepting a wrong number, though you can still fool a weak test suite or a brittle answer-extraction regex, which is its own discipline).
+
+Concretely: take a math prompt "what is $23 + 47$?" and sample $G = 4$ completions. Say the rewards from the verifier come back as $(1, 1, 0, 0)$, two correct, two wrong. The group mean is $0.5$; the standard deviation is $0.5$. The advantages are $(+1, +1, -1, -1)$, one per completion, and each one is broadcast across every token of its completion. Two epochs of clipped GRPO updates then push every token of the two correct traces *up* in $\pi_\theta$ and every token of the two wrong traces *down*, with the explicit KL term holding the policy near $\pi_{\text{ref}}$. There is no reward model in the loop, and there is no critic. The verifier and the group baseline replaced both.
 
 ### DeepSeek-R1's recipe
 
-The headline demonstration is **DeepSeek-R1** (DeepSeek-AI, January 2025), the first open-weights frontier reasoning model. The recipe has five stages. Start from a base model (DeepSeek-V3-Base). Apply **cold-start SFT** on a small high-quality reasoning dataset, a few thousand carefully curated math and code examples with explicit chain-of-thought, to stabilize the model's output format. Then run **large-scale RLVR** on verifiable math and code problems, scoring each rollout by whether the final answer is correct or whether the code passes its tests. Use **rejection sampling** on the RL-trained model to generate a much larger synthetic dataset of high-quality chain-of-thought traces, keep only the traces that lead to a correct answer. Finally, run a **second SFT + RLVR pass** on the augmented data.
+The headline demonstration is **DeepSeek-R1** (DeepSeek-AI, January 2025), the first open-weights frontier reasoning model. The recipe has five stages. Start from a base model (DeepSeek-V3-Base). Apply **cold-start SFT** on a small high-quality reasoning dataset, a few thousand carefully curated math and code examples with explicit chain-of-thought, to stabilize the model's output format. Then run **large-scale RLVR using GRPO** (section 8) on verifiable math and code problems, scoring each rollout by whether the final answer is correct or whether the code passes its tests. Use **rejection sampling** on the RL-trained model to generate a much larger synthetic dataset of high-quality chain-of-thought traces, keep only the traces that lead to a correct answer. Finally, run a **second SFT + RLVR pass** on the augmented data.
 
 A parallel experiment in the same paper, **DeepSeek-R1-Zero**, skipped the cold-start SFT entirely. Pure RLVR on a base model. It *worked*, the model learned to reason and matched many R1 capabilities, but with stability issues: language mixing between Chinese and English mid-trace, poor readability, occasional incoherent passages. The cold-start SFT in DeepSeek-R1 stabilized these issues without losing the reasoning gains. The lesson: a small SFT pass before RLVR helps; pure RL from base is the harder path but is *possible*.
 
@@ -333,13 +504,56 @@ print("DeepSeek-R1 used this approach on math + code at scale to bootstrap reaso
 **Misconception.** "Chain-of-thought is hand-engineered." In RLVR-trained models, **CoT emerges from RL training**, not from a prompt template. The model discovers, by gradient descent on a verifiable reward, that producing intermediate reasoning steps before the final answer raises the probability of getting that final answer right. The behavior is *learned*, not programmed. This is what makes RLVR exciting: it is not a smarter prompt, it is a training paradigm in which capabilities emerge from reward maximization on objective tasks. The model writes its own thinking template, and at scale the templates it writes have been a substantial fraction of the recent jump in reasoning performance on math and code benchmarks.
 </Callout>
 
-Section 8 returns to the practical pathologies that show up in any preference-optimization setup, RLHF, DPO, RLVR, and the standard mitigations.
+Section 10 synthesizes the four methods (PPO, DPO, GRPO, RLVR) into the single token-level pattern previewed in section 2; section 11 then returns to the practical pathologies that show up in any preference-optimization setup, RLHF, DPO, GRPO, RLVR, and the standard mitigations.
+
+## Synthesis: every method is reweighted next-token prediction
+
+Section 2 promised that PPO, DPO, GRPO, and RLVR are four points on one map. With all four laid out, the map is now easy to draw. The fixed point of comparison is **supervised fine-tuning** from Chapter 13. SFT maximizes $\log \pi_\theta(y_t \mid s_t)$ on every gold token, with weight $1$ on each token and no leash:
+
+$$\nabla_\theta L^{\text{SFT}} = - \, \mathbb{E}_{(x, y) \sim \mathcal{D}_{\text{gold}}} \left[ \sum_t \nabla_\theta \log \pi_\theta(y_t \mid s_t) \right]$$
+
+Every method this chapter covered is a generalization of that gradient: same per-token score function, but with a *per-token weight* and a *leash to the reference*. The differences are entirely in those two slots.
+
+### The four methods, side by side
+
+The methods only differ along four axes: where the per-token weight $A_t$ comes from, what baseline anchors that weight, what produces the underlying reward, and where the KL leash to $\pi_{\text{ref}}$ is applied. Stacked:
+
+| Method | Per-token weight $A_t$ | Baseline source | Reward source | KL leash placement | Models held |
+|---|---|---|---|---|---|
+| **PPO** | GAE over per-token TD residuals | learned critic $V_\phi$ | learned reward model $r_\phi$ | per-token, *inside the reward* | 4 (policy, critic, RM, ref) |
+| **DPO** | scalar prefactor $\beta \, \sigma(\text{reward gap})$, broadcast to all tokens (positive on chosen, negative on rejected) | the paired rejected completion (contrast) | preferences (no explicit reward) | implicit, via $\pi_{\text{ref}}$ in the parameterization | 2 (policy, ref) |
+| **GRPO** | group-relative advantage $(R_i - \mu)/\sigma$, broadcast to all tokens of $y_i$ | empirical group mean (Monte Carlo) | reward model *or* verifier | explicit term in the loss (k3 estimator) | 3 with RM, 2 with verifier |
+| **RLVR** | inherited from whatever optimizer it composes with (typically GRPO) | optimizer's | **deterministic verifier** | optimizer's | drops the RM entirely |
+
+Read this table in two passes. First pass: every row computes a *per-token weight* and a *leash*, exactly as section 2 set up. Second pass: the columns reveal the design space. The advantage column tells you what makes each method different at the gradient. The baseline column tells you what reference each method standardizes against. The reward column tells you what scalar signal drives learning. The KL column tells you how each method enforces "stay near the reference."
+
+### The gradient at the token level
+
+The unifying formula for the gradient on a single token, with clipping in its active region and the leash term included, is
+
+$$\nabla_\theta \, \ell_t \;\approx\; -A_t \cdot \nabla_\theta \log \pi_\theta(y_t \mid s_t) \; + \; \beta \, \nabla_\theta \text{KL}_t$$
+
+where $A_t$ is the per-token weight from the relevant column of the table and $\text{KL}_t$ is the leash. The first term is the **reweighted cross-entropy** gradient: identical in shape to SFT's gradient, but with a signed scalar weight that can be positive (push this token up) or negative (push it down). The second term holds the policy near $\pi_{\text{ref}}$. The clipped surrogate (PPO, GRPO) modifies the first term by gating it on or off based on the importance ratio $r_t(\theta)$, but where the gradient is active, it has exactly this form.
+
+Three observations sharpen the comparison.
+
+1. **RL fine-tuning can push token probabilities down.** SFT cannot: it only sees positive examples (gold tokens) and only ever increases their probability. RL fine-tuning sees the model's own samples *and* assigns negative advantage to bad ones, decreasing those token probabilities. This is the structural reason RL teaches *quality* in a way SFT cannot, the motivation that opened the chapter.
+
+2. **DPO is RL in disguise.** Its loss does not have a clipped surrogate or an explicit advantage, but the gradient of the DPO loss (derived in section 6) has the same shape: a positive push on tokens of chosen completions, a negative push on tokens of rejected completions, with the implicit reward $\beta \log(\pi_\theta / \pi_{\text{ref}})$ playing the role $A_t$ plays in PPO. The "RL" label is about how the data is collected (offline pairs versus on-policy rollouts), not about what is happening at the gradient.
+
+3. **RLVR's contribution is in one column only.** It changes the reward source from a learned model to a deterministic verifier; it does nothing to the advantage estimator, the baseline, or the KL placement. That is why "RLVR" composes with PPO or GRPO and is best thought of as a reward-design move rather than a new algorithm.
+
+<Callout type="note">
+**The unifying takeaway.** Post-training is reweighted next-token prediction with a leash to the reference. SFT is the trivial case (weight = $1$, no leash). PPO, DPO, GRPO, and RLVR are four engineered ways to compute the weight and place the leash, and most of the operational complexity of this chapter (the four-model RLHF system, the closed-form DPO derivation, the group baseline, the verifier) lives in service of those two choices.
+</Callout>
+
+The next section catalogues the practical pathologies that any of these methods can fall into, and the standard mitigations.
 
 ## Practical issues
 
 ### Reward hacking
 
-Goodhart's law: when a measure becomes a target, it ceases to be a good measure. Reward models are imperfect *measures* of human preference; the moment you optimize against them as *targets*, they stop measuring well. The policy finds responses that score high on the reward model but are actually bad. The most common manifestations are *length hacking*, longer responses scoring higher on the RM, so the policy produces verbose outputs, *sycophancy*, agreeing with the user's premise even when wrong, because raters prefer agreement on average, *repetition*, reward-positive phrases hammered until the RM saturates, and *out-of-distribution responses* that confuse the RM into high scores. The standard mitigations are the KL constraint (section 4's main defense), length normalization (SimPO's contribution), iterative RM training on freshly collected preferences as the policy drifts, and diverse preference data to limit the RM's blind spots.
+Goodhart's law: when a measure becomes a target, it ceases to be a good measure. Reward models are imperfect *measures* of human preference; the moment you optimize against them as *targets*, they stop measuring well. The policy finds responses that score high on the reward model but are actually bad. The most common manifestations are *length hacking*, longer responses scoring higher on the RM, so the policy produces verbose outputs, *sycophancy*, agreeing with the user's premise even when wrong, because raters prefer agreement on average, *repetition*, reward-positive phrases hammered until the RM saturates, and *out-of-distribution responses* that confuse the RM into high scores. The standard mitigations are the KL constraint (section 5's main defense), length normalization (SimPO's contribution), iterative RM training on freshly collected preferences as the policy drifts, and diverse preference data to limit the RM's blind spots. Verifier-based rewards (RLVR) sidestep most learned-RM hacking but introduce their own variants: gaming the answer-extraction step, exploiting weak test suites, or producing correct final answers from incoherent reasoning the verifier cannot inspect.
 
 ### Length bias
 
@@ -349,11 +563,19 @@ Length is the single most studied reward-hacking failure mode. The mechanism is 
 
 The dual failure mode of reward hacking is **mode collapse**: the policy converges to a narrow distribution of high-reward responses and loses diversity. Mode collapse is bad for creative tasks, writing, brainstorming, anything benefiting from variety, and for robustness, a narrow policy is easier to perturb adversarially. Mitigations are similar to the reward-hacking ones: a stronger KL constraint, fewer total training steps, a lower learning rate, occasionally an explicit entropy bonus in the objective. The trade-off with mode collapse is direct: pushing the KL constraint harder gives back diversity at the cost of less preference-following.
 
+### GRPO-specific failure modes
+
+GRPO has two failure modes PPO does not, both arising from the group baseline. **Dead groups** occur when every completion in the group gets the same reward, all correct or all wrong, which forces $\text{std}(R) = 0$ and collapses the standardized advantage to zero. The group then contributes no gradient, which wastes compute. This is most common on prompts the model already solves reliably (advancing too fast for the current curriculum) and prompts it cannot touch at all (too hard). The standard mitigation is **dynamic sampling**: detect zero-std groups and resample more prompts to keep batches informative (DAPO's contribution).
+
+GRPO also has two **standardization biases** baked into the standard objective. Dividing by completion length penalizes per-token loss on long wrong completions less than on short wrong ones, biasing training toward verbosity. Dividing by the group standard deviation up-weights gradients on prompts where the group happens to have low variance, biasing training away from the prompts where the model is genuinely uncertain. **Dr. GRPO** removes both: sum per-token losses without the $1/|y_i|$ divide, and use the un-standardized $R_i - \text{mean}(R)$ as the advantage. The corrected version is what most 2025 reasoning-model recipes use.
+
+**Entropy collapse** affects every RL method but is sharpest in GRPO trained with verifiable rewards. As the model gets better at producing correct answers, the policy concentrates probability mass on the patterns that work, lowering entropy until the policy is effectively deterministic and learning stalls. Standard mitigations are an explicit entropy bonus in the loss (PPO has this as $c_2 \, H(\pi_\theta)$; GRPO recipes often add it), a tighter KL constraint, and sampling at higher temperature during rollouts to maintain exploration.
+
 <Callout type="aside">
 **Misconception.** "Reward models are accurate." **They are noisy proxies.** Production reward models reach $65$–$75$% agreement with held-out human preferences in published evaluations, barely above the inter-rater agreement floor. The remaining $25$–$35$% is signal the RM gets wrong, and the wrongs are not random: they cluster around the systematic biases in the preference data (length, confidence, formatting). Without a KL constraint, an RL policy will *find* those errors and exploit them. The mathematical structure of reward hacking is exactly this, Goodhart's law applied to a noisy proxy. Be skeptical of any claim that a reward model "captures human preferences"; it captures the *average* of a *biased sample* of *imperfect raters*.
 </Callout>
 
-Section 9 closes the chapter by placing this material in the modern post-training stack.
+Section 12 closes the chapter by placing this material in the modern post-training stack.
 
 ## Exercises
 
@@ -652,9 +874,83 @@ strong_bias = [gen_pair(2.0) for _ in range(500)]
   packages={["numpy"]}
 />
 
+### Exercise 5 (medium): GRPO group-relative advantage
+
+Implement the GRPO group-relative advantage and a single clipped GRPO step on a toy categorical policy. Verify (a) that the advantage flips sign correctly between above- and below-mean completions, (b) that a dead group (all rewards equal) produces zero advantage and zero gradient, and (c) that after one update the probabilities of "good" tokens have risen and "bad" tokens have fallen.
+
+<details>
+<summary>Hint</summary>
+
+1. Sample $G = 8$ tokens from a toy softmax policy over a small vocab. Treat each sampled token as a single-token "completion" to keep the bookkeeping simple.
+2. Score each completion: $R_i = 1$ if the sampled token is in a "good" set, $0$ otherwise.
+3. Compute the group-relative advantage $A_i = (R_i - \text{mean}(R)) / \text{std}(R)$. Handle the $\text{std} = 0$ case explicitly (set every $A_i$ to zero).
+4. Compute the per-completion gradient: at $\theta = \theta_{\text{old}}$ the importance ratio is $1$ and the clip is inactive, so this is just $A_i \cdot \nabla_\theta \log \pi_\theta(y_i)$. For a softmax over $V$ tokens, $\nabla_\theta \log \pi_\theta(t)$ at logit position $j$ is $\mathbb{1}[j = t] - \pi(j)$.
+5. Sum across the $G$ samples, apply a small ascent step, and check the new probabilities moved in the expected directions.
+6. As a sanity check, construct a dead group where all sampled tokens get the same reward and verify both the advantage and the gradient are zero.
+
+For bonus credit: run two epochs (so $r_{i,t} \neq 1$ on the second pass) and observe the clip kick in on tokens whose probability moved past $1 \pm \epsilon$ of the snapshot.
+
+</details>
+
+<RunnableCode
+  client:visible
+  defaultCode={`import numpy as np
+
+np.random.seed(0)
+V = 6                       # vocab size
+G = 8                       # group size
+GOOD = {0, 1}               # "correct" tokens get reward 1
+epsilon = 0.2
+
+def softmax(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+def reward(token):
+    return 1.0 if token in GOOD else 0.0
+
+# Toy single-state "policy": logits over V tokens
+theta_old = np.zeros(V)
+pi_old = softmax(theta_old)
+print("Initial policy probs:", np.round(pi_old, 3))
+
+# Sample a group of G completions (each is one token)
+samples = np.random.choice(V, size=G, p=pi_old)
+rewards = np.array([reward(t) for t in samples])
+print("Sampled tokens:", samples)
+print("Rewards:       ", rewards)
+
+# TODO: compute group-relative advantage A_i. Handle std == 0 by returning zeros.
+# advantages = ...
+# print("Advantages:    ", np.round(advantages, 3))
+
+# TODO: compute the per-completion gradient at theta_old.
+# grad_log_pi(token) on logit j  =  one_hot(token)[j] - pi_old[j]
+# total_grad = sum_i A_i * grad_log_pi(samples[i])
+# grad_theta = np.zeros(V)
+# for i in range(G):
+#     one_hot = np.zeros(V); one_hot[samples[i]] = 1.0
+#     grad_theta += advantages[i] * (one_hot - pi_old)
+
+# Take a small ascent step and compare.
+# theta_new = theta_old + 0.5 * grad_theta
+# pi_new = softmax(theta_new)
+# print("New policy probs:    ", np.round(pi_new, 3))
+# print("Mass on GOOD tokens:", round(pi_old[list(GOOD)].sum(), 3),
+#       "->", round(pi_new[list(GOOD)].sum(), 3))
+
+# Dead-group sanity check
+# dead_samples = np.array([5] * G)
+# dead_rewards = np.array([reward(t) for t in dead_samples])
+# print(f"\\nDead group std = {dead_rewards.std()}: advantage and gradient must be zero.")
+`}
+  packages={["numpy"]}
+/>
+
 ## The modern post-training stack
 
-The current production recipe for a chat model, as of late $2024$ to early $2025$, follows a clean six-stage pipeline. Stage one: a **base model** (Chapters 7–10), pre-trained on web text and code at scale. Stage two: **SFT** (Chapter 13) on a curated instruction-response dataset, to teach the model the format of being a helpful assistant. Stage three: **preference optimization** (this chapter), typically DPO in the open-source world or PPO at frontier labs, occasionally iterative DPO with online preference collection. Stage four (optional): **RLVR** for reasoning-focused models, large-scale RL on math and code with verifiable rewards, layered on top of stage three. Stage five (optional): **PEFT** (Chapter 15) for cheap domain-specific behavior on top of an already-aligned model. Stage six (optional): **distillation** (Chapter 16) to compress the fully-trained model into a smaller form factor for deployment.
+The current production recipe for a chat model, as of late $2024$ to early $2025$, follows a clean six-stage pipeline. Stage one: a **base model** (Chapters 7–10), pre-trained on web text and code at scale. Stage two: **SFT** (Chapter 13) on a curated instruction-response dataset, to teach the model the format of being a helpful assistant. Stage three: **preference optimization** (this chapter), typically DPO in the open-source world or PPO at frontier labs, occasionally iterative DPO with online preference collection. Stage four (optional): **RLVR with GRPO** for reasoning-focused models, large-scale RL on math and code with verifiable rewards (group-relative advantage from a sampled group of completions; a deterministic verifier as the reward signal), layered on top of stage three. Stage five (optional): **PEFT** (Chapter 15) for cheap domain-specific behavior on top of an already-aligned model. Stage six (optional): **distillation** (Chapter 16) to compress the fully-trained model into a smaller form factor for deployment.
 
 Most production chat models stop at stage three. They have an SFT base and a preference-optimization pass, and they ship. Frontier *reasoning* models, o1, DeepSeek-R1, Gemini Thinking, add stage four, and the resulting capability jump on math and code benchmarks has been a major story of the last twelve months. Open-source models in the $7$B class through $2024$ followed the **SFT + DPO** template that Zephyr-7B established (Tunstall et al. 2023), producing ChatGPT-$3.5$-class capability at a fraction of the cost. Late $2024$ saw a clear shift toward **SFT + DPO + light RLVR** in open-source releases, following DeepSeek-R1's demonstration that RLVR is the path to frontier reasoning.
 

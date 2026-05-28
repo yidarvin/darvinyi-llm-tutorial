@@ -28,7 +28,7 @@ Per-chapter widget and runnable specs are intentionally one-line summaries here 
 | **II — The Transformer** | 4–6 | Attention, multi-head, the block, position |
 | **III — Pre-training** | 7–10 | Data, training a small LLM, scaling, infrastructure |
 | **IV — Alternative Architectures** | 11–12 | MoE, state-space models, Mamba |
-| **V — Post-training** | 13–16 | SFT, alignment (RLHF/DPO/RLVR), PEFT, distillation |
+| **V — Post-training** | 13–16 | SFT, alignment (RLHF/DPO/GRPO/RLVR), PEFT, distillation |
 | **VI — Inference** | 17–19 | KV cache, FlashAttention, quantization, sampling |
 | **VII — Modern Capabilities** | 20–23 | Reasoning, tool use, RAG, multimodal |
 | **VIII — Safety, Interpretability & Eval** | 24–26 | Guardrails, mechanistic interp, evaluation |
@@ -726,7 +726,7 @@ Instruction tuning, chat templates (ChatML, Llama 3, Alpaca, Mistral, Gemma), lo
 
 ---
 
-## Chapter 14 — Alignment (RLHF, DPO, RLVR, Constitutional AI)
+## Chapter 14 — Alignment (RLHF, DPO, GRPO, RLVR, Constitutional AI)
 
 **Part:** V — Post-training
 **Math depth:** High
@@ -734,15 +734,19 @@ Instruction tuning, chat templates (ChatML, Llama 3, Alpaca, Mistral, Gemma), lo
 
 ### Reader will be able to
 
-- Walk through the full RLHF pipeline: reward modeling + PPO with KL penalty
-- Derive the DPO loss from the RLHF objective and explain the elegant collapse
-- Articulate the differences between RLHF, DPO, IPO, KTO, ORPO
+- Frame autoregressive generation as a token-level MDP and identify exactly where reward enters and where the per-token gradient comes from
+- Walk through the RLHF pipeline: reward modeling, then PPO with a KL penalty against the reference
+- Read PPO at the token level: where the clipped surrogate gates the gradient on or off, where the per-token KL enters the reward, the role of the value function and GAE
+- Derive the DPO loss from the RLHF objective and explain the closed-form collapse
+- Derive GRPO's group-relative advantage and explain why a Monte Carlo baseline replaces the value function
+- Compose RLVR with GRPO to recreate the DeepSeek-R1 reasoning recipe and explain why long chain-of-thought emerges
+- Articulate the differences between DPO, IPO, KTO, ORPO, SimPO
 - Understand Constitutional AI / RLAIF
-- Understand RLVR (RL with Verifiable Rewards) and how it powers reasoning models like R1
+- Express PPO, DPO, GRPO, and RLVR as instances of one token-level pattern: reweighted next-token prediction with a leash to the reference
 
 ### Key concepts
 
-Reward model training on pairwise preferences (Bradley-Terry), PPO with KL penalty against the reference model, the reference model, DPO (Direct Preference Optimization) and its derivation, IPO (KL-regularized variant), KTO (Kahneman-Tversky), ORPO (odds-ratio preference optimization), Constitutional AI (RLAIF — RL from AI feedback), RLVR (RL with Verifiable Rewards) for math/code, o1-style reasoning training, GRPO (Group Relative Policy Optimization, used in DeepSeek-R1), reward hacking.
+The token-level MDP framing of generation (state = prompt + tokens so far; action = next token; deterministic transition; sparse terminal reward). Reward model training on pairwise preferences (Bradley-Terry). Policy gradient and importance sampling; PPO's clipped surrogate with the case-by-case gradient analysis for positive and negative advantage; Generalized Advantage Estimation (GAE); the value function / critic; the four-model RLHF system (policy, value, reward, reference); per-token KL penalty against the reference, folded into the reward. DPO (Direct Preference Optimization) and its derivation from the KL-regularized RL objective; the implicit reward; IPO (KL-regularized variant), KTO (Kahneman-Tversky), ORPO (odds-ratio preference optimization), SimPO (length-normalized, reference-free). Constitutional AI (RLAIF — RL from AI feedback). RLVR (RL with Verifiable Rewards) for math, code, and other checkable outputs. GRPO (Group Relative Policy Optimization, used in DeepSeek-R1) with group-relative advantage as a critic-free Monte Carlo baseline, broadcast to every token in the sampled completion; the k3 KL estimator; dead groups; length and difficulty bias from group standardization (Dr. GRPO). The synthesis: post-training as reweighted next-token prediction, where methods differ in how they compute the per-token weight and where they place the leash to the reference. Reward hacking, length bias, entropy collapse.
 
 ### Widgets
 
@@ -753,7 +757,8 @@ Reward model training on pairwise preferences (Bradley-Terry), PPO with KL penal
 
 - `bradley_terry.py` — fit a Bradley-Terry preference model on pairwise data via gradient descent
 - `dpo_loss.py` — implement the DPO loss in numpy and verify the gradient matches the derivation
-- `ppo_step.py` — minimal PPO update on a single batch showing the clipped surrogate objective
+- `ppo_step.py` — minimal PPO update on a single batch showing the clipped surrogate, the case-by-case clip behavior, and the per-token KL contribution
+- `grpo_step.py` — minimal GRPO update: sample a group of G completions, compute the group-relative advantage, run a clipped update; demonstrate the dead-group edge case where all completions get the same reward
 
 ### Pre-research file `research/ch14-alignment/research.md` scope
 
@@ -766,14 +771,18 @@ Reward model training on pairwise preferences (Bradley-Terry), PPO with KL penal
 
 ### Tricky spots
 
-- The DPO derivation is the chapter's mathematical centerpiece. Walk through:
+- The DPO derivation is the chapter's first mathematical centerpiece. Walk through:
   1. The KL-constrained RL objective
   2. The optimal policy in closed form $\pi^*(y|x) \propto \pi_{\text{ref}}(y|x) \exp(r(y)/\beta)$
   3. Inverting to express $r$ in terms of $\pi^*$
   4. Substituting into the Bradley-Terry preference loss
   5. The result: a pure classification loss on preferences, no reward model needed
-- The reference model — readers often forget that DPO and PPO both need this. It's the SFT'd model from Ch 13.
-- RLVR's elegance — verifiable rewards (math correct/wrong, code passes/fails) sidestep the reward-model gaming problem entirely.
+- The token-level synthesis is the chapter's second centerpiece. PPO, DPO, GRPO, and RLVR are all reweighted next-token prediction; what differs is (a) how the per-token weight is computed (GAE-with-critic for PPO, implicit-reward log-ratio for DPO, group-relative for GRPO, verifier for RLVR) and (b) where the leash to the reference is applied (KL inside the reward for PPO, implicit via $\pi_{\text{ref}}$ in the loss for DPO, explicit KL term for GRPO).
+- The reference model — readers often forget that DPO, PPO, and GRPO all need this. It's the SFT'd model from Ch 13.
+- The PPO clipped gradient: walk through the case-by-case analysis for $A_t > 0$ versus $A_t < 0$. The `min` of clipped and unclipped makes the bound one-sided: zero gradient when the policy has moved far in the rewarded direction (so you don't extrapolate past the trust region), but active gradient if it overshot in the wrong direction (so the policy can always self-correct).
+- GRPO's group baseline replaces the value function. The mean reward across a group of G completions is a Monte Carlo estimate of $V(x)$. Standardizing by the group std turns this into the per-completion advantage, broadcast to every token in that completion. Two failure modes to flag: dead groups (all completions get the same reward → std = 0 → zero gradient; some pipelines filter or resample these), and the length/difficulty biases the standardization introduces (Dr. GRPO removes the length normalization and the std divide to fix them).
+- PPO's KL leash lives inside the per-token reward; GRPO's lives directly in the loss as an explicit term (k3 estimator, always positive, low variance). Both work; the location changes how gradients flow.
+- RLVR is a reward design, not an optimizer. It composes with either PPO or GRPO. R1 specifically used GRPO + RLVR, not PPO + RLVR; the chapter must not blur this. Verifiable rewards (math correct/wrong, code passes/fails) sidestep the reward-model gaming problem entirely.
 
 ### Connections
 
