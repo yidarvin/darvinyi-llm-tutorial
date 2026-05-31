@@ -342,7 +342,29 @@ The result is that **most production LLM APIs do not expose beam search** as a s
 Beam search dominated machine translation for years ($2014$ – $2020$) but has fallen out of favor for LLM serving. The reason is the training: **modern LLMs trained with RLHF produce well-shaped output distributions**, where stochastic sampling competes well even on tasks beam search used to win, and beats it badly on the open-ended tasks that LLMs are actually deployed for. Beam search is now mostly a fallback for specialized tasks with discrete correct answers (still: translation, some classification, structured output without a constrained decoder). **For chat, code, or creative generation, nucleus sampling wins.**
 </Callout>
 
-The final section covers the production-critical topic of constrained decoding, how to guarantee structured outputs like JSON, and then closes Phase 12.
+The next section covers the production-critical topic of constrained decoding, how to guarantee structured outputs like JSON.
+
+## Constrained decoding and modern recipes
+
+### Why constrained decoding matters
+
+Production agents need structured outputs. JSON for tool calls. Regex matches for parseable fields. A grammar like "valid Python" or "valid SQL" for code-generation pipelines. The naive approach is to prompt the model to follow the format, parse the output, and retry on failure, **brittle and slow**. Retry rates of ten percent are common at first; latency spikes when the retry path fires; and the failure mode (malformed JSON in a tool call) breaks every downstream system that depends on the output. **Constrained decoding** is the alternative: **guarantee** that the output satisfies the structural constraint by enforcing it at the sampler.
+
+### The FSM masking technique
+
+The technique generalizes nicely. Compile the structural constraint to a **finite-state machine** (or, more generally, a context-free grammar), for regex constraints this is the standard regex-to-DFA conversion that every textbook covers; for grammars it is parser-generator machinery (LR, GLR, Earley). The compiled FSM has a notion of "current state" and "valid next transitions". At each decode step, look up which token IDs from the model's vocabulary would correspond to a legal next transition from the current FSM state, and mask the logits of every other token to $-\infty$:
+
+<Equation label="19.constrained">
+$$z'_i = \begin{cases} z_i & \text{if token } i \text{ is valid at the current state} \\ -\infty & \text{otherwise} \end{cases}$$
+</Equation>
+
+Apply the usual sampling pipeline, temperature, top-p, repetition penalty if you like, over the masked distribution. The infinities become zeros after softmax, so the sampler can only choose from the valid set. **The model picks its most-likely valid token**: the FSM advances, and the next step repeats. The output is guaranteed to satisfy the constraint, the model's predictions stay coherent (because it is still choosing what *it* thinks is best, just restricted to valid options), and the latency overhead is small, an FSM lookup per step, with state cached across steps so the cost stays per-token rather than per-token-squared.
+
+Production implementations vary by ecosystem. **Outlines** (Willard & Louf, 2023) compiles regex to FSMs; works with any Hugging Face model. **OpenAI JSON mode** (`response_format = json_object`) constrains output to valid JSON. **Anthropic structured outputs** enforce tool schemas under the hood. **Llama.cpp grammar mode** accepts BNF grammars and applies them as masking constraints at every decode step. The mechanics are similar across all of them; the API surface differs.
+
+<WidgetFrame title="Constrained decoding" caption="Step-by-step generation of valid JSON. At each FSM state, only certain vocabulary tokens are valid; invalid tokens are masked (rose). The ★ marks the model's *preferred* token without constraints, often invalid! Constrained decoding picks the highest-probability valid token instead. The widget makes 'how does JSON mode work' concrete.">
+  <ConstrainedDecoding client:visible />
+</WidgetFrame>
 
 ## Exercises
 
@@ -656,29 +678,7 @@ def fake_logits(state):
   packages={["numpy"]}
 />
 
-## Constrained decoding and modern recipes
-
-### Why constrained decoding matters
-
-Production agents need structured outputs. JSON for tool calls. Regex matches for parseable fields. A grammar like "valid Python" or "valid SQL" for code-generation pipelines. The naive approach is to prompt the model to follow the format, parse the output, and retry on failure, **brittle and slow**. Retry rates of ten percent are common at first; latency spikes when the retry path fires; and the failure mode (malformed JSON in a tool call) breaks every downstream system that depends on the output. **Constrained decoding** is the alternative: **guarantee** that the output satisfies the structural constraint by enforcing it at the sampler.
-
-### The FSM masking technique
-
-The technique generalizes nicely. Compile the structural constraint to a **finite-state machine** (or, more generally, a context-free grammar), for regex constraints this is the standard regex-to-DFA conversion that every textbook covers; for grammars it is parser-generator machinery (LR, GLR, Earley). The compiled FSM has a notion of "current state" and "valid next transitions". At each decode step, look up which token IDs from the model's vocabulary would correspond to a legal next transition from the current FSM state, and mask the logits of every other token to $-\infty$:
-
-<Equation label="19.constrained">
-$$z'_i = \begin{cases} z_i & \text{if token } i \text{ is valid at the current state} \\ -\infty & \text{otherwise} \end{cases}$$
-</Equation>
-
-Apply the usual sampling pipeline, temperature, top-p, repetition penalty if you like, over the masked distribution. The infinities become zeros after softmax, so the sampler can only choose from the valid set. **The model picks its most-likely valid token**: the FSM advances, and the next step repeats. The output is guaranteed to satisfy the constraint, the model's predictions stay coherent (because it is still choosing what *it* thinks is best, just restricted to valid options), and the latency overhead is small, an FSM lookup per step, with state cached across steps so the cost stays per-token rather than per-token-squared.
-
-Production implementations vary by ecosystem. **Outlines** (Willard & Louf, 2023) compiles regex to FSMs; works with any Hugging Face model. **OpenAI JSON mode** (`response_format = json_object`) constrains output to valid JSON. **Anthropic structured outputs** enforce tool schemas under the hood. **Llama.cpp grammar mode** accepts BNF grammars and applies them as masking constraints at every decode step. The mechanics are similar across all of them; the API surface differs.
-
-<WidgetFrame title="Constrained decoding" caption="Step-by-step generation of valid JSON. At each FSM state, only certain vocabulary tokens are valid; invalid tokens are masked (rose). The ★ marks the model's *preferred* token without constraints, often invalid! Constrained decoding picks the highest-probability valid token instead. The widget makes 'how does JSON mode work' concrete.">
-  <ConstrainedDecoding client:visible />
-</WidgetFrame>
-
-### Phase 12: complete
+## Phase 12: complete
 
 Phase 12 wraps with this chapter. The trilogy: **Ch 17** reduced wasted *computation*, KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. **Ch 18** reduced *bits per parameter*, INT8 with LLM.int8 outlier handling, INT4 with per-group scales, NF4 with double quantization, GPTQ and AWQ as the modern PTQ algorithms. **Ch 19** governs the *decision*, how the decoder picks tokens given the logits the (cached, batched, quantized) forward pass produces. Combined, the three chapters are the difference between an order-of-magnitude operational cost on identical hardware: about $50$ tokens per second from naive inference, against $500$ to $1{,}000$ tokens per second aggregate from a production stack with everything in place.
 
