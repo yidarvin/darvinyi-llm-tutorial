@@ -92,7 +92,7 @@ export interface Stage {
 }
 
 // ---------------------------------------------------------------------------
-// Causal mask computation (appended for session 20)
+// Causal mask computation
 // ---------------------------------------------------------------------------
 
 /**

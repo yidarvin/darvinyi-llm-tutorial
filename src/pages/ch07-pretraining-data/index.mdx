@@ -254,7 +254,7 @@ Semantic dedup closes part of that gap by comparing meaning instead of surface f
 
 ## Quality filtering
 
-Deduplication removes redundant content. Quality filtering removes low-value content, text that is unique but not worth training on. The two passes are complementary: dedup throws away the same content seen twice, quality filtering throws away content that no model should be learning from in the first place. Modern pipelines combine three flavors of filter, in roughly increasing order of cost and sophistication.
+Deduplication removes redundant content. Quality filtering removes low-value content, text that is unique but not worth training on — a subtractive description that is mechanically accurate but, as later sections argue, undersells what the filter is actually doing. The two passes are complementary: dedup throws away the same content seen twice, quality filtering throws away content that no model should be learning from in the first place. Modern pipelines combine three flavors of filter, in roughly increasing order of cost and sophistication.
 
 ### Heuristic filters
 

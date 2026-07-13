@@ -231,7 +231,7 @@ print(f"Per-row L2 norm of output: {np.linalg.norm(out, axis=-1).round(3)}")
 Every modern transformer's FFN reduces to roughly that structure. Production code adds the gradient bookkeeping, fuses the matmuls with kernel calls, sometimes drops the biases, sometimes swaps GELU for SwiGLU, but the position-wise expand-then-contract shape is invariant.
 
 <Callout type="aside">
-Modern open-source LLMs (Llama, Mistral, Gemma) use SwiGLU rather than GELU. The performance gain over GELU is small but consistent, and the parameter cost is similar: SwiGLU uses three linear projections of $d_{\text{model}} \times (\tfrac{2}{3} \cdot 4 d_{\text{model}})$ each, which works out to roughly the same parameter count as the GELU FFN's two $d_{\text{model}} \times 4 d_{\text{model}}$ projections. The chapter implements GELU because the structural lesson is the same and the code is simpler; Exercise 4 in the closeout session implements SwiGLU as an extension.
+Modern open-source LLMs (Llama, Mistral, Gemma) use SwiGLU rather than GELU. The performance gain over GELU is small but consistent, and the parameter cost is similar: SwiGLU uses three linear projections of $d_{\text{model}} \times (\tfrac{2}{3} \cdot 4 d_{\text{model}})$ each, which works out to roughly the same parameter count as the GELU FFN's two $d_{\text{model}} \times 4 d_{\text{model}}$ projections. The chapter implements GELU because the structural lesson is the same and the code is simpler; Exercise 4 below implements SwiGLU as an extension.
 </Callout>
 
 So far the chapter has treated multi-head attention and the FFN as two separate operations. The next sections introduce what connects them inside the transformer block: residuals and layer norm.

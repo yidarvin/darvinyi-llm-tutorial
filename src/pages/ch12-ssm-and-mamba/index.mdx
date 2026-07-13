@@ -26,7 +26,7 @@ What we want is **linear-time sequence modeling**. Memory and compute both growi
 - **RWKV** is a linear RNN with time-decay. Competitive at moderate scale; architecturally distinct from SSMs and from transformers.
 - **State-space models**, S4, Mamba, Mamba-2, derive their structure from continuous-time linear dynamics. Principled, linear by construction, and the subject of this chapter.
 
-Pre-Mamba SSMs (S4, S5) performed well on the Long Range Arena benchmark but underperformed transformers on language modeling. The breakthrough came in December $2023$ with **Mamba**, which added input-dependent dynamics and finally closed the language-modeling gap. Mamba is what made SSMs a serious contender, not a research curiosity. Everything else in this chapter is consequence of that breakthrough or context for it.
+Pre-Mamba SSMs (S4, S5) performed well on the Long Range Arena benchmark but underperformed transformers on language modeling. The breakthrough came in December $2023$ with **Mamba**, which added input-dependent dynamics and finally closed most of the language-modeling gap. Mamba is what made SSMs a serious contender, not a research curiosity. Everything else in this chapter is consequence of that breakthrough or context for it.
 
 <WidgetFrame title="SSM vs attention scaling" caption="Log-log plot of compute (FLOPs) and memory (bytes) per layer vs sequence length. Attention's $O(T^2)$ line climbs at slope 2; SSM's $O(T)$ line at slope 1. Toggle between compute and memory; adjust d_model. At short contexts (<2K) attention wins on constant factors; at long contexts (>32K) SSM dominates. The crossover (~7K tokens) marks where SSM becomes faster in absolute terms.">
   <SSMvsAttentionScaling client:visible />
