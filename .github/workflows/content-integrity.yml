@@ -3,8 +3,14 @@ name: Content Integrity
 on:
   pull_request:
     branches: [main]
+    # The guard script scans all of src/ (chapter pages, widgets, lib, layouts,
+    # components), not just src/pages/. Keep this path filter as wide as the
+    # guard's own scope so a widget-only or lib-only change still triggers it.
+    # Narrower filters here previously let two real regressions ship without
+    # CI ever running: a leaked build-session comment in a widget data file,
+    # and a stale relationship-type literal in src/lib/.
     paths:
-      - 'src/pages/ch*/index.mdx'
+      - 'src/**'
       - 'scripts/check-content-integrity.mjs'
   workflow_dispatch:
 
