@@ -173,7 +173,7 @@ export default function BenchmarkHeatmap() {
         snapshot; MMLU, HumanEval, and MATH are trending the same way but don't yet clear it.{' '}
         <strong>Agentic benchmarks</strong>{' '}
         (SWE-bench, GAIA, OSWorld) show the most spread — they're where models still discriminate, and
-        where Phase 15's coverage matters most. <strong>This is the chapter's central claim made visceral</strong>:
+        where Part IX's coverage matters most. <strong>This is the chapter's central claim made visceral</strong>:
         modern AI eval is a dashboard, not a number.
       </div>
     </div>

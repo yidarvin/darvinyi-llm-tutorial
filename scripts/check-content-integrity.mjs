@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Content integrity guard.
 //
-// Catches three defect classes surfaced by the 2026-07 content critique
+// Catches five defect classes surfaced by the 2026-07 content critique
 // (docs/CONTENT_CRITIQUE.md):
 //
 //   1. Internal build-process "Phase N" labels leaking into reader-facing
@@ -19,14 +19,35 @@
 //      transformer block as "Chapter 7" (it's Chapter 5) and state-space
 //      models as "Chapter 11" (they're Chapter 12) — both inherited from a
 //      superseded chapter-numbering draft and never caught before ship.
+//   4. Same "Phase N" leakage as (1), but anywhere else under src/ — the
+//      original Phase-N purge only swept src/pages/ch*/index.mdx. It missed
+//      widget .tsx/.ts files with reader-facing captions or "echoes Phase N
+//      conventions"-style code comments, AND it missed src/lib/related-
+//      chapters.ts, where a `RelationshipType` union member was literally
+//      named 'cross-phase' and rendered to readers as "cross-phase link" —
+//      the same internal vocabulary leaking through a TypeScript literal
+//      instead of prose. Check 5 below catches that specific compound-word
+//      pattern, which a numeric "Phase N" regex can't (there's no number).
 //
 // Run: node scripts/check-content-integrity.mjs
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 const ROOT = process.cwd();
 const PAGES_DIR = join(ROOT, 'src/pages');
+const SRC_DIR = join(ROOT, 'src');
+
+function walk(dir, extensions) {
+  const out = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) out.push(...walk(full, extensions));
+    else if (extensions.some((ext) => entry.endsWith(ext))) out.push(full);
+  }
+  return out;
+}
 
 /** @type {string[]} */
 const failures = [];
@@ -92,6 +113,35 @@ for (const dir of chapterDirs) {
   }
 }
 
+// Check 4 + 5: everywhere else under src/ (components, lib, layouts, pages'
+// own frontmatter is already covered by Check 1, so this walks all of src/
+// and just skips src/pages/*/index.mdx to avoid double-reporting).
+const allSrcFiles = walk(SRC_DIR, ['.tsx', '.ts', '.astro']).filter(
+  (f) => !/src\/pages\/ch\d{2}-[^/]+\/index\.mdx?$/.test(f.replace(/\\/g, '/'))
+);
+for (const filePath of allSrcFiles) {
+  const text = readFileSync(filePath, 'utf8');
+  const rel = relative(ROOT, filePath);
+
+  // Check 4: numeric "Phase N" leakage (same pattern as Check 1, wider scope).
+  text.split('\n').forEach((line, i) => {
+    const m = line.match(/\bPhase\s+\d+\b/);
+    if (m) {
+      failures.push(`${rel}:${i + 1}: internal "Phase N" label leaked into source: "${m[0]}"`);
+    }
+  });
+
+  // Check 5: the "cross-phase" compound specifically (no number, so Check 4
+  // can't catch it) — this exact pattern leaked through a TypeScript
+  // RelationshipType literal in src/lib/related-chapters.ts. Case-insensitive
+  // since it could appear as a string literal, object key, or CSS-ish token.
+  text.split('\n').forEach((line, i) => {
+    if (/cross-phase/i.test(line)) {
+      failures.push(`${rel}:${i + 1}: internal "cross-phase" vocabulary leaked into source (rename to "cross-part"): "${line.trim()}"`);
+    }
+  });
+}
+
 if (failures.length) {
   console.error(
     `Content integrity check FAILED (${failures.length} issue${failures.length === 1 ? '' : 's'}):\n`
@@ -100,6 +150,6 @@ if (failures.length) {
   process.exit(1);
 } else {
   console.log(
-    `Content integrity check passed: ${chapterDirs.length} chapters, no Phase-N leakage, no dangling EqRefs, no landmark-anchor mismatches.`
+    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, no dangling EqRefs, no landmark-anchor mismatches.`
   );
 }

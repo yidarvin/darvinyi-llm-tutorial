@@ -4,7 +4,7 @@ export type RelationshipType =
   | 'discipline'
   | 'alternative'
   | 'callback'
-  | 'cross-phase';
+  | 'cross-part';
 
 export interface RelatedChapter {
   slug: string;
@@ -16,22 +16,22 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
   'ch01-neural-net-primitives': [
     { slug: 'ch04-attention',         relationship: 'extension',   reason: 'The softmax + cross-entropy gradient derivation reappears in the attention backward pass.' },
     { slug: 'ch08-building-small-llm', relationship: 'extension',  reason: 'The full training loop with AdamW sketched here scales to GPT-2-small territory.' },
-    { slug: 'ch14-alignment',         relationship: 'cross-phase', reason: 'Policy-gradient methods reuse the gradient framing — descend loss, ascend reward.' },
-    { slug: 'ch25-interpretability',  relationship: 'cross-phase', reason: 'The computational-graph view is the foundation for activation patching and circuits.' },
+    { slug: 'ch14-alignment',         relationship: 'cross-part', reason: 'Policy-gradient methods reuse the gradient framing — descend loss, ascend reward.' },
+    { slug: 'ch25-interpretability',  relationship: 'cross-part', reason: 'The computational-graph view is the foundation for activation patching and circuits.' },
   ],
 
   'ch02-embeddings': [
     { slug: 'ch03-tokenization',     relationship: 'foundation',  reason: 'Tokenizer vocab size determines the embedding table size.' },
     { slug: 'ch04-attention',        relationship: 'extension',   reason: 'Attention operates on embedded sequences via the Q/K/V projections.' },
-    { slug: 'ch22-retrieval-and-rag', relationship: 'cross-phase', reason: 'Retrieval systems index passages by learned embeddings in the same geometric setup.' },
+    { slug: 'ch22-retrieval-and-rag', relationship: 'cross-part', reason: 'Retrieval systems index passages by learned embeddings in the same geometric setup.' },
     { slug: 'ch23-multimodal',       relationship: 'extension',   reason: 'Multimodal models share a vector space across text, images, and audio.' },
   ],
 
   'ch03-tokenization': [
     { slug: 'ch02-embeddings',         relationship: 'extension',   reason: 'Tokens are the IDs that index the embedding table.' },
     { slug: 'ch04-attention',          relationship: 'extension',   reason: 'Sequence length — and attention\'s O(n²) cost — is set by tokenization.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'Token count drives KV-cache size at inference.' },
-    { slug: 'ch22-retrieval-and-rag',  relationship: 'cross-phase', reason: 'Chunking decisions in RAG depend on what "1000 tokens" actually means.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'Token count drives KV-cache size at inference.' },
+    { slug: 'ch22-retrieval-and-rag',  relationship: 'cross-part', reason: 'Chunking decisions in RAG depend on what "1000 tokens" actually means.' },
   ],
 
   'ch04-attention': [
@@ -39,7 +39,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch05-multihead-and-block', relationship: 'extension', reason: 'Multi-head attention is this operation run h times in parallel.' },
     { slug: 'ch06-positional-encoding', relationship: 'extension', reason: 'Attention is position-blind; positional encoding is the fix.' },
     { slug: 'ch12-ssm-and-mamba',      relationship: 'alternative', reason: 'SSMs achieve O(n) sequence mixing instead of attention\'s O(n²).' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'The KV cache is the central inference optimization built on attention\'s structure.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'The KV cache is the central inference optimization built on attention\'s structure.' },
   ],
 
   'ch05-multihead-and-block': [
@@ -47,21 +47,21 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch06-positional-encoding', relationship: 'extension',  reason: 'The block needs positional information injected before or within attention.' },
     { slug: 'ch08-building-small-llm',  relationship: 'extension',  reason: 'The block stacks N times to form the full LLM trained in Ch 8.' },
     { slug: 'ch12-ssm-and-mamba',       relationship: 'alternative', reason: 'Mamba replaces this entire block with an SSM-based equivalent.' },
-    { slug: 'ch25-interpretability',    relationship: 'cross-phase', reason: 'Mech interp lives at head granularity — induction heads, name-mover heads.' },
+    { slug: 'ch25-interpretability',    relationship: 'cross-part', reason: 'Mech interp lives at head granularity — induction heads, name-mover heads.' },
   ],
 
   'ch06-positional-encoding': [
     { slug: 'ch04-attention',           relationship: 'foundation', reason: 'Attention\'s permutation-equivariance is what positional encoding repairs.' },
     { slug: 'ch05-multihead-and-block', relationship: 'foundation', reason: 'The transformer block depends on positional information being present.' },
     { slug: 'ch08-building-small-llm',  relationship: 'extension',  reason: 'Choosing learned vs. RoPE is a concrete design decision when building the model.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'RoPE-rotated keys are cached pre-rotation, affecting how the KV cache is reused.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'RoPE-rotated keys are cached pre-rotation, affecting how the KV cache is reused.' },
   ],
 
   'ch07-pretraining-data': [
     { slug: 'ch03-tokenization',        relationship: 'foundation', reason: 'The corpus is the input to BPE training before models see a single token.' },
     { slug: 'ch08-building-small-llm',  relationship: 'extension',  reason: 'Curated data feeds directly into the training loop.' },
     { slug: 'ch09-scaling-and-distributed', relationship: 'extension', reason: 'Scaling laws assume quality-controlled data; DCLM shows quality shifts the curve.' },
-    { slug: 'ch13-sft',                 relationship: 'cross-phase', reason: 'Post-training data is curated very differently — depth over breadth.' },
+    { slug: 'ch13-sft',                 relationship: 'cross-part', reason: 'Post-training data is curated very differently — depth over breadth.' },
     { slug: 'ch26-evaluation',          relationship: 'discipline',  reason: 'Eval contamination during pretraining is a recurring discipline-level concern.' },
   ],
 
@@ -70,7 +70,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch07-pretraining-data',    relationship: 'foundation', reason: 'The corpus the training loop consumes.' },
     { slug: 'ch09-scaling-and-distributed', relationship: 'extension', reason: 'The same loop, scaled across data + model + pipeline parallelism.' },
     { slug: 'ch10-training-infra',      relationship: 'extension',  reason: 'The systems engineering that makes the loop run on real GPU clusters.' },
-    { slug: 'ch13-sft',                 relationship: 'cross-phase', reason: 'SFT is this loop run again with a response-masked loss.' },
+    { slug: 'ch13-sft',                 relationship: 'cross-part', reason: 'SFT is this loop run again with a response-masked loss.' },
   ],
 
   'ch09-scaling-and-distributed': [
@@ -78,14 +78,14 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch07-pretraining-data',    relationship: 'foundation', reason: 'Scaling laws are derived assuming quality-controlled training data.' },
     { slug: 'ch10-training-infra',      relationship: 'extension',  reason: 'How parallelism is actually executed on real hardware.' },
     { slug: 'ch11-moe',                 relationship: 'alternative', reason: 'MoE is sparse scaling — more parameters that are not all activated per token.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'Llama-3\'s over-trained 8B is partly justified by inference-cost arithmetic.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'Llama-3\'s over-trained 8B is partly justified by inference-cost arithmetic.' },
   ],
 
   'ch10-training-infra': [
     { slug: 'ch08-building-small-llm',  relationship: 'foundation', reason: 'Same training loop body; this chapter is the infra under it.' },
     { slug: 'ch09-scaling-and-distributed', relationship: 'foundation', reason: 'Strategy lives in Ch 9; execution lives here.' },
     { slug: 'ch04-attention',           relationship: 'foundation', reason: 'FlashAttention is the high-performance implementation of the Ch 4 operation.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'Inference has its own infra, but reuses kernels and memory-hierarchy ideas.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'Inference has its own infra, but reuses kernels and memory-hierarchy ideas.' },
   ],
 
   'ch11-moe': [
@@ -93,14 +93,14 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch09-scaling-and-distributed', relationship: 'extension', reason: 'Expert parallelism is a fourth dimension alongside DP/TP/PP.' },
     { slug: 'ch10-training-infra',      relationship: 'extension',  reason: 'All-to-all collectives are the MoE-specific communication pattern.' },
     { slug: 'ch12-ssm-and-mamba',       relationship: 'alternative', reason: 'Both depart from dense transformers; Jamba even stacks the two.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'Routing changes per token, so MoE inference engines need MoE-aware optimizations.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'Routing changes per token, so MoE inference engines need MoE-aware optimizations.' },
   ],
 
   'ch12-ssm-and-mamba': [
     { slug: 'ch04-attention',           relationship: 'alternative', reason: 'SSMs target attention\'s O(n²) compute + memory directly.' },
     { slug: 'ch05-multihead-and-block', relationship: 'alternative', reason: 'A Mamba block replaces the transformer block as the architectural unit.' },
     { slug: 'ch11-moe',                 relationship: 'alternative', reason: 'Both are non-dense departures from the standard transformer.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'Fixed state size means no growing KV cache — the killer feature at long context.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'Fixed state size means no growing KV cache — the killer feature at long context.' },
   ],
 
   'ch13-sft': [
@@ -115,7 +115,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch13-sft',                 relationship: 'foundation', reason: 'SFT produces the reference policy that preference methods anchor to.' },
     { slug: 'ch08-building-small-llm',  relationship: 'foundation', reason: 'PPO and DPO are training loops with different losses and rollouts.' },
     { slug: 'ch15-peft',                relationship: 'extension',  reason: 'Most production DPO is LoRA on top of an SFT model.' },
-    { slug: 'ch20-reasoning',           relationship: 'cross-phase', reason: 'RLVR (the GRPO family) is how reasoning models like o1 and R1 are trained.' },
+    { slug: 'ch20-reasoning',           relationship: 'cross-part', reason: 'RLVR (the GRPO family) is how reasoning models like o1 and R1 are trained.' },
     { slug: 'ch24-safety',              relationship: 'discipline', reason: 'Alignment is the technical substrate of safety; the same mechanics, different framing.' },
   ],
 
@@ -131,7 +131,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch13-sft',                 relationship: 'foundation', reason: 'Hard distillation is SFT with teacher-generated data — same loop, different data source.' },
     { slug: 'ch18-quantization',        relationship: 'extension',  reason: 'Distillation reduces parameter count; quantization reduces bits per parameter — multiplicative.' },
     { slug: 'ch17-inference-optimization', relationship: 'extension', reason: 'Smaller distilled models compound with inference-time tricks for cheaper serving.' },
-    { slug: 'ch20-reasoning',           relationship: 'cross-phase', reason: 'Reasoning distillation (Orca, R1-Distill) is how strong reasoning lands in small models.' },
+    { slug: 'ch20-reasoning',           relationship: 'cross-part', reason: 'Reasoning distillation (Orca, R1-Distill) is how strong reasoning lands in small models.' },
     { slug: 'ch15-peft',                relationship: 'extension',  reason: 'LoRA-distill trains a student adapter while keeping the base frozen.' },
   ],
 
@@ -140,7 +140,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch18-quantization',        relationship: 'extension',  reason: 'Quantized weights plus cached KV plus speculative decoding compound at inference.' },
     { slug: 'ch16-distillation',        relationship: 'extension',  reason: 'Distillation compresses parameters; combines multiplicatively with inference tricks.' },
     { slug: 'ch19-sampling',            relationship: 'extension',  reason: 'Sampling sits atop the forward pass and interacts with speculative decoding.' },
-    { slug: 'ch27-agent-foundations',   relationship: 'cross-phase', reason: 'Agent loops do many forward passes per task; inference cost adds up fast.' },
+    { slug: 'ch27-agent-foundations',   relationship: 'cross-part', reason: 'Agent loops do many forward passes per task; inference cost adds up fast.' },
   ],
 
   'ch18-quantization': [
@@ -163,8 +163,8 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch19-sampling',            relationship: 'foundation', reason: 'Reasoning interacts directly with sampling — temperature and constrained decoding.' },
     { slug: 'ch14-alignment',           relationship: 'foundation', reason: 'RLVR / GRPO is the post-training stack for modern reasoning models.' },
     { slug: 'ch21-tool-use',            relationship: 'extension',  reason: 'ReAct is the direct bridge — reasoning interleaved with tool calls.' },
-    { slug: 'ch17-inference-optimization', relationship: 'cross-phase', reason: 'Reasoning traces are thousands of tokens; KV cache + PagedAttention are essential.' },
-    { slug: 'ch27-agent-foundations',   relationship: 'cross-phase', reason: 'Reasoning is the "Thought" component of the ReAct agent loop.' },
+    { slug: 'ch17-inference-optimization', relationship: 'cross-part', reason: 'Reasoning traces are thousands of tokens; KV cache + PagedAttention are essential.' },
+    { slug: 'ch27-agent-foundations',   relationship: 'cross-part', reason: 'Reasoning is the "Thought" component of the ReAct agent loop.' },
   ],
 
   'ch21-tool-use': [
@@ -172,7 +172,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch19-sampling',            relationship: 'foundation', reason: 'Constrained decoding is what keeps tool calls valid JSON.' },
     { slug: 'ch22-retrieval-and-rag',   relationship: 'extension',  reason: 'Retrieval is a tool — the most common one in practice.' },
     { slug: 'ch24-safety',              relationship: 'discipline', reason: 'Tool use is the highest-risk capability — incorrect calls have real-world effects.' },
-    { slug: 'ch28-agent-from-scratch',  relationship: 'cross-phase', reason: 'Tool engineering is the 80% of building production agents.' },
+    { slug: 'ch28-agent-from-scratch',  relationship: 'cross-part', reason: 'Tool engineering is the 80% of building production agents.' },
   ],
 
   'ch22-retrieval-and-rag': [
@@ -180,7 +180,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch02-embeddings',          relationship: 'foundation', reason: 'Retrieval indexes passages by learned embeddings.' },
     { slug: 'ch20-reasoning',           relationship: 'extension',  reason: 'Agentic RAG composes retrieval with reasoning over the retrieved context.' },
     { slug: 'ch26-evaluation',          relationship: 'discipline', reason: 'RAG-specific evals (RAGAS, BEIR, MTEB) measure faithfulness and attribution.' },
-    { slug: 'ch27-agent-foundations',   relationship: 'cross-phase', reason: 'Production agent systems are RAG-heavy — vector DBs serve as agent memory.' },
+    { slug: 'ch27-agent-foundations',   relationship: 'cross-part', reason: 'Production agent systems are RAG-heavy — vector DBs serve as agent memory.' },
   ],
 
   'ch23-multimodal': [
@@ -196,7 +196,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch25-interpretability',    relationship: 'discipline', reason: 'Interpretability is the verification arm of safety; the immediate sequel.' },
     { slug: 'ch26-evaluation',          relationship: 'discipline', reason: 'Safety evaluation (HarmBench, TruthfulQA) is how claims become measurable.' },
     { slug: 'ch21-tool-use',            relationship: 'extension',  reason: 'Tool-using systems face indirect injection as a primary attack surface.' },
-    { slug: 'ch30-agent-eval-and-frameworks', relationship: 'cross-phase', reason: 'Agent safety extends this chapter into multi-step, autonomous settings.' },
+    { slug: 'ch30-agent-eval-and-frameworks', relationship: 'cross-part', reason: 'Agent safety extends this chapter into multi-step, autonomous settings.' },
   ],
 
   'ch25-interpretability': [
@@ -204,7 +204,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch26-evaluation',          relationship: 'discipline', reason: 'Interp without measurement is not actionable; the immediate sequel.' },
     { slug: 'ch04-attention',           relationship: 'foundation', reason: 'The residual stream, attention heads, and MLPs are the substrate interp examines.' },
     { slug: 'ch01-neural-net-primitives', relationship: 'foundation', reason: 'The computational-graph view is the basis for activation patching and circuits.' },
-    { slug: 'ch28-agent-from-scratch',  relationship: 'cross-phase', reason: 'Agent observability extends interpretability into multi-step traces.' },
+    { slug: 'ch28-agent-from-scratch',  relationship: 'cross-part', reason: 'Agent observability extends interpretability into multi-step traces.' },
   ],
 
   'ch26-evaluation': [
@@ -212,7 +212,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch25-interpretability',    relationship: 'discipline', reason: 'Interpretability complements evaluation — internal vs. external probes of behavior.' },
     { slug: 'ch07-pretraining-data',    relationship: 'foundation', reason: 'Eval-data contamination during pretraining is what this discipline guards against.' },
     { slug: 'ch14-alignment',           relationship: 'foundation', reason: 'Reward hacking and training-on-eval-data are evaluation-discipline failure modes.' },
-    { slug: 'ch30-agent-eval-and-frameworks', relationship: 'cross-phase', reason: 'Ch 30 extends this discipline to agent systems where per-step metrics break down.' },
+    { slug: 'ch30-agent-eval-and-frameworks', relationship: 'cross-part', reason: 'Ch 30 extends this discipline to agent systems where per-step metrics break down.' },
   ],
 
   'ch27-agent-foundations': [
@@ -227,7 +227,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch27-agent-foundations',   relationship: 'foundation', reason: 'The conceptual loop this chapter\'s engineering operationalizes.' },
     { slug: 'ch21-tool-use',            relationship: 'foundation', reason: 'Tool design and error handling are the chapter\'s 80%.' },
     { slug: 'ch26-evaluation',          relationship: 'discipline', reason: 'SWE-bench, GAIA, and OSWorld evaluate agents built with these techniques.' },
-    { slug: 'ch25-interpretability',    relationship: 'cross-phase', reason: 'Trace observability is how interpretability extends to agentic behaviors.' },
+    { slug: 'ch25-interpretability',    relationship: 'cross-part', reason: 'Trace observability is how interpretability extends to agentic behaviors.' },
     { slug: 'ch30-agent-eval-and-frameworks', relationship: 'extension', reason: 'Evaluating these hand-built agents is the next step.' },
   ],
 
@@ -236,7 +236,7 @@ export const RELATED_CHAPTERS: Record<string, RelatedChapter[]> = {
     { slug: 'ch28-agent-from-scratch',  relationship: 'foundation', reason: 'Tool design, error handling, and scaffolding amplify in multi-agent systems.' },
     { slug: 'ch30-agent-eval-and-frameworks', relationship: 'extension', reason: 'Multi-agent evaluation is harder still — emergent behaviors evade per-step metrics.' },
     { slug: 'ch26-evaluation',          relationship: 'discipline', reason: 'The evaluation discipline strains under multi-agent emergent behavior.' },
-    { slug: 'ch25-interpretability',    relationship: 'cross-phase', reason: 'Multi-agent traces are higher-dimensional; interpretability scales accordingly.' },
+    { slug: 'ch25-interpretability',    relationship: 'cross-part', reason: 'Multi-agent traces are higher-dimensional; interpretability scales accordingly.' },
   ],
 
   'ch30-agent-eval-and-frameworks': [
@@ -254,7 +254,7 @@ export const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
   'discipline':  'paired discipline',
   'alternative': 'alternative approach',
   'callback':    'callback reference',
-  'cross-phase': 'cross-phase link',
+  'cross-part': 'cross-part link',
 };
 
 export const RELATIONSHIP_COLORS: Record<RelationshipType, string> = {
@@ -263,5 +263,5 @@ export const RELATIONSHIP_COLORS: Record<RelationshipType, string> = {
   'discipline':  '#a78bfa',
   'alternative': 'var(--amber-500)',
   'callback':    'var(--rose-500)',
-  'cross-phase': 'var(--text-secondary)',
+  'cross-part': 'var(--text-secondary)',
 };

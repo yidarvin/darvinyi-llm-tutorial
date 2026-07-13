@@ -160,7 +160,7 @@ export const STRATEGIES: StrategyInfo[] = [
   },
 ];
 
-/** Distinct colors for chunks (cycled). Echoes Phase 13 conventions. */
+/** Distinct colors for chunks (cycled). Echoes Part VII conventions. */
 export const CHUNK_COLORS = [
   'var(--cyan-400)',
   'var(--amber-400)',

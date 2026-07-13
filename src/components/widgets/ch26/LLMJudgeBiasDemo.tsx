@@ -139,7 +139,7 @@ export default function LLMJudgeBiasDemo() {
         and <strong>coverage bias</strong> are consistent across orderings — swap-mitigation does NOT help.
         Defending against these requires <strong>multi-judge ensembles, rubric-based judging, anonymization,
         or human calibration</strong>. <strong>No single mitigation defends against all bias modes</strong> —
-        production LLM-as-judge requires defense-in-depth, like every other discipline of Phase 14.
+        production LLM-as-judge requires defense-in-depth, like every other discipline of Part VIII.
       </div>
     </div>
   );
