@@ -20,7 +20,7 @@ export default function ToolSchemaValidator() {
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Tool schema validator</div>
         <div className={styles.titleSubLabel}>
-          See what passes structural validation — and what doesn't
+          See what passes structural validation, and what doesn't
         </div>
       </div>
 
@@ -104,7 +104,7 @@ export default function ToolSchemaValidator() {
       <div className={styles.caption}>
         Click through the cases. <strong>Valid calls</strong> (cyan ✓) have all required fields, correct
         types, and values within range. <strong>Invalid calls</strong> (rose ✗) fail at the API layer
-        with structured errors — the model gets these as observations and recovers. <strong>Constrained
+        with structured errors; the model gets these as observations and recovers. <strong>Constrained
         decoding</strong> (Ch 19) prevents most invalid calls at generation; <strong>semantic correctness</strong>
         (e.g., "Atlantis" isn't a real city) still requires tool-level validation (Section 6's idempotency
         and error-recovery patterns).

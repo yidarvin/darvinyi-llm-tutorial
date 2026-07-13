@@ -66,7 +66,7 @@ const DP_STRATEGY: ParallelismStrategy = {
     { kind: 'all_reduce', label: 'all-reduce(gradients)', position: 'after_backward' },
   ],
   description:
-    'Each GPU holds a complete copy of the model. The batch is sharded across GPUs — each GPU processes a different micro-batch. After backward, gradients are averaged across all GPUs via a single all-reduce. The simplest parallelism strategy, but every GPU duplicates the entire model + grads + optimizer state in memory.',
+    'Each GPU holds a complete copy of the model. The batch is sharded across GPUs, and each GPU processes a different micro-batch. After backward, gradients are averaged across all GPUs via a single all-reduce. The simplest parallelism strategy, but every GPU duplicates the entire model + grads + optimizer state in memory.',
   memoryPerGPU: 'Full model (no reduction)',
   commCost: 'One all-reduce of model_size per step',
   scalingLimit: 'Bandwidth-bound past ~1000 GPUs; cannot exceed single-GPU model size',
@@ -89,7 +89,7 @@ const TP_STRATEGY: ParallelismStrategy = {
     { kind: 'all_reduce', label: 'all-reduce(activations) × per-layer', position: 'between_layers' },
   ],
   description:
-    "Each layer's operations are split across GPUs along carefully-chosen dimensions (Megatron-style: column-then-row). Every GPU sees the full batch but computes only a partial output. After each layer, all-reduce the partial outputs to reconstruct the full activation. High per-layer communication — typically restricted to within a node (TP-rank ≤ 8 over NVLink).",
+    "Each layer's operations are split across GPUs along carefully-chosen dimensions (Megatron-style: column-then-row). Every GPU sees the full batch but computes only a partial output. After each layer, all-reduce the partial outputs to reconstruct the full activation. High per-layer communication, typically restricted to within a node (TP-rank ≤ 8 over NVLink).",
   memoryPerGPU: '1/TP-rank of model',
   commCost: 'One all-reduce of activation_size per layer',
   scalingLimit: 'Bandwidth-bound across nodes; TP-rank usually ≤ 8',
@@ -112,7 +112,7 @@ const PP_STRATEGY: ParallelismStrategy = {
     { kind: 'peer_to_peer', label: 'send(activations)', position: 'pipeline_boundaries' },
   ],
   description:
-    'Different layers live on different GPUs. The batch is split into micro-batches that flow through the pipeline: GPU 0 (layer 0) → GPU 1 (layer 1) → ... → GPU N-1 (last layer). At the start of a batch, only the first GPU is busy; the pipeline gradually fills up. The "pipeline bubble" — idle time at the edges — reduces efficiency, but the per-step communication cost is low (only at stage boundaries).',
+    'Different layers live on different GPUs. The batch is split into micro-batches that flow through the pipeline: GPU 0 (layer 0) → GPU 1 (layer 1) → ... → GPU N-1 (last layer). At the start of a batch, only the first GPU is busy; the pipeline gradually fills up. The "pipeline bubble" (idle time at the edges) reduces efficiency, but the per-step communication cost is low (only at stage boundaries).',
   memoryPerGPU: '1/PP-rank of model',
   commCost: 'Peer-to-peer sends at pipeline boundaries (low)',
   scalingLimit: 'Pipeline bubble grows with PP-rank; typically ≤ 64',
@@ -132,11 +132,11 @@ const FSDP_STRATEGY: ParallelismStrategy = {
     gpuColumn(['shard', 'shard', 'shard', 'shard'], 'shard', 'B[12:16]'),
   ],
   comms: [
-    { kind: 'all_gather', label: 'all-gather(layer L params) — before each layer', position: 'between_layers' },
-    { kind: 'reduce_scatter', label: 'reduce-scatter(layer L grads) — after each layer', position: 'between_layers' },
+    { kind: 'all_gather', label: 'all-gather(layer L params), before each layer', position: 'between_layers' },
+    { kind: 'reduce_scatter', label: 'reduce-scatter(layer L grads), after each layer', position: 'between_layers' },
   ],
   description:
-    "ZeRO-3 sharding — both the model AND the batch are sharded across GPUs. Before computing each layer, all-gather the layer's parameters from all DP ranks (everyone temporarily has the full layer). Compute, then discard the gathered parameters. After the backward pass for that layer, reduce-scatter the gradients back to the appropriate ranks. Same total communication as DP, but communicated piecewise — enables overlap with compute, plus massive memory reduction.",
+    "ZeRO-3 sharding: both the model AND the batch are sharded across GPUs. Before computing each layer, all-gather the layer's parameters from all DP ranks (everyone temporarily has the full layer). Compute, then discard the gathered parameters. After the backward pass for that layer, reduce-scatter the gradients back to the appropriate ranks. Same total communication as DP, but communicated piecewise, enabling overlap with compute, plus massive memory reduction.",
   memoryPerGPU: '1/DP-rank of model + grads + optimizer state',
   commCost: 'Same as DP (one model-size of comms per step), piecewise',
   scalingLimit: 'Same as DP, but with much higher memory ceiling',

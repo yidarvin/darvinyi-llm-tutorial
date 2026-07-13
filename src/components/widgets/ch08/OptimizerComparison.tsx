@@ -100,7 +100,7 @@ export default function OptimizerComparison() {
 
       <div className={styles.plotPanel}>
         <div className={styles.panelTitle}>
-          Loss landscape — f(x, y) = 10(x − 3)² + (y − 1)²  (ill-conditioned: x curvature 10×)
+          Loss landscape: f(x, y) = 10(x − 3)² + (y − 1)²  (ill-conditioned: x curvature 10×)
         </div>
         <LandscapePlot step={step} visible={visible} focusedOpt={focusedOpt} />
       </div>

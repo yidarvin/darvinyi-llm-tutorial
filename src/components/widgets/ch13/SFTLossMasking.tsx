@@ -60,13 +60,13 @@ export default function SFTLossMasking() {
           <>
             With response masking <strong>ON</strong>, only <strong>{stats.inLoss} assistant tokens</strong>
             {' '}contribute to the loss (out of <strong>{stats.total} total</strong>). The system message,
-            user prompts, and role markers are <em>context</em> — the model sees them but doesn't learn
+            user prompts, and role markers are <em>context</em>: the model sees them but doesn't learn
             to produce them. <strong>Standard SFT.</strong>
           </>
         ) : (
           <>
             With response masking <strong>OFF</strong>, every token contributes to the loss. The model
-            wastes capacity learning to predict the user's questions and the system prompt — neither of
+            wastes capacity learning to predict the user's questions and the system prompt, neither of
             which the model needs to generate. <strong>Slightly worse than masked SFT;</strong> not what
             anyone actually does in production. This mode exists to illustrate the contrast.
           </>
@@ -104,7 +104,7 @@ function TokenCard({
       className={className}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
-      title={`${token.role} — ${token.inLoss ? 'in loss' : 'no loss'}`}
+      title={`${token.role}: ${token.inLoss ? 'in loss' : 'no loss'}`}
     >
       {token.text}
     </span>

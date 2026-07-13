@@ -155,7 +155,7 @@ export default function ParameterBudgetCalculator() {
               <span className={styles.gpuStatus}>
                 {fits
                   ? isRecommended
-                    ? <strong className={styles.recommendedTag}>FITS — recommended</strong>
+                    ? <strong className={styles.recommendedTag}>FITS, recommended</strong>
                     : 'fits'
                   : 'does NOT fit'}
               </span>
@@ -192,7 +192,7 @@ export default function ParameterBudgetCalculator() {
           <>
             LoRA fits {MODEL_SIZES[modelId].label} into <strong>{memory.total.toFixed(0)} GB</strong>.
             {recommendedGPU && <> Fits on a single <strong>{recommendedGPU.label}</strong>.</>}
-            {' '}Adapter is {memory.adapterDiskMB.toFixed(0)} MB — easy to store and swap.
+            {' '}Adapter is {memory.adapterDiskMB.toFixed(0)} MB, easy to store and swap.
           </>
         )}
         {methodId === 'qlora' && (

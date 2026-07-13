@@ -291,11 +291,11 @@ export default function AgentPatternCatalog() {
       </div>
 
       <div className={styles.caption}>
-        <strong>"Agent" isn't one architecture</strong> — it's a family of them. <strong>Linear</strong>{' '}
+        <strong>"Agent" isn't one architecture</strong>, it's a family of them. <strong>Linear</strong>{' '}
         for simple one-shots; <strong>ReAct</strong> as the modern default for multi-step tasks;{' '}
         <strong>Hierarchical</strong> when planning matters; <strong>Reflexion</strong> when you can
         get failure signal; <strong>Multi-agent</strong> when specialization helps. <strong>Most
-        production agents are single-agent (linear or ReAct)</strong> — multi-agent earns its keep
+        production agents are single-agent (linear or ReAct)</strong>; multi-agent earns its keep
         only when the task truly decomposes. Chapter 28 builds these in real code; Chapter 29 dives
         deep into multi-agent.
       </div>

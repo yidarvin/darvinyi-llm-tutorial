@@ -108,7 +108,7 @@ export default function BPETraining() {
             {' (count: '}<strong>{currentStep.chosenCount}</strong>{')'}
           </>
         ) : (
-          <>Initial corpus — no merges yet. Press Play to start training.</>
+          <>Initial corpus, no merges yet. Press Play to start training.</>
         )}
       </div>
 
@@ -176,7 +176,7 @@ export default function BPETraining() {
       </div>
 
       <div className={styles.corpusPanel}>
-        <div className={styles.panelTitle}>Corpus state — each word as token sequence</div>
+        <div className={styles.panelTitle}>Corpus state: each word as token sequence</div>
         <div className={styles.corpusGrid}>
           {currentCorpus.map((wordTokens, wIdx) => (
             <div key={wIdx} className={styles.corpusWord}>

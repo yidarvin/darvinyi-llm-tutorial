@@ -270,7 +270,7 @@ function LayerBlock({ x, y, width, height, state, layerIdx, gpuIdx, color }: Lay
           className={styles.layerEmpty}
         />
         <text x={labelX} y={labelY} className={styles.layerLabelEmpty} textAnchor="middle">
-          —
+          -
         </text>
       </g>
     );

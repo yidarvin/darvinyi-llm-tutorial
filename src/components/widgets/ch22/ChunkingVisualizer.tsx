@@ -139,7 +139,7 @@ export default function ChunkingVisualizer() {
         retrieval precision (more chunks → more fine-grained matches). <strong>Chunk size variance</strong>
         affects embedding quality (uniform sizes embed more consistently). <strong>Overlap</strong>
         preserves context at boundaries but inflates index size. <strong>The chunking decision
-        affects retrieval more than the embedding model choice</strong> — and is the most common
+        affects retrieval more than the embedding model choice</strong> and is the most common
         source of "RAG isn't working" debugging.
       </div>
     </div>

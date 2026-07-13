@@ -129,20 +129,20 @@ export function singleTraceAccuracy(problem: MockProblem): number {
 export function insightFor(n: number, isCorrect: boolean, confidence: number): string {
   if (n === 1) {
     return isCorrect
-      ? 'Single trace happened to be right — but with only N=1, we have no way to know if we got lucky.'
+      ? 'Single trace happened to be right, but with only N=1, we have no way to know if we got lucky.'
       : 'Single trace is wrong. With N=1, there is no error correction.';
   }
   if (n <= 3) {
     return isCorrect
-      ? 'Small N — majority vote works but confidence is low. Need more traces for reliability.'
+      ? 'Small N: majority vote works but confidence is low. Need more traces for reliability.'
       : 'Wrong traces are still outvoting correct ones. Increase N to let the majority emerge.';
   }
   if (n <= 8) {
     return isCorrect
-      ? `Mid-range N gives a stable majority. Confidence ${(confidence * 100).toFixed(0)}% — getting reliable.`
+      ? `Mid-range N gives a stable majority. Confidence ${(confidence * 100).toFixed(0)}%, getting reliable.`
       : 'Even at mid-range N, wrong answers can still cluster. Rare, but possible.';
   }
   return isCorrect
-    ? `Large N stabilizes the result. Confidence ${(confidence * 100).toFixed(0)}%. Diminishing returns past here — extra traces add little.`
+    ? `Large N stabilizes the result. Confidence ${(confidence * 100).toFixed(0)}%. Diminishing returns past here: extra traces add little.`
     : 'Even with large N, majority vote can fail if the model has systematic biases.';
 }

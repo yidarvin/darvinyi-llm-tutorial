@@ -119,7 +119,7 @@ export default function SelfConsistencyAggregator() {
         <div className={styles.resultRow}>
           <span className={styles.resultLabel}>Correct answer:</span>
           <span className={styles.resultValue}>
-            {problem.correctAnswer} {isCorrect ? '— ✓ Match' : '— ✗ Mismatch'}
+            {problem.correctAnswer} {isCorrect ? '(✓ Match)' : '(✗ Mismatch)'}
           </span>
         </div>
       </div>
@@ -149,10 +149,10 @@ export default function SelfConsistencyAggregator() {
 
       <div className={styles.caption}>
         Drag the slider from <strong>N=1</strong> upward. At <strong>N=1</strong>, you get
-        whatever the first trace says — sometimes right, sometimes wrong. As{' '}
+        whatever the first trace says, sometimes right, sometimes wrong. As{' '}
         <strong>N grows</strong>, wrong traces get outvoted; the correct answer emerges as the
         majority. <strong>Gains are largest from N=1 to N=10</strong>; past N=10-15, additional
-        traces add little. This is self-consistency — the simplest test-time compute technique
+        traces add little. This is self-consistency, the simplest test-time compute technique
         that works, and the conceptual ancestor of best-of-N+PRM and modern reasoning models.
       </div>
     </div>

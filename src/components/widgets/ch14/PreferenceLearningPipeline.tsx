@@ -86,7 +86,7 @@ export default function PreferenceLearningPipeline() {
         <strong>RLHF</strong> takes a two-stage path: train a reward model from preferences, then
         optimize the policy with PPO against the reward (with a KL constraint).{' '}
         <strong>DPO</strong> uses the closed-form solution of the RLHF objective to collapse
-        everything into a single supervised step — no reward model, no RL loop.{' '}
+        everything into a single supervised step: no reward model, no RL loop.{' '}
         <strong>The math is equivalent; the algorithm is different.</strong>
       </div>
     </div>

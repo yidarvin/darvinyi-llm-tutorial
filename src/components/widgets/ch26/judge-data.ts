@@ -52,7 +52,7 @@ export const SCENARIOS: JudgeScenario[] = [
     verdictBFirst: 'B',
     biasMode: 'position',
     explanation:
-      'Both responses are roughly equivalent in quality and content. The judge picks whichever is shown first — a documented position bias. With genuinely similar responses, position effects can dominate judgment.',
+      'Both responses are roughly equivalent in quality and content. The judge picks whichever is shown first, a documented position bias. With genuinely similar responses, position effects can dominate judgment.',
     mitigationOutcome: 'Swap-mitigation CATCHES this: when both orderings are tried, the verdicts disagree (A-first → A wins; B-first → B wins). The mitigated verdict is "tie."',
   },
   {
@@ -71,7 +71,7 @@ export const SCENARIOS: JudgeScenario[] = [
     verdictBFirst: 'B',
     biasMode: 'verbosity',
     explanation:
-      'Both responses are correct. Response A is concise and exactly addresses the question. Response B is much longer with additional context the question didn\'t ask for. The judge favors B in both orderings — a documented verbosity bias.',
+      'Both responses are correct. Response A is concise and exactly addresses the question. Response B is much longer with additional context the question didn\'t ask for. The judge favors B in both orderings, a documented verbosity bias.',
     mitigationOutcome: 'Swap-mitigation does NOT catch this: both orderings agree on B. The bias is in the judge itself, not the ordering. Mitigation requires rubric-based judging or human calibration that explicitly penalizes excessive verbosity.',
   },
   {
@@ -80,17 +80,17 @@ export const SCENARIOS: JudgeScenario[] = [
     prompt: 'Write a short poem about autumn.',
     responseA: {
       author: 'GPT-style model',
-      text: 'Crisp leaves drift down on amber wind,\nThe forest hushes, half resigned.\nWarm breath in air, a wood-smoke trail —\nAutumn writes its own brief tale.',
+      text: 'Crisp leaves drift down on amber wind,\nThe forest hushes, half resigned.\nWarm breath in air, a wood-smoke trail;\nAutumn writes its own brief tale.',
     },
     responseB: {
       author: 'Claude-style model',
-      text: 'October light slants gold through trees,\nA crimson hush across the breeze.\nThe year, half-spent, leans toward sleep —\nThe sky goes still; the shadows deep.',
+      text: 'October light slants gold through trees,\nA crimson hush across the breeze.\nThe year, half-spent, leans toward sleep;\nThe sky goes still; the shadows deep.',
     },
     verdictAFirst: 'A',
     verdictBFirst: 'A',
     biasMode: 'self-enhancement',
     explanation:
-      "Both poems are reasonable quality. The judge (here mocked as a GPT-family model) prefers Response A in both orderings — a documented self-enhancement bias: judges favor outputs from their own model family. This is one of Zheng 2023's most striking findings.",
+      "Both poems are reasonable quality. The judge (here mocked as a GPT-family model) prefers Response A in both orderings, a documented self-enhancement bias: judges favor outputs from their own model family. This is one of Zheng 2023's most striking findings.",
     mitigationOutcome: 'Swap-mitigation does NOT catch this: the verdict is consistent across orderings, just biased toward the judge\'s family. Mitigation requires multi-judge ensembles, anonymization of model identity, or human-calibrated rubrics.',
   },
   {
@@ -109,8 +109,8 @@ export const SCENARIOS: JudgeScenario[] = [
     verdictBFirst: 'tie',
     biasMode: 'coverage',
     explanation:
-      'Response A is correct (Rayleigh scattering). Response B is plausibly written but factually wrong (no quantum tunneling, ozone doesn\'t absorb red). The judge — not knowing physics well enough to catch the error — sees two confident, similar-length explanations and calls it a tie. This is coverage bias: the judge\'s knowledge gap masks a real quality difference.',
-    mitigationOutcome: 'Swap-mitigation does NOT catch this — both verdicts agree on "tie." The error is the judge\'s own factual gap. Mitigation requires using a stronger judge model, programmatic verification (when possible), or human expert review for technical domains.',
+      'Response A is correct (Rayleigh scattering). Response B is plausibly written but factually wrong (no quantum tunneling, ozone doesn\'t absorb red). The judge, not knowing physics well enough to catch the error, sees two confident, similar-length explanations and calls it a tie. This is coverage bias: the judge\'s knowledge gap masks a real quality difference.',
+    mitigationOutcome: 'Swap-mitigation does NOT catch this: both verdicts agree on "tie." The error is the judge\'s own factual gap. Mitigation requires using a stronger judge model, programmatic verification (when possible), or human expert review for technical domains.',
   },
   {
     id: 'clean-case',
@@ -128,8 +128,8 @@ export const SCENARIOS: JudgeScenario[] = [
     verdictBFirst: 'A',
     biasMode: 'none',
     explanation:
-      'Response A is a precise, complete one-sentence definition. Response B is vague and unhelpful. The judge correctly picks A in both orderings — there is no bias here, just a genuine quality difference being detected. This is what LLM-as-judge does well: comparing responses with clear quality gaps.',
-    mitigationOutcome: 'Swap-mitigation confirms the verdict: both orderings agree on A. The mitigation costs nothing in this case — when the bias modes don\'t fire, swap-mitigation just doubles the inference cost. The point of mitigation is to catch the cases where bias DOES fire, not to defend every judgment.',
+      'Response A is a precise, complete one-sentence definition. Response B is vague and unhelpful. The judge correctly picks A in both orderings, there is no bias here, just a genuine quality difference being detected. This is what LLM-as-judge does well: comparing responses with clear quality gaps.',
+    mitigationOutcome: 'Swap-mitigation confirms the verdict: both orderings agree on A. The mitigation costs nothing in this case; when the bias modes don\'t fire, swap-mitigation just doubles the inference cost. The point of mitigation is to catch the cases where bias DOES fire, not to defend every judgment.',
   },
 ];
 

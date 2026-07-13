@@ -231,12 +231,12 @@ export default function LinearProbingVisualizer() {
 
       <div className={styles.caption}>
         Click through the concepts. <strong>Surface features</strong> (token identity) peak at layer 0 and
-        fade across layers — the model transforms surface info into abstract representations.{' '}
+        fade across layers, as the model transforms surface info into abstract representations.{' '}
         <strong>Syntactic features</strong> (sentence boundary, POS) peak in early-middle layers.{' '}
         <strong>Semantic features</strong> (named entities, sentiment) peak in middle-late layers, requiring
         more context integration. <strong>Task-specific features</strong> (refusal patterns) peak at the
-        last layer — the model commits to behavioral decisions only after integrating all context.{' '}
-        <strong>This layer-wise emergence pattern</strong> is one of probing's most robust findings —
+        last layer: the model commits to behavioral decisions only after integrating all context.{' '}
+        <strong>This layer-wise emergence pattern</strong> is one of probing's most robust findings,
         and a window into how computation flows through a transformer.
       </div>
     </div>

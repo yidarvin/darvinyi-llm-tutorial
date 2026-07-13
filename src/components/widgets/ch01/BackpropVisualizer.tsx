@@ -666,7 +666,7 @@ function renderTooltipLines(h: HoverKey, s: NetworkState, stage: number) {
     case 'node-x': {
       const i = h.idx;
       line(`x[${i}] = ${fmt(s.x[i]!)}`);
-      line('input feature — passed unchanged into the first affine map.', true);
+      line('input feature, passed unchanged into the first affine map.', true);
       break;
     }
     case 'node-hidden': {

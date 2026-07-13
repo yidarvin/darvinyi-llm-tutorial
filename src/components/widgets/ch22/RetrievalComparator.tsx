@@ -95,7 +95,7 @@ export default function RetrievalComparator() {
         Click through the four queries. <strong>BM25 wins on keyword-heavy queries</strong>;
         <strong> Dense wins on semantic and paraphrased queries</strong>; <strong>Hybrid (RRF) is
         robust across all types</strong>, never losing badly to either alone. <strong>This is why
-        hybrid retrieval is the production default</strong> in mature RAG systems — it handles the
+        hybrid retrieval is the production default</strong> in mature RAG systems, since it handles the
         full diversity of real user queries.
       </div>
     </div>

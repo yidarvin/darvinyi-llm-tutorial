@@ -161,37 +161,37 @@ export const MASKED_OUTPUT: number[][] = (() => {
 export const STAGES: Stage[] = [
   {
     id: 'input',
-    title: 'Stage 1 — Input embeddings',
+    title: 'Stage 1: Input embeddings',
     description:
       "The 6-token sequence enters as a 6×6 matrix X. Each row is one token's embedding vector. This is what comes out of the embedding lookup (Chapter 2).",
     highlight: ['X'],
   },
   {
     id: 'projections',
-    title: 'Stage 2 — Project to Q, K, V',
+    title: 'Stage 2: Project to Q, K, V',
     description:
-      'Three learned linear projections turn the same input X into three different matrices. Q (queries), K (keys), V (values). Each is 6×4 — six positions, four dimensions per position.',
+      'Three learned linear projections turn the same input X into three different matrices. Q (queries), K (keys), V (values). Each is 6×4: six positions, four dimensions per position.',
     highlight: ['X', 'Q', 'K', 'V'],
   },
   {
     id: 'scores',
-    title: 'Stage 3 — Attention scores: Q · Kᵀ',
+    title: 'Stage 3: Attention scores: Q · Kᵀ',
     description:
-      "The matrix product Q · Kᵀ produces a 6×6 matrix of dot products. Entry (i, j) is q_i · k_j — the similarity between position i's query and position j's key. We then divide by √d_k = 2 to control the variance (more on why in section 4).",
+      "The matrix product Q · Kᵀ produces a 6×6 matrix of dot products. Entry (i, j) is q_i · k_j, the similarity between position i's query and position j's key. We then divide by √d_k = 2 to control the variance (more on why in section 4).",
     highlight: ['Q', 'K', 'scores', 'scaled'],
   },
   {
     id: 'softmax',
-    title: 'Stage 4 — Softmax: attention weights',
+    title: 'Stage 4: Softmax: attention weights',
     description:
-      "Row-wise softmax turns each row of scaled scores into a probability distribution. Each row sums to 1. With these particular Q/K projections and no positional encoding yet, every row's brightest cell sits on the diagonal — each token attends most strongly to itself — and the rest of the row's weight is spread thinly and fairly evenly across the other positions.",
+      "Row-wise softmax turns each row of scaled scores into a probability distribution. Each row sums to 1. With these particular Q/K projections and no positional encoding yet, every row's brightest cell sits on the diagonal (each token attends most strongly to itself), and the rest of the row's weight is spread thinly and fairly evenly across the other positions.",
     highlight: ['scaled', 'weights'],
   },
   {
     id: 'output',
-    title: 'Stage 5 — Weighted sum: output',
+    title: 'Stage 5: Weighted sum: output',
     description:
-      "The attention weights are applied to the values V via a final matmul. The output is 6×4 — each row is a weighted average of V rows, weighted by that position's attention distribution. This is what feeds into the next transformer layer.",
+      "The attention weights are applied to the values V via a final matmul. The output is 6×4: each row is a weighted average of V rows, weighted by that position's attention distribution. This is what feeds into the next transformer layer.",
     highlight: ['weights', 'V', 'output'],
   },
 ];

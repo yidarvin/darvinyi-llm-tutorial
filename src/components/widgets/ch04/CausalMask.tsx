@@ -78,7 +78,7 @@ export default function CausalMask() {
       <div className={styles.description} aria-live="polite">
         {mode === 'bidirectional' ? (
           <>
-            <strong>Bidirectional attention:</strong> every position attends to every other position. Used in encoder models like BERT, where the model sees the entire sequence at once. Inappropriate for autoregressive generation — the model would "see" tokens it's supposed to predict.
+            <strong>Bidirectional attention:</strong> every position attends to every other position. Used in encoder models like BERT, where the model sees the entire sequence at once. Inappropriate for autoregressive generation: the model would "see" tokens it's supposed to predict.
           </>
         ) : (
           <>

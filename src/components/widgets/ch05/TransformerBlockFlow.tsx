@@ -86,7 +86,7 @@ export default function TransformerBlockFlow() {
       <BlockDiagram activeVia={stage.via} />
 
       <div className={styles.dataPanel}>
-        <div className={styles.panelTitle}>Current state — 6 tokens × 6 features</div>
+        <div className={styles.panelTitle}>Current state: 6 tokens × 6 features</div>
         <DataMatrix data={stage.data} />
       </div>
 

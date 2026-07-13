@@ -64,7 +64,7 @@ export default function ScalingLawCalculator() {
 
       <div className={styles.plotPanel}>
         <div className={styles.panelTitle}>
-          Loss along iso-compute curve — varying D/N at fixed C
+          Loss along iso-compute curve, varying D/N at fixed C
         </div>
         <LossCurvePlot
           curve={curve}

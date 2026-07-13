@@ -40,9 +40,9 @@ export default function DistillationPipeline() {
       <div className={styles.caption}>
         This pipeline is what powers modern distillation. The teacher is expensive to train but
         generates data only once. The student inherits behavior via{' '}
-        <strong>standard SFT on teacher outputs</strong> — no soft labels, no KL divergence, no
+        <strong>standard SFT on teacher outputs</strong>, no soft labels, no KL divergence, no
         special loss. The "distillation" is in the <strong>data source</strong>, not the training
-        algorithm. R1-Distill, Phi, Orca — all use this recipe.
+        algorithm. R1-Distill, Phi, Orca all use this recipe.
       </div>
     </div>
   );

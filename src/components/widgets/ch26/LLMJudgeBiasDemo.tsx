@@ -134,11 +134,11 @@ export default function LLMJudgeBiasDemo() {
 
       {/* Pedagogical caption */}
       <div className={styles.caption}>
-        Click through the scenarios. <strong>Position bias</strong> flips with ordering — swap-mitigation
+        Click through the scenarios. <strong>Position bias</strong> flips with ordering, and swap-mitigation
         catches it (verdict becomes "tie"). <strong>Verbosity bias</strong>, <strong>self-enhancement bias</strong>,
-        and <strong>coverage bias</strong> are consistent across orderings — swap-mitigation does NOT help.
+        and <strong>coverage bias</strong> are consistent across orderings: swap-mitigation does NOT help.
         Defending against these requires <strong>multi-judge ensembles, rubric-based judging, anonymization,
-        or human calibration</strong>. <strong>No single mitigation defends against all bias modes</strong> —
+        or human calibration</strong>. <strong>No single mitigation defends against all bias modes</strong>:
         production LLM-as-judge requires defense-in-depth, like every other discipline of Part VIII.
       </div>
     </div>

@@ -215,10 +215,10 @@ export default function TestTimeComputeCurves() {
 
       <div className={styles.caption}>
         Try the sequence <strong>easy → medium → hard</strong>. On <strong>easy</strong>, all curves
-        converge fast — extra compute is wasted. On <strong>medium</strong>, the spread grows; reasoning
+        converge fast, extra compute is wasted. On <strong>medium</strong>, the spread grows; reasoning
         models pull ahead. On <strong>hard</strong>, the gap is dramatic: <strong>direct generation
         plateaus near 12%; modern reasoning models reach ~73%</strong> at 1000× compute. This is
-        Snell 2024's central insight, and the economic foundation of o1/R1 — for hard problems,
+        Snell 2024's central insight, and the economic foundation of o1/R1: for hard problems,
         thinking longer beats thinking with more parameters.
       </div>
     </div>

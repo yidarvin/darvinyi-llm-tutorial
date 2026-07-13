@@ -205,12 +205,12 @@ export default function ToolSchemaBuilder() {
       <div className={styles.caption}>
         Cycle through the tools. <strong>Each Python function compiles to a schema</strong> the LLM
         reads to decide whether and how to call it. <strong>OpenAI and Anthropic schemas are nearly
-        identical</strong> — minor key differences (<code>function</code> vs <code>name</code>), same
+        identical</strong>: minor key differences (<code>function</code> vs <code>name</code>), same
         underlying mechanism. <strong>The sample LLM call</strong> shows what the LLM actually emits:
         a structured <code>tool_calls</code> array with the function name and JSON-encoded arguments.
         {' '}<strong>Schema design IS contract design</strong>: descriptions, type constraints, enums,
         and required fields are what stops the LLM from passing malformed inputs. The most
-        under-appreciated piece of agent engineering — now visible.
+        under-appreciated piece of agent engineering, now visible.
       </div>
     </div>
   );

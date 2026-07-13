@@ -52,7 +52,7 @@ export const TOPOLOGIES: AgentTopology[] = [
     label: 'Single-agent baseline',
     shortLabel: 'Single-agent',
     description:
-      'One agent in a ReAct loop with multiple tools. The chapter\'s recommended default — handles most production tasks with less complexity than any multi-agent setup. Listed first deliberately: most "I want multi-agent" instincts are better served here.',
+      'One agent in a ReAct loop with multiple tools. The chapter\'s recommended default: handles most production tasks with less complexity than any multi-agent setup. Listed first deliberately: most "I want multi-agent" instincts are better served here.',
     diagram: {
       nodes: [
         { id: 'in',    label: 'Task',     x: 0.07, y: 0.50, role: 'input' },
@@ -167,14 +167,14 @@ export const TOPOLOGIES: AgentTopology[] = [
       ],
     },
     useCases: [
-      'Multi-agent debate (Du et al. 2023 — accuracy gains on hard tasks)',
+      'Multi-agent debate (Du et al. 2023: accuracy gains on hard tasks)',
       'Collaborative writing (one agent drafts, others edit, consensus emerges)',
       'AutoGen group chats',
       'Brainstorming-style tasks with no fixed step order',
     ],
     tradeoffs: {
       pros: [
-        'Flexible — no fixed orchestration',
+        'Flexible, no fixed orchestration',
         'Adversarial dynamics improve quality',
         'Natural for debate/critique workflows',
       ],
@@ -223,7 +223,7 @@ export const TOPOLOGIES: AgentTopology[] = [
       'Very large workflows with natural sub-team structure',
       'Mirroring organizational hierarchies (research demo)',
       'Tasks where supervision-of-supervision is genuinely useful',
-      'Rare in 2025 production — mostly research',
+      'Rare in 2025 production, mostly research',
     ],
     tradeoffs: {
       pros: [
@@ -246,7 +246,7 @@ export const TOPOLOGIES: AgentTopology[] = [
     label: 'Proposer-critic-judge (adversarial role specialization)',
     shortLabel: 'Proposer-critic-judge',
     description:
-      'Three specialized roles: one generates a candidate answer (proposer), one critiques it (critic), one decides whether to accept or revise (judge). The pattern from Du et al. 2023 — measurable accuracy gains on hard reasoning tasks via adversarial dynamics.',
+      'Three specialized roles: one generates a candidate answer (proposer), one critiques it (critic), one decides whether to accept or revise (judge). The pattern from Du et al. 2023: measurable accuracy gains on hard reasoning tasks via adversarial dynamics.',
     diagram: {
       nodes: [
         { id: 'in',  label: 'Task',     x: 0.05, y: 0.50, role: 'input' },

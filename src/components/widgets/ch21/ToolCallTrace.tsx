@@ -14,7 +14,7 @@ export default function ToolCallTrace() {
 
   const revealed = stepIdx >= 0 ? TRACE_EVENTS.slice(0, stepIdx + 1) : [];
   const currentEvent = stepIdx >= 0 ? TRACE_EVENTS[stepIdx] : null;
-  const currentStepKind = currentEvent?.kind ?? '—';
+  const currentStepKind = currentEvent?.kind ?? 'none';
 
   return (
     <div className={styles.widget}>
@@ -101,7 +101,7 @@ export default function ToolCallTrace() {
         . Each <strong>Action</strong> is a structured JSON tool call (the API
         convention from Section 2); each <strong>Observation</strong> grounds
         the next Thought in real data. This is Chapter 20's ReAct pattern made
-        production — the loop that every modern agent runs on.
+        production: the loop that every modern agent runs on.
       </div>
     </div>
   );

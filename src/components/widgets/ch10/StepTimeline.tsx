@@ -45,7 +45,7 @@ export default function StepTimeline() {
 
       <div className={styles.timelinePanel}>
         <div className={styles.timelineLabel}>
-          Sequential — communication after compute (no overlap)
+          Sequential, communication after compute (no overlap)
         </div>
         <TimelineSvg
           mode="sequential"
@@ -61,7 +61,7 @@ export default function StepTimeline() {
 
       <div className={styles.timelinePanel}>
         <div className={styles.timelineLabel}>
-          Overlapped — communication hidden behind compute
+          Overlapped, communication hidden behind compute
         </div>
         <TimelineSvg
           mode="overlapped"
@@ -79,14 +79,14 @@ export default function StepTimeline() {
         <span className={styles.speedupLabel}>Speedup from overlap:</span>
         <span className={styles.speedupValue}>{speedup.toFixed(2)}×</span>
         <span className={styles.speedupNote}>
-          {speedup >= 1.5 && '— large win, communication was the bottleneck'}
-          {speedup >= 1.1 && speedup < 1.5 && '— meaningful win'}
-          {speedup < 1.1 && '— small win, communication was already cheap relative to compute'}
+          {speedup >= 1.5 && '(large win, communication was the bottleneck)'}
+          {speedup >= 1.1 && speedup < 1.5 && '(meaningful win)'}
+          {speedup < 1.1 && '(small win, communication was already cheap relative to compute)'}
         </span>
       </div>
 
       <div className={styles.caption}>
-        The difference between sequential and overlapped MFU here is just <em>ordering</em> —
+        The difference between sequential and overlapped MFU here is just <em>ordering</em>:
         same compute, same communication, but communication scheduled to run during compute.
         Modern training frameworks (PyTorch FSDP, Megatron-LM) overlap automatically via async
         CUDA streams and careful kernel scheduling. The MFU gap between a default-tuned and

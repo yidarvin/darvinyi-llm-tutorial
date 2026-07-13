@@ -213,7 +213,7 @@ export const PATTERNS: AgentPattern[] = [
     useCases: [
       'Tasks that genuinely decompose into specialized expertise',
       'Adversarial workflows (proposer + critic + judge)',
-      'Generative-agent simulations (Park 2023 — Smallville)',
+      'Generative-agent simulations (Park 2023, Smallville)',
       'Frameworks: CrewAI, AutoGen, Swarm',
     ],
     tradeoffs: {

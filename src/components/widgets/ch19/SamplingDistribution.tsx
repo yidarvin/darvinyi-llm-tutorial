@@ -130,9 +130,9 @@ export default function SamplingDistribution() {
       </div>
 
       <div className={styles.caption}>
-        Try this sequence: <strong>peaked</strong> with p=0.95 (nucleus is 1-3 tokens — the model is confident);
-        switch to <strong>flat</strong> (nucleus grows to 20+ tokens — the model is uncertain). <strong>Top-p adapts;
-        top-k stays fixed</strong>. Then raise temperature to 1.5 and watch the distribution flatten — even the peaked
+        Try this sequence: <strong>peaked</strong> with p=0.95 (nucleus is 1-3 tokens, the model is confident);
+        switch to <strong>flat</strong> (nucleus grows to 20+ tokens, the model is uncertain). <strong>Top-p adapts;
+        top-k stays fixed</strong>. Then raise temperature to 1.5 and watch the distribution flatten, even the peaked
         shape now has a wider nucleus. <strong>This adaptive behavior is what makes nucleus sampling the modern default.</strong>
       </div>
     </div>

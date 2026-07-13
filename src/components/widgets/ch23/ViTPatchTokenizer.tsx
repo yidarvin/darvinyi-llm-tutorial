@@ -160,8 +160,8 @@ export default function ViTPatchTokenizer() {
         gray; <strong>ground patches</strong> are green. After patch embedding, an image becomes a
         sequence of {GRID_SIZE * GRID_SIZE} visual tokens (plus a <code>[CLS]</code> token), each a{' '}
         {EMBED_DIM}-dim vector.{' '}
-        <strong>From the transformer's perspective, these are indistinguishable from text tokens</strong>{' '}
-        — just vectors in a sequence. This is the mechanism that lets the same architecture handle
+        <strong>From the transformer's perspective, these are indistinguishable from text tokens</strong>,
+        just vectors in a sequence. This is the mechanism that lets the same architecture handle
         vision and language.
       </div>
     </div>

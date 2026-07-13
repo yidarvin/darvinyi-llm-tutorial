@@ -150,17 +150,17 @@ export function buildHistogram(
 /** Insight text based on bit width and format. */
 export function insightFor(nBits: number, format: Format): string {
   if (nBits >= 16)
-    return 'FP16 baseline — nearly indistinguishable from FP32. The reference.';
+    return 'FP16 baseline: nearly indistinguishable from FP32. The reference.';
   if (nBits === 8)
-    return 'INT8 — practically lossless for most weight distributions. Production default.';
+    return 'INT8: practically lossless for most weight distributions. Production default.';
   if (nBits === 4 && format === 'NF')
-    return 'NF4 — levels placed at equiprobable normal quantiles. Denser near zero (where weights live); better quality per bit for normally-distributed weights.';
+    return 'NF4: levels placed at equiprobable normal quantiles. Denser near zero (where weights live); better quality per bit for normally-distributed weights.';
   if (nBits === 4)
-    return 'INT4 uniform — visible quantization error in the tails. Needs per-group scaling and/or NF4 to be production-ready.';
+    return 'INT4 uniform: visible quantization error in the tails. Needs per-group scaling and/or NF4 to be production-ready.';
   if (nBits === 3)
-    return 'INT3 — quality starts to degrade noticeably. Active research area; typically combined with sophisticated PTQ.';
+    return 'INT3: quality starts to degrade noticeably. Active research area; typically combined with sophisticated PTQ.';
   if (nBits === 2)
-    return 'INT2 — only 4 levels. Catastrophic for general use; works only with sophisticated methods (AQLM, QuIP#).';
+    return 'INT2: only 4 levels. Catastrophic for general use; works only with sophisticated methods (AQLM, QuIP#).';
   return '';
 }
 

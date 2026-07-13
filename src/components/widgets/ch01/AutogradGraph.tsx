@@ -10,7 +10,7 @@ const NODE_H = 60;
 type Direction = 'forward' | 'backward' | 'idle';
 
 function fmt(v: number): string {
-  if (Number.isNaN(v)) return '—';
+  if (Number.isNaN(v)) return 'n/a';
   return v.toFixed(2);
 }
 
@@ -251,7 +251,7 @@ function Tooltip({ nodeId }: { nodeId: string | null }) {
   return (
     <div className={styles.tooltipBox}>
       <div className={styles.tooltipTitle}>
-        {node.label} — {opLabel}
+        {node.label}, {opLabel}
       </div>
       <pre className={styles.tooltipCode}>{node.backwardCode}</pre>
     </div>

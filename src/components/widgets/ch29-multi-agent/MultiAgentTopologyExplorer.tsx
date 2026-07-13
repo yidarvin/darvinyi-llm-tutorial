@@ -153,7 +153,7 @@ function complexityFor(id: string): string {
     case 'peer-to-peer':          return 'high';
     case 'hierarchical':          return 'very high';
     case 'proposer-critic-judge': return 'medium';
-    default:                      return '—';
+    default:                      return 'N/A';
   }
 }
 
@@ -164,7 +164,7 @@ function useWhenFor(id: string): string {
     case 'peer-to-peer':          return 'debate / adversarial';
     case 'hierarchical':          return 'research; rare in production';
     case 'proposer-critic-judge': return 'adversarial role specialization';
-    default:                      return '—';
+    default:                      return 'N/A';
   }
 }
 
@@ -296,14 +296,14 @@ export default function MultiAgentTopologyExplorer() {
       </div>
 
       <div className={styles.caption}>
-        <strong>Single-agent baseline is the chapter's recommended default</strong> — listed first
+        <strong>Single-agent baseline is the chapter's recommended default</strong>, listed first
         deliberately. Most "I want multi-agent" instincts are better served by a well-designed
         single-agent ReAct loop with the right tools. <strong>Manager-worker</strong> earns its
         place when task decomposition is the main value-add. <strong>Peer-to-peer</strong> shines
         in debate / adversarial workflows (Du et al. 2023 showed measurable accuracy gains).{' '}
         <strong>Hierarchical</strong> is mostly research demos.{' '}
         <strong>Proposer-critic-judge</strong> is the most useful pure multi-agent pattern in
-        practice — adversarial role specialization with measurable quality gains.{' '}
+        practice: adversarial role specialization with measurable quality gains.{' '}
         <strong>The widget's framing reflects the chapter's central honest claim</strong>:
         multi-agent is real and useful in narrow cases, dramatically overused everywhere else.
       </div>

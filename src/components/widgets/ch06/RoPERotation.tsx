@@ -62,7 +62,7 @@ export default function RoPERotation() {
 
       <div className={styles.description}>
         <strong>RoPE rotates each pair of dimensions by an angle proportional to position × frequency.</strong>{' '}
-        Low pairs (e.g. pair 0) rotate quickly — full revolution every ~6 positions. High pairs (e.g. pair 3) rotate slowly — full revolution every ~6,300 positions. The original Q vector at position 0 is shown dimmed; the rotated Q at the current position is highlighted in cyan. RoPE has no learned parameters — the rotation is fully determined by position and dimension.
+        Low pairs (e.g. pair 0) rotate quickly, completing a full revolution every ~6 positions. High pairs (e.g. pair 3) rotate slowly, completing a full revolution every ~6,300 positions. The original Q vector at position 0 is shown dimmed; the rotated Q at the current position is highlighted in cyan. RoPE has no learned parameters: the rotation is fully determined by position and dimension.
       </div>
     </div>
   );

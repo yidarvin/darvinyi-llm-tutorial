@@ -80,7 +80,7 @@ export const STRATEGIES: Strategy[] = [
     shortLabel: 'Kaplan',
     ratio: 1.7,
     description:
-      'The original 2020 scaling law recommendation. ~1.7 tokens per parameter — most compute goes to making the model larger. Used by GPT-3 (175B params, 300B tokens). Significantly undertrains the model; sits notably above the Chinchilla optimum on the loss curve.',
+      'The original 2020 scaling law recommendation. ~1.7 tokens per parameter, most compute goes to making the model larger. Used by GPT-3 (175B params, 300B tokens). Significantly undertrains the model; sits notably above the Chinchilla optimum on the loss curve.',
     color: 'var(--rose-400)',
   },
   {
@@ -89,7 +89,7 @@ export const STRATEGIES: Strategy[] = [
     shortLabel: 'Chinchilla ★',
     ratio: 20,
     description:
-      "The actual loss-minimizing ratio for this compute budget, found by sweeping the 6ND=C constraint. Marked at the bottom of the curve. This ratio drifts with compute (roughly 50-150+ tokens/parameter over this widget's range) — it doesn't sit at a fixed \"20,\" which is Chinchilla's separate iso-FLOP rule of thumb (and happens to match the real Chinchilla model's own 70B-param/1.4T-token ratio) rather than a consequence of this parametric fit.",
+      "The actual loss-minimizing ratio for this compute budget, found by sweeping the 6ND=C constraint. Marked at the bottom of the curve. This ratio drifts with compute (roughly 50-150+ tokens/parameter over this widget's range); it doesn't sit at a fixed \"20,\" which is Chinchilla's separate iso-FLOP rule of thumb (and happens to match the real Chinchilla model's own 70B-param/1.4T-token ratio) rather than a consequence of this parametric fit.",
     color: 'var(--cyan-400)',
   },
   {
@@ -98,7 +98,7 @@ export const STRATEGIES: Strategy[] = [
     shortLabel: 'Llama-3 style',
     ratio: 250,
     description:
-      'Over-train a smaller architecture past Chinchilla-optimal. ~100-2000 tokens per parameter; here we use 250 as a representative value. Llama-3 8B trained on 15T tokens — about 100× past Chinchilla. Slight loss penalty during training; major savings during inference (smaller model = cheaper to serve).',
+      'Over-train a smaller architecture past Chinchilla-optimal. ~100-2000 tokens per parameter; here we use 250 as a representative value. Llama-3 8B trained on 15T tokens, about 100× past Chinchilla. Slight loss penalty during training; major savings during inference (smaller model = cheaper to serve).',
     color: 'var(--amber-400)',
   },
 ];

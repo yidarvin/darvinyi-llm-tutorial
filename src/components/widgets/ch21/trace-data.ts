@@ -70,12 +70,12 @@ export function captionFor(stepIdx: number): string {
   if (!event) return '';
   switch (event.kind) {
     case 'thought':
-      return 'The model produces a Thought — natural-language reasoning about what to do next. This is internal to the model; the structured tool call comes next.';
+      return 'The model produces a Thought: natural-language reasoning about what to do next. This is internal to the model; the structured tool call comes next.';
     case 'action':
-      return 'The model emits a structured tool call — a JSON object matching a declared schema (Section 3). Constrained decoding (Ch 19) guarantees the call is well-formed.';
+      return 'The model emits a structured tool call, a JSON object matching a declared schema (Section 3). Constrained decoding (Ch 19) guarantees the call is well-formed.';
     case 'observation':
       return 'The system executes the tool and returns the result as an Observation. The model now has grounded data to reason over.';
     case 'final':
-      return 'The model produces a Final answer in plain text — no more tool calls needed. The agent loop terminates.';
+      return 'The model produces a Final answer in plain text; no more tool calls needed. The agent loop terminates.';
   }
 }

@@ -76,7 +76,7 @@ export default function LossCurve() {
       </div>
 
       <div className={styles.curvePanel}>
-        <div className={styles.panelTitle}>Loss curve — Tiny Shakespeare, char-level, ~10M params</div>
+        <div className={styles.panelTitle}>Loss curve: Tiny Shakespeare, char-level, ~10M params</div>
         <LossCurvePlot currentStep={step} />
       </div>
 

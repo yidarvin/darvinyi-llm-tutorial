@@ -219,12 +219,12 @@ export default function InterAgentConversationViewer() {
       </div>
 
       <div className={styles.caption}>
-        Step through each scenario. <strong>Three well-designed patterns</strong> — proposer-critic-judge,
-        manager-worker, plan-execute-verify — show how distinct roles produce real quality gains.
+        Step through each scenario. <strong>Three well-designed patterns</strong> (proposer-critic-judge,
+        manager-worker, plan-execute-verify) show how distinct roles produce real quality gains.
         <strong> The degenerate scenario</strong> (3 redundant reviewers) shows what happens when engineers
         reach for multi-agent without genuine role separation: <strong>3× LLM cost for 1× quality</strong>;
         no consensus mechanism; no termination criteria; identical outputs from agents that aren't really
-        different. <strong>This is the chapter's 80%</strong> — most "I want multi-agent" instincts produce
+        different. <strong>This is the chapter's 80%</strong>: most "I want multi-agent" instincts produce
         the degenerate pattern. <strong>Well-designed multi-agent separates concerns; degenerate multi-agent
         just multiplies them.</strong>
       </div>

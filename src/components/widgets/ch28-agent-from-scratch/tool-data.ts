@@ -97,7 +97,7 @@ export const TOOLS: ToolFunction[] = [
         },
       ],
     },
-    designNote: 'The simplest pattern: one required string parameter. Notice that the LLM emits `arguments` as a JSON-encoded string — your code must parse it before calling the function. The description carries the examples — that\'s where the LLM picks up the right input format.',
+    designNote: 'The simplest pattern: one required string parameter. Notice that the LLM emits `arguments` as a JSON-encoded string; your code must parse it before calling the function. The description carries the examples: that\'s where the LLM picks up the right input format.',
   },
   {
     id: 'search-web',
@@ -176,7 +176,7 @@ export const TOOLS: ToolFunction[] = [
         },
       ],
     },
-    designNote: 'Optional parameters use `default` in the schema and omit them from the `required` list. The LLM may still pass them — and often does when the description suggests doing so. Notice the `minimum`/`maximum` constraints: these prevent the LLM from passing junk values.',
+    designNote: 'Optional parameters use `default` in the schema and omit them from the `required` list. The LLM may still pass them, and often does when the description suggests doing so. Notice the `minimum`/`maximum` constraints: these prevent the LLM from passing junk values.',
   },
   {
     id: 'send-email',
@@ -258,7 +258,7 @@ export const TOOLS: ToolFunction[] = [
         },
       ],
     },
-    designNote: 'A side-effect tool. **The description starts with "CONFIRMATION REQUIRED"** — a deliberate scaffolding choice. The LLM reads the description and (with a good system prompt) will confirm with the user before calling. Note `format: "email"` and `maxLength`: these constraints prevent malformed inputs.',
+    designNote: 'A side-effect tool. **The description starts with "CONFIRMATION REQUIRED"**, a deliberate scaffolding choice. The LLM reads the description and (with a good system prompt) will confirm with the user before calling. Note `format: "email"` and `maxLength`: these constraints prevent malformed inputs.',
   },
   {
     id: 'read-file',
@@ -403,7 +403,7 @@ export const TOOLS: ToolFunction[] = [
         },
       ],
     },
-    designNote: 'An eval-style tool. **The description explicitly enumerates supported and unsupported features** — preventing the LLM from trying `import` statements or variable assignments. Implementation note: `eval` with an empty `__builtins__` is a *restricted* eval, not a real sandbox — it blocks the obvious cases but is famously escapable (e.g. via `().__class__.__bases__[0].__subclasses__()`). For untrusted input, use `ast.literal_eval`, a real expression parser, or a subprocess/container. Schema can\'t enforce this; the engineer must.',
+    designNote: 'An eval-style tool. **The description explicitly enumerates supported and unsupported features**, preventing the LLM from trying `import` statements or variable assignments. Implementation note: `eval` with an empty `__builtins__` is a *restricted* eval, not a real sandbox; it blocks the obvious cases but is famously escapable (e.g. via `().__class__.__bases__[0].__subclasses__()`). For untrusted input, use `ast.literal_eval`, a real expression parser, or a subprocess/container. Schema can\'t enforce this; the engineer must.',
   },
   {
     id: 'schedule-meeting',
@@ -518,7 +518,7 @@ export const TOOLS: ToolFunction[] = [
         },
       ],
     },
-    designNote: 'The most complex schema. **Array parameter** (`attendees`) with item-level type constraint (`format: "email"`). **Date-time format hint** so the LLM knows the expected ISO format. **Nullable optional** (`type: ["string", "null"]`) for `location`. Each constraint reduces the LLM\'s degrees of freedom — and the chance of a malformed call.',
+    designNote: 'The most complex schema. **Array parameter** (`attendees`) with item-level type constraint (`format: "email"`). **Date-time format hint** so the LLM knows the expected ISO format. **Nullable optional** (`type: ["string", "null"]`) for `location`. Each constraint reduces the LLM\'s degrees of freedom, and the chance of a malformed call.',
   },
 ];
 

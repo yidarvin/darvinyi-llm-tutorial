@@ -136,7 +136,7 @@ export default function GranularityVisualizer() {
 
       <div className={styles.caption}>
         Watch the granularity progression: <strong>per-tensor</strong> uses one scale, destroyed by the outlier row;
-        non-outlier rows lose almost all resolution. <strong>Per-channel</strong> gives each row its own scale —
+        non-outlier rows lose almost all resolution. <strong>Per-channel</strong> gives each row its own scale:
         the outlier row is fine, and the rest are well-preserved. <strong>Per-group</strong> goes further: even
         within-row variation gets its own scale, recovering quality further at the cost of more scale storage.
         At INT4 with per-group + G=32: <strong>essentially the production recipe.</strong>

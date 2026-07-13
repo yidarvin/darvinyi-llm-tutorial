@@ -10,15 +10,15 @@ export interface Chunk {
 }
 
 /** Sample document — six paragraphs of ML/RAG-related content for variety. */
-export const DOCUMENT = `Retrieval-augmented generation (RAG) is the most-deployed LLM application pattern in production. The core idea is simple: instead of relying solely on the model's parametric memory, retrieve relevant documents from an external corpus and pass them to the model as context. This solves three fundamental limits of pure parametric memory — training cutoffs, private data, and specific records.
+export const DOCUMENT = `Retrieval-augmented generation (RAG) is the most-deployed LLM application pattern in production. The core idea is simple: instead of relying solely on the model's parametric memory, retrieve relevant documents from an external corpus and pass them to the model as context. This solves three fundamental limits of pure parametric memory: training cutoffs, private data, and specific records.
 
 The retrieval step has two main flavors. Sparse retrieval uses algorithms like BM25 that match exact keywords; it remains a strong baseline that is hard to beat on domains with specialized vocabulary. Dense retrieval uses embedding models that map text into high-dimensional vectors; semantically similar texts produce nearby vectors, which lets the system match paraphrases and synonyms. Modern production systems usually combine both, often via Reciprocal Rank Fusion.
 
-Chunking is the often-overlooked decision that dominates retrieval quality. Documents are typically too long to embed as single vectors, so they must be split into pieces. The choice of chunking strategy — fixed-size with overlap, sentence-based, paragraph-based, semantic, parent-document — affects what gets retrieved more than the choice of embedding model. Wrong chunk sizes can degrade recall by thirty to fifty percent.
+Chunking is the often-overlooked decision that dominates retrieval quality. Documents are typically too long to embed as single vectors, so they must be split into pieces. The choice of chunking strategy (fixed-size with overlap, sentence-based, paragraph-based, semantic, parent-document) affects what gets retrieved more than the choice of embedding model. Wrong chunk sizes can degrade recall by thirty to fifty percent.
 
 After retrieval, a reranking stage often improves precision. Cross-encoders score each candidate document jointly with the query, producing more accurate relevance estimates than the dual-encoder embedding models used in first-stage retrieval. Reranking is slower per pair but only runs on the top candidates, so the total cost remains tractable.
 
-Production RAG systems handle more than just retrieval. They cache aggressively (re-embedding millions of documents is expensive), monitor index freshness, isolate multi-tenant data, enforce document-level access controls, and instrument every layer for evaluation. RAGAS and similar frameworks measure faithfulness — does the generated answer match the retrieved content — alongside traditional information-retrieval metrics like recall and NDCG.
+Production RAG systems handle more than just retrieval. They cache aggressively (re-embedding millions of documents is expensive), monitor index freshness, isolate multi-tenant data, enforce document-level access controls, and instrument every layer for evaluation. RAGAS and similar frameworks measure faithfulness (does the generated answer match the retrieved content) alongside traditional information-retrieval metrics like recall and NDCG.
 
 The architectural landscape continues to evolve. Vanilla RAG with a single retrieval call suffices for FAQ and documentation use cases. Agentic RAG, where the model decides when to retrieve via tool calls, handles multi-step research. Graph RAG attempts multi-hop reasoning over knowledge graphs. RETRO bakes retrieval into the model architecture during training. Each variant trades simplicity for capability; choose based on the actual use case.`;
 
@@ -150,7 +150,7 @@ export const STRATEGIES: StrategyInfo[] = [
     id: 'paragraph',
     label: 'Paragraph-based',
     description: 'Each paragraph becomes one chunk.',
-    insight: 'Larger semantic units; works well for prose. Chunks are coherent and self-contained, but bigger chunks mean fewer total chunks — and retrieval becomes less precise. Best when your corpus already has good paragraph structure.',
+    insight: 'Larger semantic units; works well for prose. Chunks are coherent and self-contained, but bigger chunks mean fewer total chunks, and retrieval becomes less precise. Best when your corpus already has good paragraph structure.',
   },
   {
     id: 'parent-doc',

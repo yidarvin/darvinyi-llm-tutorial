@@ -266,7 +266,7 @@ export default function FrameworkPicker() {
         teams; Anthropic's tooling is best for Anthropic-native deployments; OpenTelemetry is the
         future-proof open standard; <strong>custom code wins when surface area is small</strong> and
         lock-in is unacceptable. <strong>The right framework is the one your team will actually
-        use</strong> — feature overload often correlates with under-adoption. <strong>Most production
+        use</strong>: feature overload often correlates with under-adoption. <strong>Most production
         systems</strong> use one framework as scaffolding plus custom logic. <strong>The framework is
         plumbing</strong>, not the system. Treat it accordingly.
       </div>

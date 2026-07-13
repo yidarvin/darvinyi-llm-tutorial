@@ -131,7 +131,7 @@ export default function TemperatureScaling() {
       <div className={styles.caption}>
         Hinton's central insight: <strong>dark knowledge</strong> is the information in
         non-target class probabilities. At T = 1, this information is crushed (the correct
-        class dominates). Raising T reveals it — at T = 4–8, the relative similarities
+        class dominates). Raising T reveals it: at T = 4–8, the relative similarities
         between classes become visible. <strong>The student trained on softened distributions
         learns more per example</strong> than from hard labels alone.
       </div>

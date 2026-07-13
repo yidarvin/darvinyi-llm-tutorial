@@ -234,7 +234,7 @@ export default function EmbeddingSpace() {
           </>
         ) : selected ? (
           <>
-            Selected: <strong>{selected}</strong> — click again or press Reset to deselect
+            Selected: <strong>{selected}</strong>, click again or press Reset to deselect
           </>
         ) : enabledAnalogies.size > 0 ? (
           <>

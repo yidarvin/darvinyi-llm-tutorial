@@ -70,7 +70,7 @@ export function classifyState(T: number): {
   if (T < 3.5) {
     return {
       darkKnowledgeStatus: 'emerging',
-      insight: 'Dark knowledge starting to emerge — non-target classes becoming visible.',
+      insight: 'Dark knowledge starting to emerge: non-target classes becoming visible.',
     };
   }
   if (T < 10) {
@@ -84,12 +84,12 @@ export function classifyState(T: number): {
     return {
       darkKnowledgeStatus: 'fading',
       insight:
-        'Distribution flattening. Signal weakening — the gap between correct and incorrect classes is shrinking.',
+        'Distribution flattening. Signal weakening: the gap between correct and incorrect classes is shrinking.',
     };
   }
   return {
     darkKnowledgeStatus: 'lost',
     insight:
-      'Distribution near uniform. Information is being lost — at T → ∞, all classes are equal.',
+      'Distribution near uniform. Information is being lost: at T → ∞, all classes are equal.',
   };
 }

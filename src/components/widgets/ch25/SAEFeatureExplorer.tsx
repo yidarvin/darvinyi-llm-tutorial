@@ -92,7 +92,7 @@ export default function SAEFeatureExplorer() {
       </div>
 
       <div className={styles.mapPanel}>
-        <div className={styles.mapTitle}>Feature space — related features cluster together</div>
+        <div className={styles.mapTitle}>Feature space: related features cluster together</div>
         <svg
           viewBox={`0 0 ${MAP_W} ${MAP_H}`}
           className={styles.mapSvg}
@@ -181,7 +181,7 @@ export default function SAEFeatureExplorer() {
                 style={{ background: FAMILIES[n.family].color }}
               />
               <span className={styles.neighborLabel}>{n.label}</span>
-              <span className={styles.neighborFamily}>— {FAMILIES[n.family].label}</span>
+              <span className={styles.neighborFamily}>({FAMILIES[n.family].label})</span>
             </li>
           ))}
         </ol>
@@ -190,11 +190,11 @@ export default function SAEFeatureExplorer() {
       <div className={styles.caption}>
         Click through the features. <strong>Each one represents a learned direction</strong> in the model&rsquo;s
         activation space that activates on a specific, interpretable concept. The activation bars show how
-        sharply the feature fires on its top inputs — peak inputs hit 1.0, related-but-not-perfect inputs
+        sharply the feature fires on its top inputs: peak inputs hit 1.0, related-but-not-perfect inputs
         fall off. <strong>The 2D map reveals decoder geometry</strong>: features in the same family cluster
         together because the SAE learned them as related directions. <strong>This is what Anthropic&rsquo;s
         breakthrough looks like</strong>: not a finished science, but a tractable handle on what&rsquo;s inside
-        the model — and a foundation for safety verification.
+        the model, and a foundation for safety verification.
       </div>
     </div>
   );

@@ -81,7 +81,7 @@ export const SCENARIOS: AgentScenario[] = [
     label: 'Computation with verification',
     category: 'computation',
     task: 'If I deposit $5000 at 4.5% APR for 7 years, how much do I have at the end? Compute both annual and monthly compounding.',
-    note: 'A 4-turn task where the agent does the same calculation two ways and reports both. The agent\'s reasoning shows why it\'s doing each step. Compounding frequency makes a meaningful difference — the agent surfaces it.',
+    note: 'A 4-turn task where the agent does the same calculation two ways and reports both. The agent\'s reasoning shows why it\'s doing each step. Compounding frequency makes a meaningful difference, and the agent surfaces it.',
     turns: [
       {
         turn: 1,
@@ -99,7 +99,7 @@ export const SCENARIOS: AgentScenario[] = [
       },
       {
         turn: 3,
-        thought: 'Monthly compounding gives ~$6,847.26. The difference is about $42.95 — monthly compounding earns slightly more. Time to report both.',
+        thought: 'Monthly compounding gives ~$6,847.26. The difference is about $42.95; monthly compounding earns slightly more. Time to report both.',
         action: 'final_answer("After 7 years at 4.5% APR: $6,804.31 (annual compounding) or $6,847.26 (monthly compounding). Monthly earns ~$42.95 more.")',
         observation: null,
         isFinal: true,
@@ -113,7 +113,7 @@ export const SCENARIOS: AgentScenario[] = [
     label: 'Research chain',
     category: 'research',
     task: 'What is the population density of Bhutan in people per square kilometer?',
-    note: 'A 4-turn chain: look up population, look up area, divide, finalize. Each tool call depends on the previous. This is the classic "chained research" pattern — common for product lookups, data analysis, and any multi-source question.',
+    note: 'A 4-turn chain: look up population, look up area, divide, finalize. Each tool call depends on the previous. This is the classic "chained research" pattern, common for product lookups, data analysis, and any multi-source question.',
     turns: [
       {
         turn: 1,
@@ -138,7 +138,7 @@ export const SCENARIOS: AgentScenario[] = [
       },
       {
         turn: 4,
-        thought: 'About 20.5 people per square kilometer — Bhutan is sparsely populated. Time to report.',
+        thought: 'About 20.5 people per square kilometer; Bhutan is sparsely populated. Time to report.',
         action: 'final_answer("Bhutan has a population density of approximately 20.5 people per square kilometer (population ~787k / area 38,394 km²).")',
         observation: null,
         isFinal: true,
@@ -152,7 +152,7 @@ export const SCENARIOS: AgentScenario[] = [
     label: 'Agent recognizes limits',
     category: 'failure',
     task: "What's my best friend's birthday?",
-    note: 'A 2-turn case where the agent recognizes it can\'t answer with the tools available. This is the "graceful failure" pattern — the agent reaches a final answer that honestly states the limitation. The alternative (hallucinating a birthday) is far worse.',
+    note: 'A 2-turn case where the agent recognizes it can\'t answer with the tools available. This is the "graceful failure" pattern: the agent reaches a final answer that honestly states the limitation. The alternative (hallucinating a birthday) is far worse.',
     turns: [
       {
         turn: 1,
@@ -163,7 +163,7 @@ export const SCENARIOS: AgentScenario[] = [
       },
       {
         turn: 2,
-        thought: 'No tool can answer this without personal information I don\'t have access to. The honest answer is to say so — fabricating a date would be much worse than admitting I don\'t know.',
+        thought: 'No tool can answer this without personal information I don\'t have access to. The honest answer is to say so; fabricating a date would be much worse than admitting I don\'t know.',
         action: "final_answer(\"I don\\'t have access to personal information about your best friend. You could store that information in your profile, or share it with me directly so I can remember it for future questions.\")",
         observation: null,
         isFinal: true,

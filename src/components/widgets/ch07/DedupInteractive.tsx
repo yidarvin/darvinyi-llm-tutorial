@@ -131,7 +131,7 @@ function ClusterRow({ cluster }: { cluster: number[] }) {
       </span>
       {discardIds.length > 0 && (
         <span className={styles.clusterDiscard}>
-          — discard: {discardIds.map(id => `ID ${id}`).join(', ')}
+          discard: {discardIds.map(id => `ID ${id}`).join(', ')}
         </span>
       )}
     </div>

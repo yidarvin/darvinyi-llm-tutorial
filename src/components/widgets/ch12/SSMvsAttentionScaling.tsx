@@ -253,7 +253,7 @@ function PlotSvg({ curve, metric, dModel, currentSeqLen, crossover, onHover }: P
       onMouseMove={handleMouseMove}
       onMouseLeave={() => onHover(null)}
       role="img"
-      aria-label="Attention vs SSM scaling plot — log-log compute or memory cost per layer against sequence length"
+      aria-label="Attention vs SSM scaling plot: log-log compute or memory cost per layer against sequence length"
     >
       {xTicks.map(t => (
         <line

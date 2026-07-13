@@ -75,7 +75,7 @@ export interface SampleSnapshot {
 export const SAMPLES: SampleSnapshot[] = [
   {
     step: 0,
-    description: 'Pure random — model is at initialization',
+    description: 'Pure random, model is at initialization',
     text: `q!Ck;5Wj?n.zUM/x bPL3 GcRO'jY;w.zE:dQs8ux\nrYjBkP9q!hZ x?bMNuTL,e \nNs;3'm.Q?GZ.,LpDxnEMHKj`,
   },
   {
@@ -115,7 +115,7 @@ export const SAMPLES: SampleSnapshot[] = [
   },
   {
     step: 5000,
-    description: 'Trained model — coherent, stylistic, almost convincing',
+    description: 'Trained model, coherent, stylistic, almost convincing',
     text: `BRUTUS:\nGood Caesar, hear me speak. The Roman senate\nHas spoken not of war, but of a peace\nThat may, with honour, set our city free.\nLet us not fear what time shall bring to pass.`,
   },
 ];

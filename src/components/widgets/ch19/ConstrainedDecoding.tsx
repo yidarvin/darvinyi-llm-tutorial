@@ -112,7 +112,7 @@ export default function ConstrainedDecoding() {
         <div className={styles.insightLabel}>Insight</div>
         <div className={styles.insightText}>
           Constrained decoding guarantees the output satisfies the grammar. The model still uses its
-          full probability distribution — it just gets restricted to valid options. Without it, the
+          full probability distribution, it just gets restricted to valid options. Without it, the
           model often picks tokens that break the format (★ markers above).
         </div>
       </div>
@@ -120,7 +120,7 @@ export default function ConstrainedDecoding() {
       <div className={styles.caption}>
         Click <strong>Next ▶</strong> to walk through generating <code>&#123;"name": "Alice"&#125;</code>.
         At each step, watch which tokens are <strong>valid (cyan ✓)</strong> vs <strong>masked (rose ✗)</strong>.
-        The ★ marks the model's <em>preferred</em> token without constraints — often invalid! Constrained
+        The ★ marks the model's <em>preferred</em> token without constraints, often invalid! Constrained
         decoding picks the highest-probability valid token instead. <strong>This is how JSON mode and tool-calling
         APIs guarantee structured output.</strong>
       </div>

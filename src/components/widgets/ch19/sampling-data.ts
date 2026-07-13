@@ -131,13 +131,13 @@ export function insightFor(
   nucleusSize: number,
 ): string {
   if (topP >= 0.999) {
-    return 'Top-p effectively disabled — all tokens in the nucleus. Adjust top-p below 1.0 to see truncation.';
+    return 'Top-p effectively disabled: all tokens in the nucleus. Adjust top-p below 1.0 to see truncation.';
   }
   if (shape === 'peaked') {
-    return `Nucleus is small (${nucleusSize} tokens) — the model is confident; only a few candidates matter.`;
+    return `Nucleus is small (${nucleusSize} tokens): the model is confident; only a few candidates matter.`;
   }
   if (shape === 'bimodal') {
-    return `Nucleus includes both peaks (${nucleusSize} tokens) — the model is uncertain between two main options.`;
+    return `Nucleus includes both peaks (${nucleusSize} tokens): the model is uncertain between two main options.`;
   }
-  return `Nucleus is large (${nucleusSize} tokens) — the model is uncertain across many options.`;
+  return `Nucleus is large (${nucleusSize} tokens): the model is uncertain across many options.`;
 }

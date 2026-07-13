@@ -227,7 +227,7 @@ export default function AgentTraceInspector() {
       {/* Pedagogical caption */}
       <div className={styles.caption}>
         <strong>This is what production observability looks like.</strong> Each agent task is a tree of
-        spans — LLM calls, tool calls, parses, retries, final answers — each with timing, attributes
+        spans (LLM calls, tool calls, parses, retries, final answers), each with timing, attributes
         (model, tokens, cost), and status. <strong>Clean traces tell you nothing</strong>; they're
         the baseline. <strong>The interesting traces are the failure modes</strong>: transient retries
         (engineering working as designed), hallucinated tool calls (the LLM recovers via structured

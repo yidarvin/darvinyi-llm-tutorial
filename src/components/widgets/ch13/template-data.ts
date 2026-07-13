@@ -48,7 +48,7 @@ export const TEMPLATES: Record<TemplateId, TemplateInfo> = {
     id: 'mistral',
     label: 'Mistral',
     description:
-      "Mistral's original [INST] format. Simpler but lacks a native system role — system messages get prepended to the first user turn.",
+      "Mistral's original [INST] format. Simpler but lacks a native system role, so system messages get prepended to the first user turn.",
     specialTokens: ['[INST]', '[/INST]', '<s>', '</s>'],
     hasSystemRole: false,
     models: ['Mistral-7B-Instruct', 'Mixtral-8x7B-Instruct'],

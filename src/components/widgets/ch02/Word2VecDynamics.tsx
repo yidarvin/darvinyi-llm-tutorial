@@ -107,7 +107,7 @@ export default function Word2VecDynamics() {
     if (realStep === 0) return 'Step 0: All embeddings start at small random positions near the origin.';
     if (realStep < 50)  return `Step ${realStep}: Words are beginning to drift. Positive pairs pull together; negatives push apart.`;
     if (realStep < 120) return `Step ${realStep}: Category structure is emerging. Animals, vehicles, and foods are separating into distinct regions.`;
-    return `Step ${realStep}: Clusters are well-formed. Connector words ("liked", "saw", "wanted") sit between categories — they co-occur with everything.`;
+    return `Step ${realStep}: Clusters are well-formed. Connector words ("liked", "saw", "wanted") sit between categories; they co-occur with everything.`;
   }
 
   return (

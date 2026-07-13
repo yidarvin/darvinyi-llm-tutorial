@@ -258,13 +258,13 @@ export default function AgentBenchmarkExplorer() {
       <div className={styles.caption}>
         <strong>The 2025 agent benchmark landscape</strong>: coding (SWE-bench, ~50%), general
         assistance (GAIA, ~65% Level 1), computer use (OSWorld, ~14%), tool-use reliability (τ-bench
-        pass^4, ~51%), and complex web research (BrowseComp, ~42% — above human baseline).{' '}
+        pass^4, ~51%), and complex web research (BrowseComp, ~42%, above human baseline).{' '}
         <strong>The gaps to human performance</strong> are real: 35 pp on SWE-bench, 58 pp on OSWorld.{' '}
-        <strong>The widest gap is OSWorld</strong> (computer use) — embodied desktop interaction
+        <strong>The widest gap is OSWorld</strong> (computer use): embodied desktop interaction
         remains the hardest agent regime. <strong>BrowseComp's positive gap</strong> shows where
         agents already exceed humans: tireless browsing capacity.{' '}
         <strong>Benchmarks measure narrow things</strong>; production readiness requires more (cost,
-        latency, safety, reliability, observability — sections 3–6 of this chapter).{' '}
+        latency, safety, reliability, observability, sections 3–6 of this chapter).{' '}
         <strong>This is the discipline Ch 26 established, extended to the agent layer.</strong>
       </div>
     </div>

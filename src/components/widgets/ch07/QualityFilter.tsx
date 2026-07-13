@@ -80,7 +80,7 @@ export default function QualityFilter() {
 
       <div className={styles.summary}>
         Result: <strong>{keptCount}</strong> of {SAMPLES.length} samples pass all enabled filters
-        {keptCount === 0 && <span className={styles.summaryWarn}> (none pass — try loosening)</span>}
+        {keptCount === 0 && <span className={styles.summaryWarn}> (none pass, try loosening)</span>}
       </div>
 
       <div className={styles.panelTitle}>Samples</div>
@@ -122,7 +122,7 @@ export default function QualityFilter() {
       </div>
 
       <div className={styles.footerHint}>
-        Try disabling individual filters to see what each catches alone. Quality classifier is the most aggressive — without it, some obvious junk (placeholders, mild spam) slips through heuristics.
+        Try disabling individual filters to see what each catches alone. Quality classifier is the most aggressive: without it, some obvious junk (placeholders, mild spam) slips through heuristics.
       </div>
     </div>
   );

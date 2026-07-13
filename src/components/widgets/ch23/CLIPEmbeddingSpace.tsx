@@ -162,7 +162,7 @@ export default function CLIPEmbeddingSpace() {
 
       <div className={styles.caption}>
         Click through the queries. Watch where the query lands in the 2D embedding space, and which items
-        light up as its nearest neighbors. <strong>Notice that images and texts both appear</strong> — the
+        light up as its nearest neighbors. <strong>Notice that images and texts both appear</strong>: the
         shared embedding space doesn&apos;t separate by modality, only by meaning. <strong>This is what CLIP
         gives you</strong>: cosine similarity that bridges modalities. It is the foundational technique
         behind every modern vision-language model (LLaVA, GPT-4V, Claude vision, Gemini) and behind

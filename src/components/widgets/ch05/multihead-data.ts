@@ -60,30 +60,30 @@ const HEAD_4_RAW: number[][] = [
 export const HEADS: HeadSpec[] = [
   {
     id: 'head-1',
-    label: 'Head 1 — Local attention',
+    label: 'Head 1: Local attention',
     shortLabel: 'Local',
-    description: 'Each token attends primarily to itself and its immediate neighbors. This kind of "local" head captures short-range syntactic patterns — n-gram-like dependencies.',
+    description: 'Each token attends primarily to itself and its immediate neighbors. This kind of "local" head captures short-range syntactic patterns, n-gram-like dependencies.',
     attention: normalize(HEAD_1_RAW),
   },
   {
     id: 'head-2',
-    label: 'Head 2 — Backward shift',
+    label: 'Head 2: Backward shift',
     shortLabel: 'Previous',
-    description: 'Each token attends primarily to the previous token. A backward-shift head implements something like "the most recent token" — useful for syntactic dependencies that always look one step back.',
+    description: 'Each token attends primarily to the previous token. A backward-shift head implements something like "the most recent token", useful for syntactic dependencies that always look one step back.',
     attention: normalize(HEAD_2_RAW),
   },
   {
     id: 'head-3',
-    label: 'Head 3 — "the"-detection',
+    label: 'Head 3: "the"-detection',
     shortLabel: '"the"',
     description: 'Every token attends primarily to positions where "the" appears (positions 0 and 4). A "token-specific detector" head finds occurrences of a particular word regardless of position.',
     attention: normalize(HEAD_3_RAW),
   },
   {
     id: 'head-4',
-    label: 'Head 4 — Ending broadcast',
+    label: 'Head 4: Ending broadcast',
     shortLabel: 'Spread',
-    description: 'Later tokens attend broadly to earlier tokens. A "broadcast" head aggregates global context — useful when the current token needs to draw on the whole prefix.',
+    description: 'Later tokens attend broadly to earlier tokens. A "broadcast" head aggregates global context, useful when the current token needs to draw on the whole prefix.',
     attention: normalize(HEAD_4_RAW),
   },
 ];

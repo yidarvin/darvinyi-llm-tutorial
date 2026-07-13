@@ -53,7 +53,7 @@ export function evaluateStacks(
     fits: totalStateGB + baseActivationGB < gpu.memoryGB * 0.9,
     mfuEstimate: estimateMFU('dp', gpuCount),
     rationale:
-      'Each GPU holds the full model + grads + optimizer state. Simplest stack but does not scale to large models — each GPU needs to hold the entire state.',
+      'Each GPU holds the full model + grads + optimizer state. Simplest stack but does not scale to large models: each GPU needs to hold the entire state.',
   };
 
   const fsdpStateMem = totalStateGB / gpuCount;

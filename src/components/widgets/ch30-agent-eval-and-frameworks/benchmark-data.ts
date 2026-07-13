@@ -58,14 +58,14 @@ export const BENCHMARKS: AgentBenchmark[] = [
     exampleTask:
       "A Python data-validation library has an issue: schema validation incorrectly accepts negative numbers when a 'positive: true' constraint is specified. The agent must navigate the codebase, locate the validation logic, write a fix, and produce a PR that passes the project's existing test suite plus the issue's reproducer.",
     characteristics: [
-      'Real GitHub issues — not synthetic',
+      'Real GitHub issues, not synthetic',
       'Multi-file context; agent must navigate codebase',
       'Success = PR passes the original tests',
       'Verified subset reduces ambiguity in original SWE-bench',
       'Used by every major coding-agent vendor',
     ],
     whatItMeasures:
-      "Real-world coding-agent capability under conditions close to professional software-engineering work. **Frontier scores rose from ~5% (2023) to ~50% (early 2025)** — the most rapidly improving agent metric.",
+      "Real-world coding-agent capability under conditions close to professional software-engineering work. **Frontier scores rose from ~5% (2023) to ~50% (early 2025)**, the most rapidly improving agent metric.",
     year: 2023,
     maturity: 'standard',
   },
@@ -94,7 +94,7 @@ export const BENCHMARKS: AgentBenchmark[] = [
       'Sponsored by Meta + Hugging Face',
     ],
     whatItMeasures:
-      "End-to-end agent capability: planning, tool use, browsing, retrieval, synthesis. **The gap widens with difficulty** — frontier agents score 70% on Level 1, 30% on Level 3. Humans stay near 90% across all levels.",
+      "End-to-end agent capability: planning, tool use, browsing, retrieval, synthesis. **The gap widens with difficulty**: frontier agents score 70% on Level 1, 30% on Level 3. Humans stay near 90% across all levels.",
     year: 2023,
     maturity: 'standard',
   },
@@ -114,11 +114,11 @@ export const BENCHMARKS: AgentBenchmark[] = [
       'Real desktop OS execution in sandboxed VMs',
       'Mouse + keyboard + screenshot interface',
       'State-based verification (file system, application state)',
-      'Multimodal — vision required for most tasks',
+      'Multimodal, vision required for most tasks',
       'Closest to general-purpose computer use',
     ],
     whatItMeasures:
-      "Embodied agent capability — driving real computers, not text APIs. **Frontier agents score ~14%; humans ~72%**, the widest gap in current benchmarks. The 6× gap shows agent capability has substantial headroom in the computer-use regime.",
+      "Embodied agent capability: driving real computers, not text APIs. **Frontier agents score ~14%; humans ~72%**, the widest gap in current benchmarks. The 6× gap shows agent capability has substantial headroom in the computer-use regime.",
     year: 2024,
     maturity: 'established',
   },
@@ -138,16 +138,16 @@ export const BENCHMARKS: AgentBenchmark[] = [
       { label: 'pass^8', frontierScore: 0.42, humanScore: 0.82 },
     ],
     exampleTask:
-      "A customer asks to return a recently-delivered item from their order history. The agent must (1) authenticate the customer via the look-up-account tool, (2) verify the order falls within the return window per policy, (3) initiate the return via the create-return tool, and (4) communicate the refund timeline. All across multiple consecutive sessions — pass^k requires consistency.",
+      "A customer asks to return a recently-delivered item from their order history. The agent must (1) authenticate the customer via the look-up-account tool, (2) verify the order falls within the return window per policy, (3) initiate the return via the create-return tool, and (4) communicate the refund timeline. All across multiple consecutive sessions; pass^k requires consistency.",
     characteristics: [
       'Conversational interface with structured tool use',
       'Policy constraints (returns within X days, etc.)',
-      'pass^k metric — must succeed every time across k attempts',
+      'pass^k metric, must succeed every time across k attempts',
       'Single-domain depth (retail or airline)',
       'Surfaces reliability gaps single-trial benchmarks miss',
     ],
     whatItMeasures:
-      "Tool-use reliability under realistic constraints. **The gap between pass^1 (~65%) and pass^4 (~51%) and pass^8 (~42%) is the key signal** — agents that work 65% of the time still fail half of multi-attempt sessions. Production agents need pass^k ≥ ~80% for many deployments.",
+      "Tool-use reliability under realistic constraints. **The gap between pass^1 (~65%) and pass^4 (~51%) and pass^8 (~42%) is the key signal**: agents that work 65% of the time still fail half of multi-attempt sessions. Production agents need pass^k ≥ ~80% for many deployments.",
     year: 2024,
     maturity: 'established',
   },
@@ -171,7 +171,7 @@ export const BENCHMARKS: AgentBenchmark[] = [
       'OpenAI 2025; recent benchmark with growing adoption',
     ],
     whatItMeasures:
-      "Complex web-research capability — the rare benchmark where **frontier agents (~42%) score above the ~30% human figure**, though that human number reflects trainers working under a time limit who mostly gave up rather than answered incorrectly, so it isn't a clean human ceiling. Reflects that agents have tireless browsing capacity humans lack, even when their reasoning is weaker per-step.",
+      "Complex web-research capability: the rare benchmark where **frontier agents (~42%) score above the ~30% human figure**, though that human number reflects trainers working under a time limit who mostly gave up rather than answered incorrectly, so it isn't a clean human ceiling. Reflects that agents have tireless browsing capacity humans lack, even when their reasoning is weaker per-step.",
     year: 2025,
     maturity: 'emerging',
   },

@@ -148,8 +148,8 @@ export default function KVCacheAnimation() {
 
       <div className={styles.caption}>
         The KV cache stores K and V vectors for every position.{' '}
-        <strong>Prefill</strong> processes all prompt tokens at once — 5 slots fill
-        simultaneously. <strong>Decode</strong> generates tokens one at a time — each new
+        <strong>Prefill</strong> processes all prompt tokens at once: 5 slots fill
+        simultaneously. <strong>Decode</strong> generates tokens one at a time; each new
         token fills exactly one slot. Without the cache, every decode step would recompute
         K, V for all previous tokens; the speedup is ~700× for a 1024-token sequence.
       </div>
@@ -171,14 +171,14 @@ function SlotRow({ slot }: { slot: SlotState }) {
       <span
         className={`${styles.slotBox} ${slot.filled ? styles.slotBoxFilled : ''}`}
       >
-        {slot.filled ? 'K' : '—'}
+        {slot.filled ? 'K' : '-'}
       </span>
       <span
         className={`${styles.slotBox} ${slot.filled ? styles.slotBoxFilled : ''}`}
       >
-        {slot.filled ? 'V' : '—'}
+        {slot.filled ? 'V' : '-'}
       </span>
-      <span className={styles.slotToken}>{slot.filled ? `"${slot.token}"` : '—'}</span>
+      <span className={styles.slotToken}>{slot.filled ? `"${slot.token}"` : '-'}</span>
       <span className={styles.slotPhase}>
         {slot.phase === 'prefill' && '← prefill'}
         {slot.phase === 'decode' && '← decode'}

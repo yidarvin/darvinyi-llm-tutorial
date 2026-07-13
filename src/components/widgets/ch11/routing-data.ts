@@ -28,7 +28,7 @@ export const EXPERTS: ExpertSpec[] = [
   { index: 1, label: 'Expert 1', category: 'syntax',       shortDescription: 'function words / syntax' },
   { index: 2, label: 'Expert 2', category: 'code_keyword', shortDescription: 'code keywords (secondary)' },
   { index: 3, label: 'Expert 3', category: 'code_primary', shortDescription: 'code (primary)' },
-  { index: 4, label: 'Expert 4', category: 'unused',       shortDescription: 'under-utilized — see widget caption' },
+  { index: 4, label: 'Expert 4', category: 'unused',       shortDescription: 'under-utilized, see widget caption' },
   { index: 5, label: 'Expert 5', category: 'entities',     shortDescription: 'named entities' },
   { index: 6, label: 'Expert 6', category: 'numeric',      shortDescription: 'numeric / math' },
   { index: 7, label: 'Expert 7', category: 'proper_noun',  shortDescription: 'proper nouns / capitalized' },

@@ -93,7 +93,7 @@ export const CONCEPTS: ProbeConcept[] = [
       0.50, 0.51, 0.52, 0.54, 0.58, 0.63,
       0.69, 0.75, 0.81, 0.86, 0.91, 0.95,
     ],
-    note: 'Refusal is a decision the model commits to at output. It emerges only in the last layers — after the model has integrated all input context and reached a behavioral conclusion. The "refusal direction" identified in late layers is what makes refusal-clamping interventions possible.',
+    note: 'Refusal is a decision the model commits to at output. It emerges only in the last layers, after the model has integrated all input context and reached a behavioral conclusion. The "refusal direction" identified in late layers is what makes refusal-clamping interventions possible.',
   },
 ];
 

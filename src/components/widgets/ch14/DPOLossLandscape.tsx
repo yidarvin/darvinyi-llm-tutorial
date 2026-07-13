@@ -87,10 +87,10 @@ export default function DPOLossLandscape() {
       </div>
 
       <div className={styles.caption}>
-        The DPO loss is <strong>−log σ(r_chosen − r_rejected)</strong> — it depends only on the difference.
+        The DPO loss is <strong>−log σ(r_chosen − r_rejected)</strong>; it depends only on the difference.
         Below the diagonal: chosen has higher reward; loss is low; <strong>the policy correctly prefers chosen</strong>.
         Above the diagonal: rejected has higher reward; loss is high; the policy has it backwards.
-        The gradient always points "down and right": <strong>increase r_chosen, decrease r_rejected</strong> — this is
+        The gradient always points "down and right": <strong>increase r_chosen, decrease r_rejected</strong>; this is
         how DPO drives the policy toward correct preferences during training.
       </div>
     </div>

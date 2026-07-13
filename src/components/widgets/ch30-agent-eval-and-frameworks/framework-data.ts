@@ -48,7 +48,7 @@ export const FRAMEWORKS: Framework[] = [
       'Most-adopted in the LangChain ecosystem',
     ],
     weaknesses: [
-      'Opinionated — assumes LangChain conventions',
+      'Opinionated, assumes LangChain conventions',
       'Less useful outside the LangChain stack',
       'Pricing scales with trace volume',
     ],
@@ -70,15 +70,15 @@ export const FRAMEWORKS: Framework[] = [
     label: 'Helicone',
     shortLabel: 'Helicone',
     category: 'proxy',
-    philosophy: 'Drop-in LLM proxy with cost tracking and observability — minimal integration overhead.',
+    philosophy: 'Drop-in LLM proxy with cost tracking and observability: minimal integration overhead.',
     description:
       'Open-source LLM observability proxy. Captures every LLM call via a one-line URL change; tracks cost per request, latency, cache hits, user-level analytics. Lighter-weight than LangSmith; cost-focused. Popular for teams where cost monitoring is the dominant concern.',
     strengths: [
       'One-line integration (URL swap)',
-      'Open-source — self-hostable',
+      'Open-source, self-hostable',
       'Cost tracking is first-class',
       'Vendor-neutral (works with any LLM)',
-      'Lightweight — small feature surface',
+      'Lightweight, small feature surface',
     ],
     weaknesses: [
       'Less feature-rich than LangSmith / Braintrust',
@@ -103,7 +103,7 @@ export const FRAMEWORKS: Framework[] = [
     label: 'Braintrust',
     shortLabel: 'Braintrust',
     category: 'eval-platform',
-    philosophy: 'Eval-first LLM platform — built for engineering teams that treat eval as core development.',
+    philosophy: 'Eval-first LLM platform, built for engineering teams that treat eval as core development.',
     description:
       'Evaluation-first LLM platform. Strong eval pipelines, regression detection, prompt experimentation, A/B testing. Designed for engineering teams running rigorous eval-driven development. Steeper learning curve; rewards investment.',
     strengths: [
@@ -137,9 +137,9 @@ export const FRAMEWORKS: Framework[] = [
     label: 'Anthropic evaluation tooling',
     shortLabel: 'Anthropic eval',
     category: 'vendor-tooling',
-    philosophy: 'Integrated evaluation within Anthropic\'s Console — best for Anthropic-native deployments.',
+    philosophy: 'Integrated evaluation within Anthropic\'s Console, best for Anthropic-native deployments.',
     description:
-      'Anthropic\'s integrated evaluation tooling within the Console. Evaluation playgrounds, prompt comparison, safety tooling. Tight integration with Claude models; safety-aware. Less of a standalone platform — more a complement to Anthropic-specific workflows.',
+      'Anthropic\'s integrated evaluation tooling within the Console. Evaluation playgrounds, prompt comparison, safety tooling. Tight integration with Claude models; safety-aware. Less of a standalone platform, more a complement to Anthropic-specific workflows.',
     strengths: [
       'Tight integration with Claude models',
       'Safety-aware (Anthropic\'s safety framing built in)',
@@ -169,19 +169,19 @@ export const FRAMEWORKS: Framework[] = [
     label: 'OpenTelemetry GenAI conventions',
     shortLabel: 'OpenTelemetry',
     category: 'standard',
-    philosophy: 'Open standard for LLM trace data — vendor-neutral, future-proof, requires manual instrumentation.',
+    philosophy: 'Open standard for LLM trace data: vendor-neutral, future-proof, requires manual instrumentation.',
     description:
       'Open-source semantic conventions for LLM trace data (span attributes for model name, token counts, costs). The convergence point most platforms now adopt. Vendor-neutral; future-proof. Requires manual instrumentation but works across any observability backend (Datadog, Honeycomb, Jaeger, Tempo).',
     strengths: [
       'Vendor-neutral (no lock-in)',
       'Works with existing observability stacks (Datadog, Honeycomb, etc.)',
-      'Future-proof — the convergence standard',
+      'Future-proof, the convergence standard',
       'Open-source',
       'Tracing standard across non-LLM systems too',
     ],
     weaknesses: [
       'Requires manual instrumentation',
-      'No native UI — needs a backend',
+      'No native UI, needs a backend',
       'Eval pipelines are separate',
       'Steeper engineering investment',
     ],
@@ -204,7 +204,7 @@ export const FRAMEWORKS: Framework[] = [
     label: 'Custom code',
     shortLabel: 'Custom',
     category: 'custom',
-    philosophy: 'Hand-rolled logging + database — best when surface area is small and lock-in is unacceptable.',
+    philosophy: 'Hand-rolled logging + database, best when surface area is small and lock-in is unacceptable.',
     description:
       'Roll your own observability: structured logs to a database (Postgres, ClickHouse) with custom dashboards. Common for small teams, simple workloads, or environments where commercial frameworks aren\'t a fit. No external dependencies; full control; engineering cost is high.',
     strengths: [
@@ -217,7 +217,7 @@ export const FRAMEWORKS: Framework[] = [
       'Significant engineering investment',
       'Maintenance burden grows with feature requests',
       'Slower to ship than using a platform',
-      'Easy to underestimate — observability is harder than it looks',
+      'Easy to underestimate: observability is harder than it looks',
     ],
     whenToUse: [
       'You\'re small with simple workload',
@@ -298,18 +298,18 @@ export function recommend(inputs: PickerInputs): Recommendation[] {
   // LangChain stack — strong signal for LangSmith
   if (inputs.usesLangChain === 'yes') {
     scores['langsmith']!.score += 4;
-    scores['langsmith']!.reasons.push('LangChain stack — LangSmith is the most-aligned option');
+    scores['langsmith']!.reasons.push('LangChain stack: LangSmith is the most-aligned option');
   } else if (inputs.usesLangChain === 'no') {
     scores['langsmith']!.score -= 1;
-    scores['langsmith']!.reasons.push('Not on LangChain — LangSmith\'s value drops outside that ecosystem');
+    scores['langsmith']!.reasons.push('Not on LangChain: LangSmith\'s value drops outside that ecosystem');
   }
 
   // Cost sensitivity
   if (inputs.costSensitivity === 'high') {
     scores['helicone']!.score += 3;
-    scores['helicone']!.reasons.push('High cost sensitivity — Helicone\'s cost tracking is first-class');
+    scores['helicone']!.reasons.push('High cost sensitivity: Helicone\'s cost tracking is first-class');
     scores['custom']!.score += 2;
-    scores['custom']!.reasons.push('High cost sensitivity — custom code avoids subscription fees');
+    scores['custom']!.reasons.push('High cost sensitivity: custom code avoids subscription fees');
     scores['langsmith']!.score -= 1;
     scores['braintrust']!.score -= 1;
   } else if (inputs.costSensitivity === 'low') {
@@ -320,12 +320,12 @@ export function recommend(inputs: PickerInputs): Recommendation[] {
   // Eval discipline
   if (inputs.evalDiscipline === 'high') {
     scores['braintrust']!.score += 4;
-    scores['braintrust']!.reasons.push('High eval discipline — Braintrust\'s eval-first design rewards this');
+    scores['braintrust']!.reasons.push('High eval discipline: Braintrust\'s eval-first design rewards this');
     scores['langsmith']!.score += 2;
-    scores['langsmith']!.reasons.push('Strong eval discipline — LangSmith has solid eval pipelines too');
+    scores['langsmith']!.reasons.push('Strong eval discipline: LangSmith has solid eval pipelines too');
   } else if (inputs.evalDiscipline === 'low') {
     scores['braintrust']!.score -= 2;
-    scores['braintrust']!.reasons.push('Low eval discipline — Braintrust requires eval investment');
+    scores['braintrust']!.reasons.push('Low eval discipline: Braintrust requires eval investment');
     scores['helicone']!.score += 1;
     scores['anthropic-eval']!.score += 1;
   }
@@ -333,11 +333,11 @@ export function recommend(inputs: PickerInputs): Recommendation[] {
   // Vendor independence
   if (inputs.vendorIndependent) {
     scores['opentelemetry']!.score += 4;
-    scores['opentelemetry']!.reasons.push('Vendor independence required — OpenTelemetry is the open standard');
+    scores['opentelemetry']!.reasons.push('Vendor independence required: OpenTelemetry is the open standard');
     scores['helicone']!.score += 2;
-    scores['helicone']!.reasons.push('Vendor independence — Helicone is open-source and self-hostable');
+    scores['helicone']!.reasons.push('Vendor independence: Helicone is open-source and self-hostable');
     scores['custom']!.score += 2;
-    scores['custom']!.reasons.push('Vendor independence — custom code maximizes control');
+    scores['custom']!.reasons.push('Vendor independence: custom code maximizes control');
     scores['langsmith']!.score -= 2;
     scores['anthropic-eval']!.score -= 2;
     scores['braintrust']!.score -= 1;

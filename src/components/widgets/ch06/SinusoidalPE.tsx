@@ -69,7 +69,7 @@ export default function SinusoidalPE() {
       </div>
 
       <div className={styles.panelTitle}>
-        PE matrix — position (rows) × dimension (columns)
+        PE matrix: position (rows) × dimension (columns)
       </div>
       <Heatmap
         pe={pe}
@@ -79,7 +79,7 @@ export default function SinusoidalPE() {
       />
 
       <div className={styles.selectedInfo}>
-        Selected dimension <strong>d{selectedDim}</strong> (pair {pairIdx}, {isSin ? 'sin' : 'cos'}) — period {formatPeriod(period)}
+        Selected dimension <strong>d{selectedDim}</strong> (pair {pairIdx}, {isSin ? 'sin' : 'cos'}), period {formatPeriod(period)}
       </div>
 
       <WavePlot wave={wave} selectedDim={selectedDim} />

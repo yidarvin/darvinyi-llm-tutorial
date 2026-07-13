@@ -191,7 +191,7 @@ export default function QuantizationExplorer() {
           )}
           {gridLevels.length === 0 && (
             <span className={styles.legendItem}>
-              FP16 baseline — no quantization grid
+              FP16 baseline, no quantization grid
             </span>
           )}
         </div>
@@ -300,7 +300,7 @@ export default function QuantizationExplorer() {
         Try the sequence <strong>16 → 8 → 4 → 3 → 2</strong>: watch the
         quantization grid get coarser and the error grow. At 4 bits, toggle
         between <strong>INT4</strong> (uniform spacing) and <strong>NF4</strong>{' '}
-        (denser near zero) — NF4 visibly reduces error on this
+        (denser near zero); NF4 visibly reduces error on this
         normally-distributed weight set.{' '}
         <strong>
           INT8 is the production default; INT4 with NF4/GPTQ/AWQ is the

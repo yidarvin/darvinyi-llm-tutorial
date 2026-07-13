@@ -42,7 +42,7 @@ export const TRACE: AutogradTrace = {
       x: 80,
       y: 80,
       backwardCode:
-        '# a is a leaf — no _backward function\n# its grad accumulates from its consumers (d, here)',
+        '# a is a leaf, no _backward function\n# its grad accumulates from its consumers (d, here)',
     },
     {
       id: 'b',
@@ -55,7 +55,7 @@ export const TRACE: AutogradTrace = {
       x: 80,
       y: 220,
       backwardCode:
-        '# b is a leaf — no _backward function\n# its grad accumulates from its consumers (d, here)',
+        '# b is a leaf, no _backward function\n# its grad accumulates from its consumers (d, here)',
     },
     {
       id: 'c',
@@ -68,7 +68,7 @@ export const TRACE: AutogradTrace = {
       x: 80,
       y: 360,
       backwardCode:
-        '# c is a leaf — no _backward function\n# its grad accumulates from its consumers (e, here)',
+        '# c is a leaf, no _backward function\n# its grad accumulates from its consumers (e, here)',
     },
     {
       id: 'd',

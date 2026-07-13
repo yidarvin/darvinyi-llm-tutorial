@@ -244,7 +244,7 @@ export default function AgenticLoopVisualizer() {
       {/* Pedagogical caption */}
       <div className={styles.caption}>
         Step through each scenario. <strong>Every turn is an observe → think → act cycle</strong>.
-        Previous turns stay visible — context <em>accumulates</em>. The LLM sees the whole trace
+        Previous turns stay visible: context <em>accumulates</em>. The LLM sees the whole trace
         each call. <strong>Simple scenarios complete in 2-3 turns</strong>; <strong>research chains
         require 4+</strong>; <strong>some scenarios end in graceful failure</strong> where the
         agent recognizes its limits and reports honestly. <strong>The capability is the loop, not the

@@ -139,7 +139,7 @@ export default function ChatTemplateComparison() {
 
       <div className={styles.caption}>
         The same conversation, four different formats.{' '}
-        <strong>Each model expects its specific template</strong> — the special tokens were
+        <strong>Each model expects its specific template</strong>: the special tokens were
         learned during pre-training. Using ChatML tokens with a Llama-3 model produces broken
         output: the model doesn't recognize the role markers.{' '}
         <strong>Always use the model's intended template</strong> via{' '}

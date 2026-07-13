@@ -28,7 +28,7 @@ export default function MultiHeadDecomposition() {
     <div className={styles.widget}>
       <div className={styles.header}>
         <div className={styles.title}>
-          {focusedHead ? `Focused: ${focusedHead.label}` : 'All 4 heads — click any to focus'}
+          {focusedHead ? `Focused: ${focusedHead.label}` : 'All 4 heads, click any to focus'}
         </div>
         {focusedHead && (
           <button

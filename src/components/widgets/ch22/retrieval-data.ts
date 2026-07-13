@@ -241,7 +241,7 @@ export function firstCorrectRank(
 export function insightFor(query: Query): string {
   switch (query.type) {
     case 'keyword':
-      return 'BM25 dominates: the query terms ("BM25", "sparse", "retrieval") appear literally in the relevant documents. Dense scores are also high — modern embedding models often catch keyword overlap too — but BM25 is the clearer win here.';
+      return 'BM25 dominates: the query terms ("BM25", "sparse", "retrieval") appear literally in the relevant documents. Dense scores are also high (modern embedding models often catch keyword overlap too), but BM25 is the clearer win here.';
     case 'semantic':
       return 'Dense wins on semantic generalization: "automobiles" → "vehicles" / "cars" / "automobile". BM25 catches docs containing the literal word "automobiles" but misses the synonyms. Hybrid captures both signals.';
     case 'paraphrased':

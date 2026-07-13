@@ -142,7 +142,7 @@ export default function JailbreakTaxonomy() {
 
       <div className={styles.chartPanel}>
         <div className={styles.chartTitle}>
-          All six categories — by mechanism × success rate
+          All six categories, by mechanism × success rate
         </div>
         <svg
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
@@ -255,8 +255,8 @@ export default function JailbreakTaxonomy() {
         <strong>Suffix attacks</strong> and{' '}
         <strong>multi-modal attacks</strong> have the highest success rates
         because they target deep vulnerabilities the model has no concept of in
-        its training. <strong>No single defense covers all categories</strong>{' '}
-        — production safety uses defense-in-depth across input filters,
+        its training. <strong>No single defense covers all categories</strong>:{' '}
+        production safety uses defense-in-depth across input filters,
         safety-trained models, and output validation.
       </div>
     </div>

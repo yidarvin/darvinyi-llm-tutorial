@@ -131,8 +131,8 @@ export default function PromptInjectionClassifier() {
       <div className={styles.limitationsPanel}>
         <div className={styles.limitationsLabel}>Limitations of pattern matching</div>
         <div className={styles.limitationsText}>
-          Pattern scanners catch <strong>known patterns</strong>. Novel attacks — paraphrased instructions,
-          encoded payloads, language variants, semantic injections — bypass them. <strong>This is one layer
+          Pattern scanners catch <strong>known patterns</strong>. Novel attacks (paraphrased instructions,
+          encoded payloads, language variants, semantic injections) bypass them. <strong>This is one layer
           of defense-in-depth</strong>, not a complete solution. Production safety combines pattern filters,
           model-based classifiers, structural separation of trusted vs untrusted content, and tool-call
           sandboxing.
@@ -142,7 +142,7 @@ export default function PromptInjectionClassifier() {
       <div className={styles.caption}>
         Click through the samples. Notice that <strong>three of the clean samples</strong> match no patterns
         and all four <strong>adversarial samples</strong> match multiple. <strong>The calendar invite</strong>
-        demonstrates how easily an attacker can plant instructions in content the user didn't write —
+        demonstrates how easily an attacker can plant instructions in content the user didn't write:
         anyone can send a meeting invite. <strong>The web snippet</strong> shows how invisible HTML
         (0px text, white-on-white) carries hidden payloads that humans don't see. <strong>Defense-in-depth
         is the rule</strong>, not a single magic filter.
