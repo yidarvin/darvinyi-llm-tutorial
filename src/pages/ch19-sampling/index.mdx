@@ -933,7 +933,7 @@ def constrained_decode(logits_fn, state, rng=None):
     return emitted, state
 ```
 
-Running it: `Emitted: { " name " : " Alice " }`, joined as `{"name":"Alice"}`, final state `DONE`. Checking `fake_logits` against the unconstrained argmax at every non-terminal state shows the model's raw preference violates the grammar every single time (it wants `}`, `{`, `random`, `Alice`, `Alice`, `random`, `random`, `name`, `random` in turn) — masking is doing all the work, not the model's own judgment.
+Running it: `Emitted: { " name " : " Alice " }`, joined as `{"name":"Alice"}`, final state `DONE`. Checking `fake_logits` against the unconstrained argmax at every non-terminal state shows the model's raw preference violates the grammar every single time (it wants `}`, `{`, `random`, `Alice`, `Alice`, `random`, `random`, `name`, `random` in turn): masking is doing all the work, not the model's own judgment.
 
 </details>
 

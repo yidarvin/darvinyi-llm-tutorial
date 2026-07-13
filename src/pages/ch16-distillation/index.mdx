@@ -726,7 +726,7 @@ T=  4 |            2.6355 |            0.1647
 T= 16 |            2.6180 |            0.0102
 ```
 
-At $T=1$ the multiplier is a no-op ($1^2 = 1$), so the two columns match. By $T=16$, the no-$T^2$ soft loss has collapsed to 0.01 (softened distributions are close to uniform, so KL is tiny) while the $T^2$-scaled version stays around 2.6 — confirming the multiplier is what keeps the soft-loss gradient from vanishing at high temperature.
+At $T=1$ the multiplier is a no-op ($1^2 = 1$), so the two columns match. By $T=16$, the no-$T^2$ soft loss has collapsed to 0.01 (softened distributions are close to uniform, so KL is tiny) while the $T^2$-scaled version stays around 2.6, confirming the multiplier is what keeps the soft-loss gradient from vanishing at high temperature.
 
 </details>
 
@@ -876,7 +876,7 @@ print(f"Filtered (kept):        {filtered_count} ({100*filtered_count/total_gene
 print(f"Student training data:  {student_training_examples} examples")
 ```
 
-Output: `160` prompts in, `160` teacher responses, `160` filtered (`100%`), `160` student training examples. With `skill=0.85`, the beta distribution (`Beta(8.5, 1.5)`) has mean 0.85 and standard deviation ≈0.11, so a threshold of 0.5 is over 3 standard deviations below the mean — at this seed every response clears it. Lowering `skill` or raising `threshold` would start rejecting examples and drop the survival rate below 100%.
+Output: `160` prompts in, `160` teacher responses, `160` filtered (`100%`), `160` student training examples. With `skill=0.85`, the beta distribution (`Beta(8.5, 1.5)`) has mean 0.85 and standard deviation ≈0.11, so a threshold of 0.5 is over 3 standard deviations below the mean; at this seed every response clears it. Lowering `skill` or raising `threshold` would start rejecting examples and drop the survival rate below 100%.
 
 </details>
 

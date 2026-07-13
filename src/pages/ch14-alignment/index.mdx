@@ -696,7 +696,7 @@ print(f"\nFinal accuracy: {accuracy*100:.1f}% of pairs have chosen > rejected re
 print(f"Final cosine similarity w_phi vs w_true: {np.dot(w_phi, w_true) / (np.linalg.norm(w_phi) * np.linalg.norm(w_true)):.3f}")
 ```
 
-With this seed, loss drops from $0.82$ to $0.12$ over 500 steps, cosine similarity between $w_\phi$ and $w_{\text{true}}$ climbs from $-0.36$ to $0.995$, and final pairwise accuracy is $98.0\%$. $w_\phi$ never recovers the exact scale of $w_{\text{true}}$ (BT loss is scale-invariant in the reward — only the direction is identified), which is why cosine similarity, not raw distance, is the right check.
+With this seed, loss drops from $0.82$ to $0.12$ over 500 steps, cosine similarity between $w_\phi$ and $w_{\text{true}}$ climbs from $-0.36$ to $0.995$, and final pairwise accuracy is $98.0\%$. $w_\phi$ never recovers the exact scale of $w_{\text{true}}$ (BT loss is scale-invariant in the reward; only the direction is identified), which is why cosine similarity, not raw distance, is the right check.
 
 </details>
 
@@ -787,7 +787,7 @@ def dpo_grad_analytical(logp_w, logp_l, logp_ref_w, logp_ref_l, beta=0.1):
     return grad_w, grad_l
 ```
 
-For the test point ($\log\pi(y_w)=-8$, $\log\pi(y_l)=-10$, both refs at $-10$, $\beta=0.1$): loss is $0.5981$, analytical gradients are $dL/d\log p_w = -0.04502$ and $dL/d\log p_l = 0.04502$, and the finite-difference check matches to $10^{-4}$. The signs confirm the mechanism: $\log p_w$'s gradient is negative (descent increases the chosen log-prob), $\log p_l$'s gradient is positive (descent decreases the rejected log-prob) — exactly the "push chosen up, rejected down" behavior from the loss landscape widget.
+For the test point ($\log\pi(y_w)=-8$, $\log\pi(y_l)=-10$, both refs at $-10$, $\beta=0.1$): loss is $0.5981$, analytical gradients are $dL/d\log p_w = -0.04502$ and $dL/d\log p_l = 0.04502$, and the finite-difference check matches to $10^{-4}$. The signs confirm the mechanism: $\log p_w$'s gradient is negative (descent increases the chosen log-prob), $\log p_l$'s gradient is positive (descent decreases the rejected log-prob): exactly the "push chosen up, rejected down" behavior from the loss landscape widget.
 
 </details>
 
@@ -977,7 +977,7 @@ def length_bias_analysis(preference_pairs):
     }
 ```
 
-With this seed: no-bias data has chosen-longer at $48.8\%$ (statistical noise around $50\%$, as expected when length carries no signal); mild bias ($0.5$) pushes it to $59.2\%$; strong bias ($2.0$) pushes it to $77.0\%$, with average chosen length ($101$ chars) far exceeding average rejected length ($67$ chars). The reward model, or a human annotator, is being fooled by length regardless of actual quality — exactly the failure SimPO's length normalization and Dr. GRPO's std-divide removal are designed to fix.
+With this seed: no-bias data has chosen-longer at $48.8\%$ (statistical noise around $50\%$, as expected when length carries no signal); mild bias ($0.5$) pushes it to $59.2\%$; strong bias ($2.0$) pushes it to $77.0\%$, with average chosen length ($101$ chars) far exceeding average rejected length ($67$ chars). The reward model, or a human annotator, is being fooled by length regardless of actual quality: exactly the failure SimPO's length normalization and Dr. GRPO's std-divide removal are designed to fix.
 
 </details>
 
@@ -1076,7 +1076,7 @@ theta_new = theta_old + 0.5 * grad_theta
 pi_new = softmax(theta_new)
 ```
 
-With `np.random.seed(1)`, the sampled group is `[2 4 0 1 0 0 1 2]` with rewards `[0 0 1 1 1 1 1 0]`: a genuine mix of good and bad tokens (the exercise's original `seed(0)` happens to draw a group with zero good tokens, a dead group that can't demonstrate the sign flip — use `seed(1)` instead). Advantages come out to $-1.291$ for the three bad-token samples and $+0.775$ for the five good-token samples, correctly signed. After one ascent step, probability mass on `{0, 1}` rises from $0.333$ to $0.657$ and mass on the bad tokens falls correspondingly. The dead-group check (`[5, 5, 5, 5, 5, 5, 5, 5]`) gives `std = 0.0`, so `advantages` is all zeros and `grad_theta` is exactly zero — no gradient signal when every completion is equally (un)rewarded.
+With `np.random.seed(1)`, the sampled group is `[2 4 0 1 0 0 1 2]` with rewards `[0 0 1 1 1 1 1 0]`: a genuine mix of good and bad tokens (the exercise's original `seed(0)` happens to draw a group with zero good tokens, a dead group that can't demonstrate the sign flip, so use `seed(1)` instead). Advantages come out to $-1.291$ for the three bad-token samples and $+0.775$ for the five good-token samples, correctly signed. After one ascent step, probability mass on `{0, 1}` rises from $0.333$ to $0.657$ and mass on the bad tokens falls correspondingly. The dead-group check (`[5, 5, 5, 5, 5, 5, 5, 5]`) gives `std = 0.0`, so `advantages` is all zeros and `grad_theta` is exactly zero: no gradient signal when every completion is equally (un)rewarded.
 
 </details>
 

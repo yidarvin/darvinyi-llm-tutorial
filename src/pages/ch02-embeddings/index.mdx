@@ -425,7 +425,7 @@ print(f"Logits over vocab (10 entries): {logits[0].round(3)}")
   height={320}
 />
 
-Tying is common but far from universal, and the pattern is scale-dependent rather than a blanket default. GPT-2 ties. Gemma ties, notably, despite (or because of) its unusually large 256K-token vocabulary, where the embedding block would otherwise be a large cost. Many 7B-and-up open models, including Llama-2-7B and Mistral-7B, do NOT tie — their reference configs set `tie_word_embeddings: false`. At that scale the embedding is a small enough fraction of the parameter budget that the extra flexibility of independent input and output spaces is cheap to buy. The practical rule: check `tie_word_embeddings` in a model's config rather than assuming either way, and expect ties to be more common at small scale and less common as models grow.
+Tying is common but far from universal, and the pattern is scale-dependent rather than a blanket default. GPT-2 ties. Gemma ties, notably, despite (or because of) its unusually large 256K-token vocabulary, where the embedding block would otherwise be a large cost. Many 7B-and-up open models, including Llama-2-7B and Mistral-7B, do NOT tie; their reference configs set `tie_word_embeddings: false`. At that scale the embedding is a small enough fraction of the parameter budget that the extra flexibility of independent input and output spaces is cheap to buy. The practical rule: check `tie_word_embeddings` in a model's config rather than assuming either way, and expect ties to be more common at small scale and less common as models grow.
 
 <Callout type="aside">
 The parameter savings from tying are dramatic at small scale (~30% of a GPT-2-small) and diminish at large scale. For a 7B-parameter model, tied versus untied is a ~1% parameter difference, barely visible against the FFN and attention blocks that dominate. Tying costs nothing and occasionally helps perplexity by a small margin (Press and Wolf reported ~5%), which is why smaller models tend to keep it; once the savings shrink to a percent or two, many larger models drop it instead, trading the (now-marginal) parameter savings for the flexibility of independent input and output spaces. The perplexity gain is empirical and not always reproducible; the parameter savings are mechanical and always real.
@@ -528,7 +528,7 @@ mat <-> rug:    0.586
 dog <-> mat:    0.100
 ```
 
-`mat <-> rug` is the most similar pair (0.586), not `cat <-> dog` — both are surface objects that co-occur with *on* in the corpus, and with only 21 tokens the "surfaces" cluster is tighter than the "animals" cluster. `dog <-> mat` is least similar (0.100): a pet and a surface it never directly co-occurs with in this tiny corpus.
+`mat <-> rug` is the most similar pair (0.586), not `cat <-> dog`: both are surface objects that co-occur with *on* in the corpus, and with only 21 tokens the "surfaces" cluster is tighter than the "animals" cluster. `dog <-> mat` is least similar (0.100): a pet and a surface it never directly co-occurs with in this tiny corpus.
 
 </details>
 
@@ -579,7 +579,7 @@ print(find_intruder(['purred', 'barked', 'napped', 'the'], U, word_to_id))  # 't
 print(find_intruder(['mat', 'rug', 'sat', 'dog'], U, word_to_id))          # 'dog'
 ```
 
-With the trained `U` from Exercise 1, the per-word average similarities are `{purred: 0.722, barked: 0.700, napped: 0.674, the: 0.234}` — `the` co-occurs with nearly every word in the corpus so it sits far from any tight cluster, making it the clear intruder. Same story for the second list: `{mat: 0.525, rug: 0.576, sat: 0.649, dog: 0.177}` — `dog` is the intruder against three words that co-occur heavily with *the mat/the rug*.
+With the trained `U` from Exercise 1, the per-word average similarities are `{purred: 0.722, barked: 0.700, napped: 0.674, the: 0.234}`; `the` co-occurs with nearly every word in the corpus so it sits far from any tight cluster, making it the clear intruder. Same story for the second list: `{mat: 0.525, rug: 0.576, sat: 0.649, dog: 0.177}`; `dog` is the intruder against three words that co-occur heavily with *the mat/the rug*.
 
 </details>
 
@@ -671,7 +671,7 @@ print(f"CBOW within-category: {within:.3f}, cross-category: {cross:.3f}")
 print(f"CBOW cat<->dog: {cos(U_cbow[word_to_id['cat']], U_cbow[word_to_id['dog']]):.3f}")
 ```
 
-Output: `CBOW within-category: 0.892, cross-category: 0.193`, and `cat<->dog: 0.953` versus skip-gram's 0.552 on the same pair. CBOW's averaging pulls context words toward a shared prediction target every step, which produces noticeably tighter within-category clustering than skip-gram on a corpus this small — consistent with the standard finding that CBOW smooths over rare-word noise at the cost of losing some of skip-gram's fine-grained distinctions.
+Output: `CBOW within-category: 0.892, cross-category: 0.193`, and `cat<->dog: 0.953` versus skip-gram's 0.552 on the same pair. CBOW's averaging pulls context words toward a shared prediction target every step, which produces noticeably tighter within-category clustering than skip-gram on a corpus this small, consistent with the standard finding that CBOW smooths over rare-word noise at the cost of losing some of skip-gram's fine-grained distinctions.
 
 </details>
 
@@ -730,7 +730,7 @@ def find_analogy(a, b, c, E, word_to_id, vocab):
 print(find_analogy('cat', 'dog', 'mat', U, word_to_id, vocab))
 ```
 
-Output: `('sat', 0.724)` — on this 10-word toy corpus the result is not semantically meaningful (as the prompt warns), but the algorithm is doing exactly what it should: compute `dog - cat + mat` and return the closest untried vocabulary vector by cosine similarity.
+Output: `('sat', 0.724)`. On this 10-word toy corpus the result is not semantically meaningful (as the prompt warns), but the algorithm is doing exactly what it should: compute `dog - cat + mat` and return the closest untried vocabulary vector by cosine similarity.
 
 </details>
 

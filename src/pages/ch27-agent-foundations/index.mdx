@@ -527,7 +527,7 @@ def react_agent(task, tools=TOOLS, max_iterations=8):
 <details>
 <summary>Solution</summary>
 
-The loop builds the prompt from history, calls the LLM, parses Thought/Action, and branches on whether the action is `final_answer` — otherwise it executes the tool and appends the observation:
+The loop builds the prompt from history, calls the LLM, parses Thought/Action, and branches on whether the action is `final_answer`; otherwise it executes the tool and appends the observation:
 
 ```python
 def react_agent(task, tools=TOOLS, max_iterations=8):
@@ -553,7 +553,7 @@ def react_agent(task, tools=TOOLS, max_iterations=8):
     return "Max iterations reached."
 ```
 
-Running `react_agent("What's the weather in Tokyo, and what date is it today?")` traces three iterations: `weather("Tokyo")` -> `"18°C, partly cloudy in Tokyo"`, `date()` -> `"2025-05-22"`, then `final_answer(...)`, returning `"Today (May 22, 2025) in Tokyo: 18°C, partly cloudy."` — every fact in the answer came from an observed tool call, not a fabrication.
+Running `react_agent("What's the weather in Tokyo, and what date is it today?")` traces three iterations: `weather("Tokyo")` -> `"18°C, partly cloudy in Tokyo"`, `date()` -> `"2025-05-22"`, then `final_answer(...)`, returning `"Today (May 22, 2025) in Tokyo: 18°C, partly cloudy."` Every fact in the answer came from an observed tool call, not a fabrication.
 
 </details>
 
@@ -654,7 +654,7 @@ def reflexion_run(task, max_attempts=4):
 <details>
 <summary>Solution</summary>
 
-Canned reflections keyed on how many the agent has already written — attempt 1 fails with the first canned line, attempt 2 fails with the second, and `attempt()`'s mock succeeds once `len(self.reflections) >= 2`:
+Canned reflections keyed on how many the agent has already written: attempt 1 fails with the first canned line, attempt 2 fails with the second, and `attempt()`'s mock succeeds once `len(self.reflections) >= 2`:
 
 ```python
 def reflect_on_failure(self, task, failed_attempt):
@@ -791,7 +791,7 @@ def execute_with_retry(tool, args, max_retries=3, base_wait=0.001):
     return (None, f"Failed after {max_retries} attempts")
 ```
 
-With `random.seed(42)` and this plan, `robust_agent` reports: `search('Bhutan population')` succeeds, `search('Bhutan area km')` exhausts its 3 retries and fails, `calc('787000 / 38394')` succeeds (`20.4979944783039`), and `search('population density meaning')` succeeds — a 3/4 summary. The exact pass/fail pattern depends on `random`'s internal state consumption (each retry attempt burns one `random.random()` call), so it is deterministic given the seed but not "obviously" predictable by inspection — that's the point of exponential backoff plus retry budgets: some flaky calls recover, some don't, and the agent keeps going either way.
+With `random.seed(42)` and this plan, `robust_agent` reports: `search('Bhutan population')` succeeds, `search('Bhutan area km')` exhausts its 3 retries and fails, `calc('787000 / 38394')` succeeds (`20.4979944783039`), and `search('population density meaning')` succeeds, a 3/4 summary. The exact pass/fail pattern depends on `random`'s internal state consumption (each retry attempt burns one `random.random()` call), so it is deterministic given the seed but not "obviously" predictable by inspection; that's the point of exponential backoff plus retry budgets: some flaky calls recover, some don't, and the agent keeps going either way.
 
 </details>
 
@@ -934,7 +934,7 @@ def sketch_react_for_task_2():
     return f"Bhutan's population density is approximately {density:.2f} people per square kilometer."
 ```
 
-All three tasks classify correctly: task_1 -> `linear` (no chain, a lookup verb), task_2 -> `react` (contains "then"), task_3 -> `reflexion` (contains "fix" and "test"). `sketch_react_for_task_2()` returns "Bhutan's population density is approximately 20.50 people per square kilometer." — `787000 / 38394 = 20.4979944783039`, rounded to `20.50`.
+All three tasks classify correctly: task_1 -> `linear` (no chain, a lookup verb), task_2 -> `react` (contains "then"), task_3 -> `reflexion` (contains "fix" and "test"). `sketch_react_for_task_2()` returns "Bhutan's population density is approximately 20.50 people per square kilometer." (`787000 / 38394 = 20.4979944783039`, rounded to `20.50`.)
 
 </details>
 

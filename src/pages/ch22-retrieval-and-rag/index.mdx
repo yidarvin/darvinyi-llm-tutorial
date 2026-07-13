@@ -819,7 +819,7 @@ def reciprocal_rank_fusion(rankings, k=60):
     return sorted(scores.items(), key=lambda x: -x[1])
 ```
 
-On the two mock rankings this produces (doc\_id, score): `[(0, 0.0325), (1, 0.0323), (3, 0.0318), (4, 0.0159), (5, 0.0156), (2, 0.0154), (7, 0.0154)]`. Doc 0 (rank 1 in BM25, rank 2 in dense) edges out doc 1 (rank 3 in BM25, rank 1 in dense), since $1/61 + 1/62 > 1/63 + 1/61$. Doc 3, present in both lists at middling ranks, still beats docs 4/5/7 which appear in only one ranking each — RRF rewards appearing in multiple retrievers over any single high rank.
+On the two mock rankings this produces (doc\_id, score): `[(0, 0.0325), (1, 0.0323), (3, 0.0318), (4, 0.0159), (5, 0.0156), (2, 0.0154), (7, 0.0154)]`. Doc 0 (rank 1 in BM25, rank 2 in dense) edges out doc 1 (rank 3 in BM25, rank 1 in dense), since $1/61 + 1/62 > 1/63 + 1/61$. Doc 3, present in both lists at middling ranks, still beats docs 4/5/7 which appear in only one ranking each: RRF rewards appearing in multiple retrievers over any single high rank.
 
 </details>
 

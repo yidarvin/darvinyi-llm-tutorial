@@ -572,7 +572,7 @@ def summarize(results):
     return {'overall': overall, 'by_category': by_category, 'n': n, 'correct': correct, 'errors': errors}
 ```
 
-Run against `mock_model`: overall 7/9 = 78%, with math at 100%, history at 67%, science at 67%. The two errors are both near-misses: the Constitution date (model says 1788, actual 1787) and the speed of light (model returns "3 × 10^8" instead of the exact digit string) — exactly the kind of formatting mismatch that exact-match scoring is too brittle to forgive.
+Run against `mock_model`: overall 7/9 = 78%, with math at 100%, history at 67%, science at 67%. The two errors are both near-misses: the Constitution date (model says 1788, actual 1787) and the speed of light (model returns "3 × 10^8" instead of the exact digit string): exactly the kind of formatting mismatch that exact-match scoring is too brittle to forgive.
 
 </details>
 
@@ -711,7 +711,7 @@ What is the capital of Franc   | B     | B     | tie
 Explain photosynthesis brief   | A     | tie   | tie
 ```
 
-Case 1's B-response is 1.5x+ longer, so verbosity bias fires immediately and swap doesn't touch it (both orderings still pick the longer one) — only the verbosity penalty catches it. Case 2's responses are similar length, so the naive judge's "always A" position bias is exposed by swapping (verdict flips to B, disagreement forces a tie). Two independent bias modes need two independent mitigations.
+Case 1's B-response is 1.5x+ longer, so verbosity bias fires immediately and swap doesn't touch it (both orderings still pick the longer one); only the verbosity penalty catches it. Case 2's responses are similar length, so the naive judge's "always A" position bias is exposed by swapping (verdict flips to B, disagreement forces a tie). Two independent bias modes need two independent mitigations.
 
 </details>
 
@@ -837,7 +837,7 @@ def detect_contamination(items, probability_threshold=0.95):
     return [item for item in items if item['model_prob_of_answer'] >= probability_threshold]
 ```
 
-At threshold 0.95, both truly-contaminated items (Eiffel Tower at 0.998, water formula at 0.999) clear the bar, and none of the genuinely-known-or-uncertain items (0.85, 0.72, 0.22) do — precision 100%, recall 100%, F1 1.00. That's an artificially clean result: real model-probability distributions don't separate this neatly, which is why production detectors triangulate Min-K% probability with exact-substring matching rather than trusting a single threshold.
+At threshold 0.95, both truly-contaminated items (Eiffel Tower at 0.998, water formula at 0.999) clear the bar, and none of the genuinely-known-or-uncertain items (0.85, 0.72, 0.22) do: precision 100%, recall 100%, F1 1.00. That's an artificially clean result: real model-probability distributions don't separate this neatly, which is why production detectors triangulate Min-K% probability with exact-substring matching rather than trusting a single threshold.
 
 </details>
 
@@ -1031,7 +1031,7 @@ def evaluate_eval(items, model_fn):
     return {'overall': overall, 'by_category': by_category, 'results': results}
 ```
 
-Output: model accuracy 67% (6/9) — `acute_emergency` and `diagnostic` both hit 100%, but `general_info` scores 0%. The mock model's general-info reply says "though this isn't medical advice," which doesn't contain the literal substring `'not medical advice'` or `'disclaimer'`, so `classify_response` falls through to `'inappropriate'` on all three general-info items. That's the exercise's real lesson: keyword-matched scoring is exactly as brittle as its keyword list, and a 67% score only means something once you check it against the baselines — random, refuse-everything, and answer-everything all tie at 33% here, so 67% is a real signal, not noise. It also shows up as a paraphrase gap the harness itself should catch (a scoring function that requires exact "not medical advice" is too narrow for production use).
+Output: model accuracy 67% (6/9); `acute_emergency` and `diagnostic` both hit 100%, but `general_info` scores 0%. The mock model's general-info reply says "though this isn't medical advice," which doesn't contain the literal substring `'not medical advice'` or `'disclaimer'`, so `classify_response` falls through to `'inappropriate'` on all three general-info items. That's the exercise's real lesson: keyword-matched scoring is exactly as brittle as its keyword list, and a 67% score only means something once you check it against the baselines: random, refuse-everything, and answer-everything all tie at 33% here, so 67% is a real signal, not noise. It also shows up as a paraphrase gap the harness itself should catch (a scoring function that requires exact "not medical advice" is too narrow for production use).
 
 </details>
 

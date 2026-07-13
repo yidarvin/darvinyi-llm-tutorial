@@ -257,7 +257,7 @@ print("- This is the inference-time use of PRMs; no model retraining needed.")
 </RunnableCode>
 
 <Callout type="aside">
-"PRMs are strictly better than ORMs" is false. **R1 demonstrated that pure outcome rewards work** with no PRM, and no learned ORM either — a rule-based verifier (exact-match, test-pass rate) was enough. PRMs add complexity and can introduce reward-hacking, the model "performs reasoning steps" to score well, even when the steps do not help the answer. **Both have their place**: PRMs are still useful for inference-time filtering and as research artifacts; rule-based outcome rewards are simpler for training and were the engine behind the open-source reasoning breakthrough. The right default depends on the budget and what you can label (or verify).
+"PRMs are strictly better than ORMs" is false. **R1 demonstrated that pure outcome rewards work** with no PRM, and no learned ORM either: a rule-based verifier (exact-match, test-pass rate) was enough. PRMs add complexity and can introduce reward-hacking, the model "performs reasoning steps" to score well, even when the steps do not help the answer. **Both have their place**: PRMs are still useful for inference-time filtering and as research artifacts; rule-based outcome rewards are simpler for training and were the engine behind the open-source reasoning breakthrough. The right default depends on the budget and what you can label (or verify).
 </Callout>
 
 ## Test-time compute scaling
@@ -546,7 +546,7 @@ def self_consistency(traces):
     return majority, count / len(answers)
 ```
 
-With `random.seed(42)` on `mock_pool` (8 correct at 30, 2 wrong at 40/25), sampling gives: N=1 -> 30 (100%), N=3 -> 30 (100%), N=5 -> 30 (80%), N=7 -> 30 (71%), N=10 -> 30 (80%). Every draw in this particular seeded run lands on the correct majority — with only 2 wrong traces out of 10, a wrong-outlier draw is possible at small N (20% chance at N=1) but this seed doesn't hit it. The underlying mechanism still holds: at N=1 you're exposed to the full 20% error rate of a single trace, while at N>=5 the wrong traces would need to be a majority of the sample to flip the vote, which is increasingly unlikely as N grows.
+With `random.seed(42)` on `mock_pool` (8 correct at 30, 2 wrong at 40/25), sampling gives: N=1 -> 30 (100%), N=3 -> 30 (100%), N=5 -> 30 (80%), N=7 -> 30 (71%), N=10 -> 30 (80%). Every draw in this particular seeded run lands on the correct majority. With only 2 wrong traces out of 10, a wrong-outlier draw is possible at small N (20% chance at N=1) but this seed doesn't hit it. The underlying mechanism still holds: at N=1 you're exposed to the full 20% error rate of a single trace, while at N>=5 the wrong traces would need to be a majority of the sample to flip the vote, which is increasingly unlikely as N grows.
 
 </details>
 
@@ -659,7 +659,7 @@ mock_pool = [
 <details>
 <summary>Solution</summary>
 
-The mock PRM combines three cheap proxies for reasoning quality — length (capped), density of math operators (capped), and absence of hedging language — into a score in [0, 1]; best-of-N just takes the argmax.
+The mock PRM combines three cheap proxies for reasoning quality (length capped, density of math operators capped, and absence of hedging language) into a score in [0, 1]; best-of-N just takes the argmax.
 
 ```python
 def mock_prm_score(trace):
@@ -677,7 +677,7 @@ def best_of_n_prm(traces):
     return best_trace, extract_numeric_answer(best_trace)
 ```
 
-With `rng = random.Random(0)` on the 10-trace pool (7 correct at 30, 3 wrong): `random_single` draws "Maybe 25? Answer is 25." — wrong. `majority_vote` returns 30 (7/10 agree). `best_of_n_prm` scores the most detailed correct trace ("We have distance=60 and time=2, so speed = 60/2 = 30. Answer: 30.", score 0.86) above everything else, including above the uncertain wrong traces (which score 0.09-0.16 for starting with "I think"/"Maybe" or containing "guess"), and returns 30. Here majority vote and best-of-N+PRM agree because both signals point the same way; the PRM's edge shows up when the correct answer is a minority but better-reasoned than the wrong majority, which majority vote alone can't detect.
+With `rng = random.Random(0)` on the 10-trace pool (7 correct at 30, 3 wrong): `random_single` draws "Maybe 25? Answer is 25." (wrong). `majority_vote` returns 30 (7/10 agree). `best_of_n_prm` scores the most detailed correct trace ("We have distance=60 and time=2, so speed = 60/2 = 30. Answer: 30.", score 0.86) above everything else, including above the uncertain wrong traces (which score 0.09-0.16 for starting with "I think"/"Maybe" or containing "guess"), and returns 30. Here majority vote and best-of-N+PRM agree because both signals point the same way; the PRM's edge shows up when the correct answer is a minority but better-reasoned than the wrong majority, which majority vote alone can't detect.
 
 </details>
 
@@ -769,7 +769,7 @@ def majority_vote_accuracy(p, n):
     )
 ```
 
-Values: p=0.5 stays at 50% for every N (no signal to extract, as expected — averaging noise gives noise). p=0.7 climbs 70% (N=1) -> 90.1% (N=9) -> 92.2% (N=11) -> 97.4% (N=21) -> 99.9% (N=51), reaching 95% at N=10. p=0.9 climbs 90% (N=1) -> 99.1% (N=5) -> 99.9% (N=9) -> essentially 100% by N=15. This reproduces the widget's qualitative pattern exactly: curves saturate, higher starting accuracy saturates faster, and returns diminish sharply past the first ~10-20 samples — which is why self-consistency is typically run at N in the 5-40 range rather than the hundreds.
+Values: p=0.5 stays at 50% for every N (no signal to extract, as expected; averaging noise gives noise). p=0.7 climbs 70% (N=1) -> 90.1% (N=9) -> 92.2% (N=11) -> 97.4% (N=21) -> 99.9% (N=51), reaching 95% at N=10. p=0.9 climbs 90% (N=1) -> 99.1% (N=5) -> 99.9% (N=9) -> essentially 100% by N=15. This reproduces the widget's qualitative pattern exactly: curves saturate, higher starting accuracy saturates faster, and returns diminish sharply past the first ~10-20 samples, which is why self-consistency is typically run at N in the 5-40 range rather than the hundreds.
 
 </details>
 

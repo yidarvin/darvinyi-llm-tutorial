@@ -554,7 +554,7 @@ X = rng.normal(0, 5, (4, 8))   # large-scale input
 <details>
 <summary>Solution</summary>
 
-Mean and variance are computed along `axis=-1` (features), and γ/β apply elementwise after normalization — they don't need to touch the mean/var computation at all.
+Mean and variance are computed along `axis=-1` (features), and γ/β apply elementwise after normalization. They don't need to touch the mean/var computation at all.
 
 ```python
 import numpy as np
@@ -767,7 +767,7 @@ X = np.random.default_rng(0).normal(0, 1, (n, d_model))
 <details>
 <summary>Solution</summary>
 
-Both residual adds use the *unnormalized* `x`, exactly as the hint's pseudocode shows — LN only feeds the sublayer, never the skip connection.
+Both residual adds use the *unnormalized* `x`, exactly as the hint's pseudocode shows: LN only feeds the sublayer, never the skip connection.
 
 ```python
 import numpy as np
@@ -815,7 +815,7 @@ print(f"Per-token output norms: {np.linalg.norm(out, axis=-1).round(3)}")
 # Per-token output norms: [3.671 2.77  4.033 4.022 4.686 3.702]
 ```
 
-Shape is preserved (residuals require it) and per-token norms sit in a tight band around 3-5 — no collapse toward zero, no blowup. That's the Pre-LN block doing its job: each sublayer's output magnitude is bounded by its own LN, so what the residual stream accumulates stays controlled even with tiny (0.02-std) random weights.
+Shape is preserved (residuals require it) and per-token norms sit in a tight band around 3-5: no collapse toward zero, no blowup. That's the Pre-LN block doing its job: each sublayer's output magnitude is bounded by its own LN, so what the residual stream accumulates stays controlled even with tiny (0.02-std) random weights.
 
 </details>
 
@@ -921,7 +921,7 @@ print(f"SwiGLU output shape: {out.shape}")
 # SwiGLU output shape: (6, 64)
 ```
 
-170 isn't exactly `4 * 64 * 2/3 = 170.67`, so the ratio lands at 0.996 rather than exactly 1.0 — the `int()` truncation is the whole gap, and it is negligible at any real model scale.
+170 isn't exactly `4 * 64 * 2/3 = 170.67`, so the ratio lands at 0.996 rather than exactly 1.0: the `int()` truncation is the whole gap, and it is negligible at any real model scale.
 
 </details>
 

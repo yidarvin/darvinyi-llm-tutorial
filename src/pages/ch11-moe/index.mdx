@@ -562,7 +562,7 @@ def count_moe_params(num_layers, d_model, d_ffn, num_experts, top_k, vocab_size=
     return total, active
 ```
 
-Mixtral 8x7B (computed): total = 47.5B (published: 46.7B), active = 13.7B (published: 12.9B), sparsity = 29%. Llama-2 70B dense: total = active = 78.4B. So Mixtral has ~61% of Llama-2 70B's total params and ~17% of its active params, for quality closer to the 70B model — the payoff of sparsity.
+Mixtral 8x7B (computed): total = 47.5B (published: 46.7B), active = 13.7B (published: 12.9B), sparsity = 29%. Llama-2 70B dense: total = active = 78.4B. So Mixtral has ~61% of Llama-2 70B's total params and ~17% of its active params, for quality closer to the 70B model: the payoff of sparsity.
 
 </details>
 
@@ -630,7 +630,7 @@ collapsed_assign = np.argmax(collapsed_probs, axis=-1)
 <details>
 <summary>Solution</summary>
 
-$f_i$ is a hard count (from argmax assignments), $P_i$ is a soft average (from the full softmax) — mixing a hard and soft signal is what makes this loss differentiable despite argmax being involved:
+$f_i$ is a hard count (from argmax assignments), and $P_i$ is a soft average (from the full softmax); mixing a hard and soft signal is what makes this loss differentiable despite argmax being involved:
 
 ```python
 import numpy as np
@@ -641,7 +641,7 @@ def aux_load_balance_loss(router_probs, expert_assignments, num_experts, alpha=0
     return alpha * num_experts * np.sum(f * P)
 ```
 
-With the seeded setup: balanced routing loss = 0.01001 (close to the theoretical minimum $\alpha \cdot N \cdot N \cdot (1/N)^2 = \alpha = 0.01$), collapsed routing loss = 0.03841, a 3.84x ratio — collapse is heavily penalized.
+With the seeded setup: balanced routing loss = 0.01001 (close to the theoretical minimum $\alpha \cdot N \cdot N \cdot (1/N)^2 = \alpha = 0.01$), collapsed routing loss = 0.03841, a 3.84x ratio: collapse is heavily penalized.
 
 </details>
 

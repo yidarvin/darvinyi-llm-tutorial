@@ -61,7 +61,7 @@ Five benchmarks dominate the agent landscape that took shape in $2025$. Each has
 
 **BrowseComp, web research agents.** Complex web research questions requiring multiple sources. Frontier agents hit $30$–$50\%$ as of early $2025$. By mid-$2026$, leading systems on the public leaderboard were reporting scores in the $80$s and low $90$s percent. Designed to be hard for humans too, questions where the answer requires substantial research, not a single lookup.
 
-<WidgetFrame title="Agent benchmark explorer" caption="Five 2025 agent benchmarks visualized side-by-side: SWE-bench Verified (coding), GAIA (general assistants), OSWorld (computer use), τ-bench (tool reliability), BrowseComp (web research). Each shows state-of-the-art numbers, the frontier-vs-human gap, task structure, paraphrased example tasks, and characteristics. The discipline of Ch 26 extended to the agent layer, and a snapshot of where agent capability sat in early 2025 — every one of these numbers has since moved, several into saturation territory; read the widget as a map of relative task difficulty, not a current leaderboard.">
+<WidgetFrame title="Agent benchmark explorer" caption="Five 2025 agent benchmarks visualized side-by-side: SWE-bench Verified (coding), GAIA (general assistants), OSWorld (computer use), τ-bench (tool reliability), BrowseComp (web research). Each shows state-of-the-art numbers, the frontier-vs-human gap, task structure, paraphrased example tasks, and characteristics. The discipline of Ch 26 extended to the agent layer, and a snapshot of where agent capability sat in early 2025. Every one of these numbers has since moved, several into saturation territory; read the widget as a map of relative task difficulty, not a current leaderboard.">
   <AgentBenchmarkExplorer client:visible />
 </WidgetFrame>
 
@@ -557,7 +557,7 @@ def design_evaluation(task):
     return ('custom', ['human_judged'], 'No heuristic matched; default to human judgment')
 ```
 
-Output: task_1 (JS coding) -> custom / success_rate, regression_monitoring; task_2 (refunds) -> custom / pass^k, human_judged; task_3 (blog posts) -> custom / human_judged, llm_as_judge; task_4 (spreadsheet) -> OSWorld / state_verification. Only the computer-use task lands on a public benchmark — everything else needs a custom eval, which is the point.
+Output: task_1 (JS coding) -> custom / success_rate, regression_monitoring; task_2 (refunds) -> custom / pass^k, human_judged; task_3 (blog posts) -> custom / human_judged, llm_as_judge; task_4 (spreadsheet) -> OSWorld / state_verification. Only the computer-use task lands on a public benchmark: everything else needs a custom eval, which is the point.
 
 </details>
 
@@ -660,7 +660,7 @@ task_medium_low        34%        16%        4%         0%
 task_hard              18%        4%         0%         0%
 ```
 
-pass$^1$ tracks each task's intrinsic success rate closely (92%, 71%, 57%, 34%, 18% against nominal 92/75/60/40/25 — sampling noise at $n=200$). pass$^4$ collapses fast: the "easy" task drops from 92% to 70%, and anything at or below 60% single-shot is functionally unusable at $k=4$ (10% or worse). This is the reliability gap $\tau$-bench surfaces: high pass$^1$ does not imply a system survives multiple consecutive attempts.
+pass$^1$ tracks each task's intrinsic success rate closely (92%, 71%, 57%, 34%, 18% against nominal 92/75/60/40/25, sampling noise at $n=200$). pass$^4$ collapses fast: the "easy" task drops from 92% to 70%, and anything at or below 60% single-shot is functionally unusable at $k=4$ (10% or worse). This is the reliability gap $\tau$-bench surfaces: high pass$^1$ does not imply a system survives multiple consecutive attempts.
 
 </details>
 
@@ -764,7 +764,7 @@ def pareto_frontier(configs):
     return sorted(non_dominated, key=lambda c: c['cost'])
 ```
 
-Result: 8 of the 10 configs are Pareto-optimal. The two dropped are `opus-bad-prompt` (cost 0.95, quality 0.70 — dominated by `sonnet-tuned` at cost 0.20, quality 0.71, and also by `opus-only-default`) and `sonnet-bloated` (cost 0.30, quality 0.60 — dominated by `sonnet-only-default` at cost 0.15, quality 0.65). Note the loop that reports "dominated by X" prints the *first* dominator it finds while scanning `CONFIGS` in list order, not necessarily every config that dominates — both bad configs are in fact dominated by more than one entry.
+Result: 8 of the 10 configs are Pareto-optimal. The two dropped are `opus-bad-prompt` (cost 0.95, quality 0.70, dominated by `sonnet-tuned` at cost 0.20, quality 0.71, and also by `opus-only-default`) and `sonnet-bloated` (cost 0.30, quality 0.60, dominated by `sonnet-only-default` at cost 0.15, quality 0.65). Note the loop that reports "dominated by X" prints the *first* dominator it finds while scanning `CONFIGS` in list order, not necessarily every config that dominates; both bad configs are in fact dominated by more than one entry.
 
 </details>
 
@@ -895,7 +895,7 @@ EVIDENCE = {
     # Tool failure handling, Timeouts, Cost alerting, Rate limiting,
     # p50/p95/p99 measured, SLA defined, Latency alerting, Safety eval,
     # PII redaction, Staging env, Canary pattern, Rollback procedure,
-    # On-call runbook, Incident response, Post-mortems) has no keywords —
+    # On-call runbook, Incident response, Post-mortems) has no keywords:
     # the description never addresses them, so they're gaps by default.
 }
 
@@ -915,7 +915,7 @@ def audit(description, checklist):
     return result
 ```
 
-Running this over `SYSTEM_DESCRIPTION`: 5 checks come back covered (Manual QA, Per-task budget, Tool sandboxing, All calls traced, Structured logging) and **18 gaps** across all 8 categories — including all of Reliability, all of Latency, all of Deployment, and all of Operations. `total_gaps = 18 > 5`, so the audit prints `"Not ready to ship. Address gaps before deployment."` A system that "looks good" on a 30-question manual eval is nowhere close to production-ready by the 8-category standard.
+Running this over `SYSTEM_DESCRIPTION`: 5 checks come back covered (Manual QA, Per-task budget, Tool sandboxing, All calls traced, Structured logging) and **18 gaps** across all 8 categories, including all of Reliability, all of Latency, all of Deployment, and all of Operations. `total_gaps = 18 > 5`, so the audit prints `"Not ready to ship. Address gaps before deployment."` A system that "looks good" on a 30-question manual eval is nowhere close to production-ready by the 8-category standard.
 
 </details>
 

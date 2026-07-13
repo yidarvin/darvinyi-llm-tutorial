@@ -254,7 +254,7 @@ Semantic dedup closes part of that gap by comparing meaning instead of surface f
 
 ## Quality filtering
 
-Deduplication removes redundant content. Quality filtering removes low-value content, text that is unique but not worth training on — a subtractive description that is mechanically accurate but, as later sections argue, undersells what the filter is actually doing. The two passes are complementary: dedup throws away the same content seen twice, quality filtering throws away content that no model should be learning from in the first place. Modern pipelines combine three flavors of filter, in roughly increasing order of cost and sophistication.
+Deduplication removes redundant content. Quality filtering removes low-value content, text that is unique but not worth training on. This is a subtractive description that is mechanically accurate but, as later sections argue, undersells what the filter is actually doing. The two passes are complementary: dedup throws away the same content seen twice, quality filtering throws away content that no model should be learning from in the first place. Modern pipelines combine three flavors of filter, in roughly increasing order of cost and sophistication.
 
 ### Heuristic filters
 
@@ -536,7 +536,7 @@ text_c = "Quantum mechanics is hard."
 <details>
 <summary>Solution</summary>
 
-The signature is built by tracking, per hash function, the minimum of `(a*x + b) mod p` over all shingles — the probability two documents' minimums agree at a random hash function equals their Jaccard similarity, which is the whole trick.
+The signature is built by tracking, per hash function, the minimum of `(a*x + b) mod p` over all shingles: the probability two documents' minimums agree at a random hash function equals their Jaccard similarity, which is the whole trick.
 
 ```python
 import hashlib
@@ -560,7 +560,7 @@ def estimate_jaccard(sig_a, sig_b):
     return float(np.mean(sig_a == sig_b))
 ```
 
-With `num_hashes=200`: `True J(a,b) = 0.688`, `MinHash J(a,b) ≈ 0.705`; `True J(a,c) = 0.000`, `MinHash J(a,c) ≈ 0.000` (no shared 5-grams). Averaging `|estimate - true|` over 30 random seeds gives mean absolute error ≈ 0.062 at `num_hashes=50` and ≈ 0.016 at `num_hashes=500` — well inside the `1/(2*sqrt(k))` bound (0.071 and 0.022 respectively), and shrinking as k grows, as expected.
+With `num_hashes=200`: `True J(a,b) = 0.688`, `MinHash J(a,b) ≈ 0.705`; `True J(a,c) = 0.000`, `MinHash J(a,c) ≈ 0.000` (no shared 5-grams). Averaging `|estimate - true|` over 30 random seeds gives mean absolute error ≈ 0.062 at `num_hashes=50` and ≈ 0.016 at `num_hashes=500`; well inside the `1/(2*sqrt(k))` bound (0.071 and 0.022 respectively), and shrinking as k grows, as expected.
 
 </details>
 
@@ -636,7 +636,7 @@ Running the table:
  1.00    1.000    1.000    1.000
 ```
 
-The transition point `(1/b)^(1/r)` is 0.376 for (50,4), 0.741 for (20,10), and 0.100 for (100,2) — matching the annotations in the config list. (100,2) is so permissive it flags almost everything above s=0.1 as a candidate.
+The transition point `(1/b)^(1/r)` is 0.376 for (50,4), 0.741 for (20,10), and 0.100 for (100,2), matching the annotations in the config list. (100,2) is so permissive it flags almost everything above s=0.1 as a candidate.
 
 </details>
 
@@ -723,7 +723,7 @@ for doc in corpus:
         kept.append(doc)
 ```
 
-`rejection_counts = {'length': 4, 'language': 1, 'repetition': 1, 'profanity': 1}` — length rejects the most documents (the spam line, the Japanese line, the Lorem ipsum filler, and the "the the the..." line are all under 100 chars, on top of whatever else they fail). `kept` has 2 documents: the normal sentence about training data quality and the quantum entanglement sentence — the two genuinely clean, sufficiently long documents in the corpus.
+`rejection_counts = {'length': 4, 'language': 1, 'repetition': 1, 'profanity': 1}`: length rejects the most documents (the spam line, the Japanese line, the Lorem ipsum filler, and the "the the the..." line are all under 100 chars, on top of whatever else they fail). `kept` has 2 documents: the normal sentence about training data quality and the quantum entanglement sentence (the two genuinely clean, sufficiently long documents in the corpus).
 
 </details>
 
@@ -783,7 +783,7 @@ for i, doc in enumerate(training_docs):
     print(i, contains_benchmark(doc, benchmark_ngrams_set))
 ```
 
-Output: `0 False`, `1 True`, `2 False` — exactly the safe / contaminated / MISSED pattern the exercise predicts. Doc 1 shares the full 13-word benchmark phrasing verbatim, so its n-gram set intersects. Doc 2 conveys the same fact ("chemical symbol for gold... Au") but reorders and rephrases it — zero 13-gram overlap with the original, so the filter lets it through even though it is exactly the kind of contamination a benchmark-aware model would benefit from. This is the general failure mode of exact/n-gram decontamination: it catches copies, not paraphrases.
+Output: `0 False`, `1 True`, `2 False`: exactly the safe / contaminated / MISSED pattern the exercise predicts. Doc 1 shares the full 13-word benchmark phrasing verbatim, so its n-gram set intersects. Doc 2 conveys the same fact ("chemical symbol for gold... Au") but reorders and rephrases it, resulting in zero 13-gram overlap with the original, so the filter lets it through even though it is exactly the kind of contamination a benchmark-aware model would benefit from. This is the general failure mode of exact/n-gram decontamination: it catches copies, not paraphrases.
 
 </details>
 

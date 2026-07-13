@@ -775,7 +775,7 @@ def cross_entropy(logits, targets):
     return -np.mean(log_probs[np.arange(n), targets])
 ```
 
-With small-variance init logits ($\sigma=0.02$) and random targets: loss = 4.6041 against baseline $\log(100) = 4.6052$, difference 0.0011 — the model is effectively guessing uniformly, as expected before any training. Forcing targets to the argmax class drops the loss to 4.5548: even at random init, the max-logit class carries a slight edge over uniform, so "always predicting correctly" beats the uniform baseline by a small margin.
+With small-variance init logits ($\sigma=0.02$) and random targets: loss = 4.6041 against baseline $\log(100) = 4.6052$, difference 0.0011: the model is effectively guessing uniformly, as expected before any training. Forcing targets to the argmax class drops the loss to 4.5548: even at random init, the max-logit class carries a slight edge over uniform, so "always predicting correctly" beats the uniform baseline by a small margin.
 
 </details>
 
@@ -865,7 +865,7 @@ class AdamW:
         params[:] = (1 - self.lr * self.weight_decay) * params - self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 ```
 
-Test 1 (weight_decay=0): converges to x = 3.0001. Test 2 (weight_decay=0.05): converges to x = 2.9980 — pulled just under 3.0, as expected, since the $(1-\alpha\lambda)$ shrinkage per step is tiny (0.995) relative to the gradient pull toward 3.
+Test 1 (weight_decay=0): converges to x = 3.0001. Test 2 (weight_decay=0.05): converges to x = 2.9980, pulled just under 3.0, as expected, since the $(1-\alpha\lambda)$ shrinkage per step is tiny (0.995) relative to the gradient pull toward 3.
 
 </details>
 
@@ -1091,7 +1091,7 @@ for step in range(TOTAL):
         print(f"step {step:4d}  lr={lr:.2e}  loss={loss.item():.3f}")
 ```
 
-With seed 42: starting loss 3.377 (baseline is $\log(28) = 3.332$), ending loss 0.037, a drop of 3.341 — well past the 0.5 threshold. The corpus is a single sentence repeated 100 times, so the model memorizes it almost exactly rather than stopping around 1.5-2.0; that's expected for a toy corpus this repetitive, not a bug in the loop.
+With seed 42: starting loss 3.377 (baseline is $\log(28) = 3.332$), ending loss 0.037, a drop of 3.341, well past the 0.5 threshold. The corpus is a single sentence repeated 100 times, so the model memorizes it almost exactly rather than stopping around 1.5-2.0; that's expected for a toy corpus this repetitive, not a bug in the loop.
 
 </details>
 

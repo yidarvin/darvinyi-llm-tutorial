@@ -500,7 +500,7 @@ for layer_idx in range(n_layers):
 best_layer = max(range(n_layers), key=lambda i: accuracies[i])
 ```
 
-With this seed setup, accuracy runs from 76% at L0 up to 92.5% at L6, back down to 74% at L11 — the measured peak lands one layer off the true signal peak (L5, strength 1.7 vs. L6's 92.5% and strength 1.5), which is expected sampling noise with only 200 examples per layer. The overall shape — rise, peak, fall — tracks `signal_strengths` closely.
+With this seed setup, accuracy runs from 76% at L0 up to 92.5% at L6, back down to 74% at L11: the measured peak lands one layer off the true signal peak (L5, strength 1.7 vs. L6's 92.5% and strength 1.5), which is expected sampling noise with only 200 examples per layer. The overall shape (rise, peak, fall) tracks `signal_strengths` closely.
 
 </details>
 
@@ -635,7 +635,7 @@ def train_sae(X, D, lr=0.02, sparsity_lambda=0.05, n_iterations=1500, seed=11):
     return W_enc, b_enc, W_dec, b_dec
 ```
 
-Running this against the 10 true features gives `True feature count: 10` / `Live SAE features: 89 (of 96 possible)` and `Reconstruction MSE: 0.0827` — confirming the observation comments above: plain L1 on an unconstrained decoder leaves most of the 96 hidden units live instead of collapsing to ~10, because the penalty can be gamed by shrinking `f` while `W_dec`'s column norms grow. Getting live count down near `n_true_features` needs the fixes noted above (decoder unit-norm constraint + dead-feature resampling), not just a larger `sparsity_lambda`.
+Running this against the 10 true features gives `True feature count: 10` / `Live SAE features: 89 (of 96 possible)` and `Reconstruction MSE: 0.0827`, confirming the observation comments above: plain L1 on an unconstrained decoder leaves most of the 96 hidden units live instead of collapsing to ~10, because the penalty can be gamed by shrinking `f` while `W_dec`'s column norms grow. Getting live count down near `n_true_features` needs the fixes noted above (decoder unit-norm constraint + dead-feature resampling), not just a larger `sparsity_lambda`.
 
 </details>
 
@@ -753,7 +753,7 @@ for depth in range(n_layers):
           f"recovery = {recovery:.0%}")
 ```
 
-Output: `Clean output: -1.2401`, `Corrupted output: 0.5690`, `Gap to recover: -1.8091`, then recovery of 2% (depth 0), 34% (depth 1), 65% (depth 2), 100% (depth 3) — matching the observation comments exactly: depth 0 (`listens_to_dim0 = 0.05`) barely moves the output, recovery jumps once depth 1 (`listens_to_dim0 = 0.9`) is patched in, and climbs to full recovery by depth 3.
+Output: `Clean output: -1.2401`, `Corrupted output: 0.5690`, `Gap to recover: -1.8091`, then recovery of 2% (depth 0), 34% (depth 1), 65% (depth 2), 100% (depth 3), matching the observation comments exactly: depth 0 (`listens_to_dim0 = 0.05`) barely moves the output, recovery jumps once depth 1 (`listens_to_dim0 = 0.9`) is patched in, and climbs to full recovery by depth 3.
 
 </details>
 

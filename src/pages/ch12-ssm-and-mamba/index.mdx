@@ -509,7 +509,7 @@ def discrete_ssm(x, A_diag, B, C, delta):
     return y
 ```
 
-With $C$ reading component 0 ($a=-3.0$, fastest decay): `y[0]=0.100, y[5]=0.022, y[20]=0.000248` — essentially gone by $t=20$. With $C$ reading component 3 ($a=-0.1$, slowest decay): `y[0]=0.100, y[5]=0.095, y[20]=0.0819` — still 82% of the peak at $t=20$. Same impulse, same $\Delta$; the eigenvalue alone sets the memory horizon.
+With $C$ reading component 0 ($a=-3.0$, fastest decay): `y[0]=0.100, y[5]=0.022, y[20]=0.000248`, essentially gone by $t=20$. With $C$ reading component 3 ($a=-0.1$, slowest decay): `y[0]=0.100, y[5]=0.095, y[20]=0.0819`, still 82% of the peak at $t=20$. Same impulse, same $\Delta$; the eigenvalue alone sets the memory horizon.
 
 </details>
 
@@ -601,7 +601,7 @@ def ssm_convolution(x, kernel):
     return y
 ```
 
-`Recurrence vs convolution max diff: 2.22e-16` — identical to floating-point precision. The recurrence walks the state forward one token at a time; the convolution precomputes $\bar{K}_j = C\bar{A}^j\bar{B}$ and applies it as a causal filter. Same function, two computation orders — sequential (cheap inference, one token at a time) versus parallel (cheap training, one matmul/FFT over the whole sequence).
+`Recurrence vs convolution max diff: 2.22e-16`: identical to floating-point precision. The recurrence walks the state forward one token at a time; the convolution precomputes $\bar{K}_j = C\bar{A}^j\bar{B}$ and applies it as a causal filter. Same function, two computation orders: sequential (cheap inference, one token at a time) versus parallel (cheap training, one matmul/FFT over the whole sequence).
 
 </details>
 
@@ -706,7 +706,7 @@ fixed:     [0.29, 5.91, 3.95, 8.35, 6.07, 9.92, 7.51, 11.02, 8.55, 11.83]
 selective: [0.15, 8.58, 6.59, 12.09, 9.90, 14.34, 12.09, 15.93, 13.65, 17.09]
 ```
 
-Look at the filler steps (indices 0, 2, 4, 6, 8): the selective model's $\Delta_t = \text{softplus}(0.1) \approx 0.74$ is well below the fixed $\Delta = 1.436$, so $\bar A$ stays close to $1$ and the state barely decays — it *carries the previous important token forward* instead of overwriting it. The fixed-$\Delta$ model uses the same large decay on filler as on signal, so it forgets faster: its filler-to-signal decay ratio (e.g. $3.95/5.91 = 0.67$) is smaller than the selective model's ($6.59/8.58 = 0.77$). That is the mechanism, not just the raw magnitude: selectivity lets $\Delta_t$ gate how much each token is allowed to write and how much prior state survives, instead of applying one compromise rate everywhere.
+Look at the filler steps (indices 0, 2, 4, 6, 8): the selective model's $\Delta_t = \text{softplus}(0.1) \approx 0.74$ is well below the fixed $\Delta = 1.436$, so $\bar A$ stays close to $1$ and the state barely decays; it *carries the previous important token forward* instead of overwriting it. The fixed-$\Delta$ model uses the same large decay on filler as on signal, so it forgets faster: its filler-to-signal decay ratio (e.g. $3.95/5.91 = 0.67$) is smaller than the selective model's ($6.59/8.58 = 0.77$). That is the mechanism, not just the raw magnitude: selectivity lets $\Delta_t$ gate how much each token is allowed to write and how much prior state survives, instead of applying one compromise rate everywhere.
 
 </details>
 
@@ -799,7 +799,7 @@ def scan_via_associative(A_list, b_list, h0):
     return states
 ```
 
-`Max difference: 2.26e-16` against `direct_recurrence` — floating-point identical. Composing pairs is associative, so the prefix compositions can be computed with a tree reduction (up-sweep) followed by a propagation pass (down-sweep) in $O(\log T)$ depth instead of unrolling $T$ sequential steps — this is what Mamba's CUDA kernel does, kept in SRAM to avoid the HBM round-trips a naive parallel implementation would pay.
+`Max difference: 2.26e-16` against `direct_recurrence`: floating-point identical. Composing pairs is associative, so the prefix compositions can be computed with a tree reduction (up-sweep) followed by a propagation pass (down-sweep) in $O(\log T)$ depth instead of unrolling $T$ sequential steps. This is what Mamba's CUDA kernel does, kept in SRAM to avoid the HBM round-trips a naive parallel implementation would pay.
 
 </details>
 

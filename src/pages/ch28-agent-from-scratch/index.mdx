@@ -1055,7 +1055,7 @@ def run(self, task):
     return "Max iterations reached."
 ```
 
-With `agent.run("What's the weather and the date today?")`, `mock_llm` gates its branches on what's already in the transcript: turn 1's action text (`get_weather(city="Tokyo")`) is the first thing to mention Tokyo, so `get_weather` fires first; turn 2 sees `'Tokyo' in prompt` and `'2025-05-22' not in prompt` and calls `get_date`; turn 3 sees the date and returns `final_answer`. The final answer is `"Today in Tokyo: 18C, partly cloudy."`, and the trace shows all three agent turns with both tools actually called — `get_weather` then `get_date` — not a hardcoded answer that skips retrieval. (Note the task string itself must not contain "Tokyo" — if it did, the first `mock_llm` check would see "Tokyo" already in the prompt on turn 1 and skip straight past `get_weather`.)
+With `agent.run("What's the weather and the date today?")`, `mock_llm` gates its branches on what's already in the transcript: turn 1's action text (`get_weather(city="Tokyo")`) is the first thing to mention Tokyo, so `get_weather` fires first; turn 2 sees `'Tokyo' in prompt` and `'2025-05-22' not in prompt` and calls `get_date`; turn 3 sees the date and returns `final_answer`. The final answer is `"Today in Tokyo: 18C, partly cloudy."`, and the trace shows all three agent turns with both tools actually called (`get_weather` then `get_date`), not a hardcoded answer that skips retrieval. (Note the task string itself must not contain "Tokyo": if it did, the first `mock_llm` check would see "Tokyo" already in the prompt on turn 1 and skip straight past `get_weather`.)
 
 </details>
 

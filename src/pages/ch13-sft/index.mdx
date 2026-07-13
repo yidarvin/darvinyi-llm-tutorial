@@ -487,7 +487,7 @@ print(f"Unmasked loss: {unmasked:.3f}")  # 5.328
 print(f"Masked loss:   {masked:.3f}")    # 5.369
 ```
 
-With seed 0, unmasked loss is 5.328 (averaged over all 12 positions) and masked loss is 5.369 (averaged over only the 6 response positions) — different values, confirming the mask actually changes which tokens the gradient sees.
+With seed 0, unmasked loss is 5.328 (averaged over all 12 positions) and masked loss is 5.369 (averaged over only the 6 response positions); these are different values, confirming the mask actually changes which tokens the gradient sees.
 
 </details>
 
@@ -836,7 +836,7 @@ print(f"Kept: {kept}/{len(dataset)} ({kept / len(dataset) * 100:.0f}%)")
 # Kept: 4/10 (40%)
 ```
 
-Kept: capital of France, photosynthesis, "Hi!", and the water-formula answer. Rejected: "OK" and "2 + 2 equals 4." (too short — a real weakness of length-only filtering, since the second one is a correct, complete answer), the AI-self-reference poem, the padded moon description (caught by the raw-count repetition check), the Spain instruction-echo, and the "I don't know." placeholder.
+Kept: capital of France, photosynthesis, "Hi!", and the water-formula answer. Rejected: "OK" and "2 + 2 equals 4." (too short, a real weakness of length-only filtering, since the second one is a correct, complete answer), the AI-self-reference poem, the padded moon description (caught by the raw-count repetition check), the Spain instruction-echo, and the "I don't know." placeholder.
 
 </details>
 

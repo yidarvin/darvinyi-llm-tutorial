@@ -54,7 +54,7 @@ where $W^Q, W^K \in \R^{d_{\text{model}} \times d_k}$ and $W^V \in \R^{d_{\text{
 
 $Q$ and $K$ must agree on dimension because we are going to take their dot product. That product $q_i \cdot k_j$ is the similarity score between position $i$'s query and position $j$'s key. $V$'s dimension $d_v$ can differ in principle, but in practice it is almost always set equal to $d_k$. In Vaswani's multi-head attention, $d_k = d_v = d_{\text{model}} / h$ where $h$ is the number of heads; Chapter 5 picks that up.
 
-A small classroom analogy makes the three cards feel less arbitrary. Picture eight students in a room. Each holds three cards: a Query card describing what they are curious about, a Key card describing what they know, and a Value card containing the actual content they would share. To form a study cluster, each student looks at every student's Key card — including their own — and decides how much to listen: *I will listen most to the students (myself included) whose Keys match my Query*. The listening is graded, not all-or-nothing: each student distributes a fixed budget of attention across everyone in the room, themselves included. After voting, each student's resulting understanding is a weighted blend of *Value* cards from across the room, weighted by Query-Key alignment; it is entirely normal, and often typical, for a student's own Value card to carry the largest weight in their own blend. Eight students, three cards each, one soft lookup per student. That is self-attention.
+A small classroom analogy makes the three cards feel less arbitrary. Picture eight students in a room. Each holds three cards: a Query card describing what they are curious about, a Key card describing what they know, and a Value card containing the actual content they would share. To form a study cluster, each student looks at every student's Key card (including their own) and decides how much to listen: *I will listen most to the students (myself included) whose Keys match my Query*. The listening is graded, not all-or-nothing: each student distributes a fixed budget of attention across everyone in the room, themselves included. After voting, each student's resulting understanding is a weighted blend of *Value* cards from across the room, weighted by Query-Key alignment; it is entirely normal, and often typical, for a student's own Value card to carry the largest weight in their own blend. Eight students, three cards each, one soft lookup per student. That is self-attention.
 
 <Callout type="insight">
 A common misconception is that $Q$, $K$, $V$ are fundamentally different *things*. They are not. In self-attention they originate from the same input matrix $X$; the distinction is which learned projection is applied. Three different views of the same data play three different *roles* in the attention computation, but ontologically they are the same sequence transformed three ways. This is the structural reason a single embedding can simultaneously *ask* something at position $i$ and *answer* something at position $j$: the query side and the key side of the same vector are independently learned linear functions of it.
@@ -206,7 +206,7 @@ for d_k in [8, 64, 512, 4096]:
   height={280}
 />
 
-The raw score std tracks $\sqrt{d_k}$, in the ballpark of 2.8, 8, 22.6, and 64 at $d_k = 8, 64, 512, 4096$ respectively — though with only 5 rows of random samples in this demo, the printed numbers wander around those theoretical values (a run with seed 0 prints roughly 2.8, 7.7, 23.4, and 70). The scaled score std stays near 1 throughout. The unscaled softmax max approaches 1 as $d_k$ grows (the distribution saturates), while the scaled version stays moderate. The derivation and the empirical numbers agree.
+The raw score std tracks $\sqrt{d_k}$, in the ballpark of 2.8, 8, 22.6, and 64 at $d_k = 8, 64, 512, 4096$ respectively, though with only 5 rows of random samples in this demo, the printed numbers wander around those theoretical values (a run with seed 0 prints roughly 2.8, 7.7, 23.4, and 70). The scaled score std stays near 1 throughout. The unscaled softmax max approaches 1 as $d_k$ grows (the distribution saturates), while the scaled version stays moderate. The derivation and the empirical numbers agree.
 
 <Callout type="insight">
 This is one of the cleanest design-justification arguments in deep learning. A four-line variance calculation explains an engineering choice that, encountered first in a formula, looks arbitrary. Many readers see $\sqrt{d_k}$ for the first time as a "magic" denominator; the variance argument turns it into "of course." Several other normalization choices in modern architectures (layer norm's $1/\sqrt{d}$ scaling on weight initialization, the $1/\sqrt{\text{fan-in}}$ in He and Glorot init) fall out of the same logic.
@@ -510,7 +510,7 @@ V = rng.normal(0, 1, (n, d_k))
 <details>
 <summary>Solution</summary>
 
-Build the mask with `np.triu(..., k=1)` to grab the strictly-upper triangle, set those entries to $-\infty$, and add the mask to the scores before softmax — after softmax, $-\infty$ becomes exactly 0.
+Build the mask with `np.triu(..., k=1)` to grab the strictly-upper triangle, set those entries to $-\infty$, and add the mask to the scores before softmax: after softmax, $-\infty$ becomes exactly 0.
 
 ```python
 def causal_mask(n):
@@ -536,7 +536,7 @@ print(weights.round(3))
 print(f"Row sums: {weights.sum(axis=-1)}")  # [1. 1. 1. 1. 1.]
 ```
 
-The upper triangle is exactly 0 in every row, and each row still sums to 1 — masking only redistributes probability mass among the allowed (earlier and current) positions.
+The upper triangle is exactly 0 in every row, and each row still sums to 1; masking only redistributes probability mass among the allowed (earlier and current) positions.
 
 </details>
 
@@ -678,7 +678,7 @@ print(f"Weights shape: {weights.shape}")  # (4, 6)
 print(f"Row sums: {weights.sum(axis=-1)}")  # [1. 1. 1. 1.]
 ```
 
-Output is `(n_dec, d_v) = (4, 8)`, weights are `(n_dec, n_enc) = (4, 6)` — rectangular, not square — and each of the 4 decoder rows still sums to 1 over the 6 encoder positions it's mixing.
+Output is `(n_dec, d_v) = (4, 8)`, weights are `(n_dec, n_enc) = (4, 6)` (rectangular, not square), and each of the 4 decoder rows still sums to 1 over the 6 encoder positions it's mixing.
 
 </details>
 

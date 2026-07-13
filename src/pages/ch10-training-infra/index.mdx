@@ -612,7 +612,7 @@ for N in [512, 2048, 8192, 32768, 131072]:
 <details>
 <summary>Solution</summary>
 
-FlashAttention's I/O is the number of SRAM passes (`max(1, N / sram_size)`) times one read/write of Q, K, V, O — never the full N x N matrix.
+FlashAttention's I/O is the number of SRAM passes (`max(1, N / sram_size)`) times one read/write of Q, K, V, O, never the full N x N matrix.
 
 ```python
 def flashattention_hbm_io(N, d, sram_size=100_000, dtype_bytes=2):

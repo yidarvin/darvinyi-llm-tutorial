@@ -678,7 +678,7 @@ x = np.random.normal(0, 1, (8, d_in))
 <details>
 <summary>Solution</summary>
 
-Because `lora_forward_adapter` computes `x @ A.T @ B.T`, the equivalent single matrix is `A.T @ B.T`, not `B @ A` — merging with `B @ A` would silently produce the wrong (transposed) matrix here since `d_in == d_out == 256` hides the shape mismatch. With the correct orientation the two modes agree to float64 precision.
+Because `lora_forward_adapter` computes `x @ A.T @ B.T`, the equivalent single matrix is `A.T @ B.T`, not `B @ A`; merging with `B @ A` would silently produce the wrong (transposed) matrix here since `d_in == d_out == 256` hides the shape mismatch. With the correct orientation the two modes agree to float64 precision.
 
 ```python
 import numpy as np
