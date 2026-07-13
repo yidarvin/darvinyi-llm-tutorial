@@ -349,7 +349,7 @@ This operator is **associative**: $(o_3 \circ o_2) \circ o_1 = o_3 \circ (o_2 \c
 
 The point is that **any associative operator can be parallelized**. The classic algorithm is **Blelloch's parallel scan**: an up-sweep that computes pairwise compositions in a tree (every level halves the number of remaining operators), then a down-sweep that propagates partial results back down to every position. Depth is $O(\log T)$; total work is $O(T)$. For $T = 32{,}768$, that is $15$ sequential rounds instead of $32{,}768$, orders of magnitude faster on a parallel device.
 
-This is the **selective scan**. The name "selective" reflects Mamba's input-dependent parameters; the "scan" is Blelloch's parallel scan applied to those time-varying operators. It exists because Mamba's selectivity broke the convolution mode and made the naive recurrence unusable on GPUs.
+This is the **selective scan**, one implementation of that time-varying recurrence, not the only one (Mamba-2 reformulates the same computation as a matmul below). The name "selective" reflects Mamba's input-dependent parameters; the "scan" is Blelloch's parallel scan applied to those time-varying operators. It exists because Mamba's selectivity broke the convolution mode and made the naive recurrence unusable on GPUs.
 
 ### The Mamba CUDA kernel
 
