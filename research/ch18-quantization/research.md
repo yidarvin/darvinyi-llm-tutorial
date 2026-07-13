@@ -1,6 +1,6 @@
 # Chapter 18 — Quantization: research
 
-> Curated source material for Chapter 18's build sessions. **The second chapter of Phase 12 (Inference).** Where Ch 17 reduced *wasted computation* (KV cache, batching, Flash Attention, speculative decoding), Ch 18 reduces the *bits per parameter*. The two combine multiplicatively — a production stack uses both. **Practical engineering chapter with a side of theory**: the math of float→int mapping is short but the engineering choices around it (symmetric vs asymmetric, per-tensor vs per-channel vs per-group, PTQ vs QAT, AWQ vs GPTQ) are dense and operationally consequential. Bridges back to Ch 15 (QLoRA's NF4 was a teaser); bridges forward to combined throughput numbers in Ch 19. Single-topic chapter; uses the **4-file cadence**.
+> Curated source material for Chapter 18's build sessions. **The second chapter of Part VI (Inference).** Where Ch 17 reduced *wasted computation* (KV cache, batching, Flash Attention, speculative decoding), Ch 18 reduces the *bits per parameter*. The two combine multiplicatively — a production stack uses both. **Practical engineering chapter with a side of theory**: the math of float→int mapping is short but the engineering choices around it (symmetric vs asymmetric, per-tensor vs per-channel vs per-group, PTQ vs QAT, AWQ vs GPTQ) are dense and operationally consequential. Bridges back to Ch 15 (QLoRA's NF4 was a teaser); bridges forward to combined throughput numbers in Ch 19. Single-topic chapter; uses the **4-file cadence**.
 
 ---
 
@@ -685,6 +685,6 @@ Eight outcomes. Exercises hit outcomes 2 (basic mapping), 3 (granularity), 5 (NF
 
 **Tonal framing**: practical engineering, like Ch 15 (PEFT) and Ch 17 (inference). **Concrete numbers**: memory savings in GB; bits per weight; perplexity loss. **Honest tradeoffs**: quality vs compression; per-tensor vs per-group; PTQ vs QAT; weight vs activation quantization.
 
-**Phase 12 middle**: Ch 18 is the *technical heart* of Phase 12. Ch 17 introduced the inference cost problem; Ch 19 closes it with sampling. Ch 18 contains the densest engineering content — the float→int mapping, granularity choices, modern PTQ algorithms, activation quantization, and the multiplicative combination with Ch 17.
+**Part VI, middle chapter**: Ch 18 is the *technical heart* of Part VI. Ch 17 introduced the inference cost problem; Ch 19 closes it with sampling. Ch 18 contains the densest engineering content — the float→int mapping, granularity choices, modern PTQ algorithms, activation quantization, and the multiplicative combination with Ch 17.
 
 **Importance**: quantization is what makes large models *affordable* to deploy. Without it, a 70B model needs 2× A100s for weights alone. With INT4, it fits on 1× A100 with room for KV cache and batching. **The single highest-leverage optimization for inference cost reduction**, alongside KV cache. **Don't skip the rigor.**

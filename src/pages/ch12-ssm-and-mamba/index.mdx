@@ -8,19 +8,19 @@ import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/conte
 import { RunnableCode } from '@components/code';
 import { SSMvsAttentionScaling, SelectiveScanAnimation } from '@components/widgets';
 
-Attention has a problem. It is $O(N^2)$ in both memory and compute. At a $32$K-token context, the attention matrix has a billion entries, about $4$GB in BF16 just to hold the scores for a single layer. At the rumored million-token frontier, the same matrix is a trillion entries, four terabytes. FlashAttention (Chapter 10) hid this cost from HBM by keeping intermediate tiles in SRAM, but the underlying compute is still quadratic: FlashAttention is a better implementation of the same $O(N^2)$ algorithm, not a different one. Long contexts are bottlenecked by attention, full stop.
+Attention has a problem. It is $O(T^2)$ in both memory and compute, where $T$ is the sequence length. At a $32$K-token context, the attention matrix has a billion entries, about $2$GB in BF16 just to hold the scores for a single layer. At the rumored million-token frontier, the same matrix is a trillion entries, two terabytes. FlashAttention (Chapter 10) hid this cost from HBM by keeping intermediate tiles in SRAM, but the underlying compute is still quadratic: FlashAttention is a better implementation of the same $O(T^2)$ algorithm, not a different one. Long contexts are bottlenecked by attention, full stop.
 
 The **state-space model** family takes a different bet entirely. Don't store every past token explicitly. Instead, maintain a fixed-size **state**, a vector that summarizes everything important about the history. New tokens update the state via a linear recurrence; predictions read from the state. Structurally it looks like an RNN, but the mathematics, continuous-time linear dynamics, principled discretization from control theory, gives the architecture properties that ordinary RNNs lack: a recurrence-convolution duality, parallelizable training, hardware-efficient inference.
 
 The lineage runs through S4 (Gu et al. $2022$, structured SSMs with HiPPO initialization), through **Mamba** (Gu & Dao, December $2023$, adding input-dependent selectivity), to **Mamba-2** (Dao & Gu, May $2024$, matrix-form computation that connects SSMs to attention). And then there are hybrids. **Jamba** (Lieber et al. $2024$) interleaves Mamba and transformer layers because, in practice, neither alone is optimal. This chapter walks the math, the algorithms, and the practical reality. Like Chapter 11 (MoE), Chapter 12 is honest: SSMs are not yet the dominant architecture. They are a principled, increasingly mature alternative with genuine advantages for long contexts and genuine costs almost everywhere else.
 
-## The setup: attention's $O(N^2)$ problem
+## The setup: attention's $O(T^2)$ problem
 
-Attention's scaling is the single most uncomfortable fact about deploying long-context transformers. At $32$K tokens the QK$^T$ matrix is $32{,}768 \times 32{,}768 \approx 10^9$ entries. At $128$K it is $\approx 1.6 \times 10^{10}$; at $1$M tokens, $10^{12}$. Memory is one cost; compute is the other, and both scale as the square of context length. **You cannot keep doubling context without doubling-and-then-some the per-token bill.**
+Attention's scaling is the single most uncomfortable fact about deploying long-context transformers. At $32$K tokens the QK$^T$ matrix is $32{,}768 \times 32{,}768 \approx 10^9$ entries. At $128$K it is $\approx 1.6 \times 10^{10}$; at $1$M tokens, $10^{12}$. Memory is one cost; compute is the other, and both scale as the square of context length. You cannot keep doubling context without doubling-and-then-some the per-token bill.
 
-FlashAttention (Chapter 10) reduced the *I/O cost* from $O(N^2)$ HBM reads to $O(N)$ HBM reads by tiling the softmax through SRAM. That single optimization made $32$K-token training practical and is responsible for most of the long-context capability frontier models advertise today. But the underlying *compute* is unchanged: the algorithm is still summing $N^2$ pairwise scores, just doing it more efficiently. **FlashAttention hides the cost; it does not eliminate it.** Past $128$K or so, even FlashAttention's accelerated quadratic is too expensive to be practical at scale.
+FlashAttention (Chapter 10) reduced the *I/O cost* from $O(T^2)$ HBM reads to $O(T)$ HBM reads by tiling the softmax through SRAM. That single optimization made $32$K-token training practical and is responsible for most of the long-context capability frontier models advertise today. But the underlying *compute* is unchanged: the algorithm is still summing $T^2$ pairwise scores, just doing it more efficiently. **FlashAttention hides the cost; it does not eliminate it.** Past $128$K or so, even FlashAttention's accelerated quadratic is too expensive to be practical at scale.
 
-What we want is **linear-time sequence modeling**. Memory and compute both growing as $O(N)$ in the sequence length, not $O(N^2)$. Constant memory per token at inference, ideally, no growing KV cache, no quadratically growing attention matrix. Several research lines have proposed such alternatives:
+What we want is **linear-time sequence modeling**. Memory and compute both growing as $O(T)$ in the sequence length, not $O(T^2)$. Constant memory per token at inference, ideally, no growing KV cache, no quadratically growing attention matrix. Several research lines have proposed such alternatives:
 
 - **Linear attention** (Performer, Linformer, Linear Transformer) approximates softmax attention with kernels or low-rank projections. Asymptotic complexity drops but quality typically degrades, and the approximation is brittle at long contexts.
 - **RWKV** is a linear RNN with time-decay. Competitive at moderate scale; architecturally distinct from SSMs and from transformers.
@@ -28,15 +28,13 @@ What we want is **linear-time sequence modeling**. Memory and compute both growi
 
 Pre-Mamba SSMs (S4, S5) performed well on the Long Range Arena benchmark but underperformed transformers on language modeling. The breakthrough came in December $2023$ with **Mamba**, which added input-dependent dynamics and finally closed the language-modeling gap. Mamba is what made SSMs a serious contender, not a research curiosity. Everything else in this chapter is consequence of that breakthrough or context for it.
 
-<WidgetFrame title="SSM vs attention scaling" caption="Log-log plot of compute (FLOPs) and memory (bytes) per layer vs sequence length. Attention's $O(N^2)$ line climbs at slope 2; SSM's $O(N)$ line at slope 1. Toggle between compute and memory; adjust d_model. At short contexts (<2K) attention wins on constant factors; at long contexts (>32K) SSM dominates. The crossover (~8K tokens) marks where SSM becomes faster in absolute terms.">
+<WidgetFrame title="SSM vs attention scaling" caption="Log-log plot of compute (FLOPs) and memory (bytes) per layer vs sequence length. Attention's $O(T^2)$ line climbs at slope 2; SSM's $O(T)$ line at slope 1. Toggle between compute and memory; adjust d_model. At short contexts (<2K) attention wins on constant factors; at long contexts (>32K) SSM dominates. The crossover (~7K tokens) marks where SSM becomes faster in absolute terms.">
   <SSMvsAttentionScaling client:visible />
 </WidgetFrame>
 
 <Callout type="warning">
-**Misconception.** "Linear in sequence length means always faster." Asymptotically yes, but constant factors favor attention at short sequences. Modern GPUs are exquisitely optimized for matmul, exactly what attention's QK$^T$V uses, while SSM's recurrent computation requires custom kernels just to compete. At $\text{seq\_len} = 2{,}048$, Mamba is *not* faster than FlashAttention; the optimized matmul wins on wall-clock time even though the asymptotic cost is worse. The crossover is somewhere around $8$K tokens; Mamba's win shows up most dramatically at $32$K–$128$K and beyond. **Don't expect a Mamba layer to be faster than an attention layer at the contexts most transformers actually serve.**
+**Misconception.** "Linear in sequence length means always faster." Asymptotically yes, but constant factors favor attention at short sequences. Modern GPUs are exquisitely optimized for matmul, exactly what attention's QK$^T$V uses, while SSM's recurrent computation requires custom kernels just to compete. At $\text{seq\_len} = 2{,}048$, Mamba is *not* faster than FlashAttention; the optimized matmul wins on wall-clock time even though the asymptotic cost is worse. The crossover is somewhere around $7$K tokens; Mamba's win shows up most dramatically at $32$K–$128$K and beyond. **Don't expect a Mamba layer to be faster than an attention layer at the contexts most transformers actually serve.**
 </Callout>
-
-The next section starts where SSMs do, in continuous time, with a four-matrix linear system that has nothing in particular to do with text.
 
 ## SSMs in continuous time: the dynamical systems view
 
@@ -61,13 +59,13 @@ The single most important fact about this setup is that $h(t)$ has **constant di
 
 This is the SSM bet stated in one sentence. **Most of what matters about the past can be summarized into a bounded representation; exact recall of distant tokens is rarely needed.** It is a real bet, sometimes the wrong one, and we'll come back to where it pays off and where it fails. But it is the bet from which everything else follows.
 
-The bookkeeping trade-off is clean. Attention's KV cache is exact and unbounded; SSMs' state is compressed and bounded. Attention can recall any past token with full fidelity; SSMs cannot. Attention pays $O(N)$ memory per layer per token to store the cache; SSMs pay $O(d_{\text{state}})$ regardless of context length. For long contexts the SSM's bounded state is the entire architectural advantage. For tasks requiring needle-in-a-haystack retrieval, it is the architecture's central limitation.
+The bookkeeping trade-off is clean. Attention's KV cache is exact and unbounded; SSMs' state is compressed and bounded. Attention can recall any past token with full fidelity; SSMs cannot. Attention pays $O(T)$ memory per layer per token to store the cache; SSMs pay $O(d_{\text{state}})$ regardless of context length. For long contexts the SSM's bounded state is the entire architectural advantage. For tasks requiring needle-in-a-haystack retrieval, it is the architecture's central limitation.
 
 <Callout type="note">
 **SSMs come from control theory, not from machine learning.** The equations $h'(t) = A h(t) + B x(t)$, $y(t) = C h(t)$ describe a **linear time-invariant system** of a kind studied since the $1960$s, Kalman filters, signal processing, control of physical plants. The novelty in S4 and Mamba is not the framework itself; it is *using* the framework for sequence modeling and finding the right structure for $A, B, C$ to make it work on tasks the original developers never had in mind. Modern ML is sometimes described as the rediscovery of half-century-old applied mathematics. SSMs are an unusually direct case of that.
 </Callout>
 
-The continuous formulation is mathematically clean but does not directly run on a computer, text tokens are discrete, not a continuous-time signal. The next section covers how the continuous system becomes a discrete recurrence.
+The continuous formulation is mathematically clean but does not directly run on a computer, text tokens are discrete, not a continuous-time signal.
 
 ## Discretization: making SSMs computable
 
@@ -143,7 +141,7 @@ print(f"\nSlower eigenvalues → longer-range memory.")
 ```
 </RunnableCode>
 
-The recurrence is one way to compute the SSM. The next section shows the other, a parallel mode that the linear structure unlocks for free.
+The recurrence is one way to compute the SSM. The linear structure unlocks a second, parallel mode for free.
 
 ## The recurrence-convolution duality
 
@@ -157,7 +155,7 @@ $$y_t = C h_t = \sum_{i=0}^{t} \big( C \bar{A}^{t-i} \bar{B} \big) \, x_i = \sum
 
 where $\bar{K}_j = C \bar{A}^j \bar{B}$ is the **SSM kernel**. The output is the convolution of the input sequence with the kernel. Same model. **The SSM can be computed two ways**:
 
-- **Recurrence mode**: $h_t = \bar{A} h_{t-1} + \bar{B} x_t$, then $y_t = C h_t$. $O(N \cdot d_{\text{state}})$ time per token, **sequential**, token $t$ depends on token $t-1$. Constant memory per token (just the state). Excellent for inference, one token at a time.
+- **Recurrence mode**: $h_t = \bar{A} h_{t-1} + \bar{B} x_t$, then $y_t = C h_t$. $O(d_{\text{state}})$ time per token per channel ($O(d_{\text{state}} \cdot d_{\text{model}})$ across all channels), **sequential**, token $t$ depends on token $t-1$. Constant memory per token (just the state). Excellent for inference, one token at a time.
 - **Convolution mode**: precompute the kernel $\bar{K}$, then $y = \bar{K} * x$. Parallelizable across positions; with FFT, the whole convolution is $O(T \log T)$ overall. Excellent for training, where the whole sequence is available at once.
 
 This is the SSM's signature property. Attention has only the parallel mode: there is no efficient recurrent reformulation of softmax attention. Standard RNNs have only the sequential mode: the nonlinearity in the recurrence prevents parallel reduction. **SSMs have both.** Training uses convolution to saturate the GPU; inference uses recurrence to keep memory bounded.
@@ -230,7 +228,7 @@ print(f"convolution (with FFT) for training. This duality is the magic of SSMs."
 ```
 </RunnableCode>
 
-The duality is mathematically beautiful but has a limitation that becomes the central plot point of the next section. **It only works for time-invariant systems**, systems where $\bar{A}, \bar{B}, \bar{C}$ do not change across time steps. The moment we make the parameters depend on the input, the convolution mode breaks. Section 5 explains why Mamba does that anyway.
+The duality is mathematically beautiful but has a limitation: it only works for time-invariant systems, systems where $\bar{A}, \bar{B}, \bar{C}$ do not change across time steps. The moment we make the parameters depend on the input, the convolution mode breaks, and Mamba does exactly that anyway.
 
 ## From S4 to Mamba: selectivity
 
@@ -247,11 +245,11 @@ Language is selective. "The capital of France is ___" relies on remembering "Fra
 
 ### The selectivity insight
 
-Mamba (Gu and Dao, December $2023$) is one architectural change away from S4. **Make the parameters depend on the input.** Where S4 has fixed $\bar{B}, \bar{C}, \Delta$, Mamba computes them per token from $x_t$:
+Mamba (Gu and Dao, December $2023$) is one architectural change away from S4. **Make the parameters depend on the input.** Where S4 has fixed $\bar{B}, \bar{C}, \Delta$, Mamba computes $B$, $C$, and $\Delta$ per token from $x_t$:
 
-$$\bar{B}_t = \text{Linear}_B(x_t), \quad \bar{C}_t = \text{Linear}_C(x_t), \quad \Delta_t = \text{softplus}(\text{Linear}_\Delta(x_t))$$
+$$B_t = \text{Linear}_B(x_t), \quad C_t = \text{Linear}_C(x_t), \quad \Delta_t = \text{softplus}(\text{Linear}_\Delta(x_t))$$
 
-(The matrix $A$ itself is kept fixed; what varies per token is $\bar{A}_t = \exp(\Delta_t A)$ via $\Delta_t$.)
+(No bars: $B_t$ and $C_t$ are the raw, pre-discretization parameters. Discretization is then applied only to $A$ and $B$: $\bar{A}_t = \exp(\Delta_t A)$ and $\bar{B}_t = \Delta_t B_t$. $C$ is used directly, undiscretized, exactly as the runnable code below does.)
 
 What this buys is **content-sensitive dynamics**. The model can now *decide*, on a per-token basis, whether to write strongly into the state or barely at all. When $\Delta_t$ is large, $\bar{A}_t = \exp(\Delta_t A)$ moves the state strongly toward the new input, important tokens get encoded. When $\Delta_t \to 0$, $\bar{A}_t \to I$ and the state passes through nearly unchanged, irrelevant tokens are effectively ignored. The model has gained the ability to **selectively forget and selectively remember**, which is exactly what S4 lacked and exactly what makes language modeling hard.
 
@@ -267,7 +265,7 @@ Note the subscript on $\bar{A}_t$. The dynamics are now **time-varying**: the ma
 
 This is exactly what breaks the convolution mode. The duality derivation required $\bar{A}$ to be the same at every step so that $\bar{A}^j$ made sense as a single number indexing into the kernel. With $\bar{A}_t$ varying per token, there is no fixed kernel, the "kernel" would need a different value at every $(t, i)$ pair, which is the same as not having a kernel at all. **Mamba can only run as a recurrence.**
 
-This is a deliberate trade-off. Mamba gives up the convolution mode to gain selectivity. The duality, S4's signature mathematical elegance, is sacrificed for a quality gain that lets SSMs finally compete with transformers on language. It is not a flaw of Mamba; it is a chosen complexity. And it sets up the engineering problem that the next section solves: how to compute a time-varying linear recurrence efficiently on a GPU.
+This is a deliberate trade-off. Mamba gives up the convolution mode to gain selectivity. The duality, S4's signature mathematical elegance, is sacrificed for a quality gain that lets SSMs finally compete with transformers on language. It is not a flaw of Mamba; it is a chosen complexity, and it leaves an engineering problem: how to compute a time-varying linear recurrence efficiently on a GPU.
 
 <WidgetFrame title="Selective scan visualization" caption="A 16-token sequence with hand-tuned $\Delta_t$ per token. Important tokens (&quot;capital&quot;, &quot;France&quot;, &quot;Paris&quot;, &quot;weather&quot;, &quot;rainy&quot;, &quot;winter&quot;) have large $\Delta_t$; filler tokens (&quot;The&quot;, &quot;of&quot;, &quot;is&quot;, etc.) have small $\Delta_t$. The state heatmap shows 8 components evolving over time. Slow-decay components retain information across many tokens; fast-decay components forget quickly. Press play to scrub through the sequence and see selectivity in action.">
   <SelectiveScanAnimation client:visible />
@@ -329,7 +327,7 @@ print(f"\nThis is the core insight of Mamba: input-dependent dynamics.")
 ```
 </RunnableCode>
 
-Breaking the convolution mode means we need a new algorithm to compute Mamba's recurrence efficiently. Section 6 covers it.
+Breaking the convolution mode means we need a new algorithm to compute Mamba's recurrence efficiently.
 
 ## The selective scan: hardware-aware parallelism
 
@@ -351,25 +349,25 @@ This operator is **associative**: $(o_3 \circ o_2) \circ o_1 = o_3 \circ (o_2 \c
 
 The point is that **any associative operator can be parallelized**. The classic algorithm is **Blelloch's parallel scan**: an up-sweep that computes pairwise compositions in a tree (every level halves the number of remaining operators), then a down-sweep that propagates partial results back down to every position. Depth is $O(\log T)$; total work is $O(T)$. For $T = 32{,}768$, that is $15$ sequential rounds instead of $32{,}768$, orders of magnitude faster on a parallel device.
 
-This is the **selective scan**. The name "selective" reflects Mamba's input-dependent parameters; the "scan" is Blelloch's parallel scan applied to those time-varying operators. **Selective scan is the algorithm.** It exists because Mamba's selectivity broke the convolution mode and made the naive recurrence unusable on GPUs.
+This is the **selective scan**. The name "selective" reflects Mamba's input-dependent parameters; the "scan" is Blelloch's parallel scan applied to those time-varying operators. It exists because Mamba's selectivity broke the convolution mode and made the naive recurrence unusable on GPUs.
 
 ### The Mamba CUDA kernel
 
 The algorithm has to actually run efficiently on real hardware. Mamba's published artifact is not just the math: it is a **custom CUDA kernel** that implements selective scan with hardware-aware optimizations directly mirrored on FlashAttention (Chapter 10):
 
 - **State in SRAM, not HBM.** The state $h$ is kept in fast on-chip memory throughout the scan. HBM is only touched at the boundaries (inputs in, outputs out).
-- **Fused input/output projections.** The Linear layers that produce $\bar{B}_t, \bar{C}_t, \Delta_t$ and the final output projection are folded into the same CUDA kernel as the scan itself, eliminating intermediate memory writes.
+- **Fused input/output projections.** The Linear layers that produce $B_t, C_t, \Delta_t$ and the final output projection are folded into the same CUDA kernel as the scan itself, eliminating intermediate memory writes.
 - **Activation recomputation during backward.** Storing all intermediate states for the backward pass would blow the memory budget; Mamba recomputes them from the saved inputs.
 
-The engineering pattern is identical to FlashAttention. **The algorithm was largely known**, parallel scans on associative operators are textbook computer science. **The kernel made it practical.** This is the connection back to Chapter 10's "hardware-aware implementation" thesis: at the frontier, custom CUDA kernels are not optimization; they are the difference between an algorithm working and not working.
+The engineering pattern is identical to FlashAttention. The algorithm was largely known, parallel scans on associative operators are textbook computer science; the kernel is what made it practical. This is the connection back to Chapter 10's "hardware-aware implementation" thesis: at the frontier, custom CUDA kernels are not optimization; they are the difference between an algorithm working and not working.
 
-**Mamba-2 (May $2024$) goes further.** Dao and Gu reformulate selective SSMs by restricting $A$ to a scalar per channel: the recurrence becomes $h_t = \alpha_t h_{t-1} + \bar{B}_t x_t$. With that restriction, the entire computation can be expressed as a structured matmul. Modern GPUs are matmul machines, and the matrix form is $2$–$8\times$ faster than the scan kernel on actual hardware. Mamba-2 is the current state of the art for selective SSM implementations.
+Mamba-2 (May $2024$) goes further. Dao and Gu reformulate selective SSMs by restricting $A$ to a scalar per channel: the recurrence becomes $h_t = \alpha_t h_{t-1} + \bar{B}_t x_t$. With that restriction, the entire computation can be expressed as a structured matmul: $Y = M \odot (X W_C) W_B^\top X$, where $M$ is a mask applied over pairs of positions. Modern GPUs are matmul machines, and the matrix form is $2$–$8\times$ faster than the scan kernel on actual hardware. Mamba-2 is the current state of the art for selective SSM implementations.
+
+The paper's actual title is "Transformers are SSMs," and the reason is this masked-matmul form. **Softmax attention has the same shape**: $Y = \text{softmax}(QK^\top) V$ is also a mask $M$ (the softmax weights) applied over $(X W_Q)(X W_K)^\top$ before multiplying by $V$. Attention and Mamba-2's SSM form are the same computation, a structured matmul $M \odot (\text{pairwise scores})$, differing only in what structure the mask $M$ has. Attention's mask is the full, data-dependent softmax over every pair; Mamba-2's mask is **1-semiseparable**, built from cumulative products of the scalar decay $\alpha_t$, structured and fixed in form even though the values are input-dependent. This is the **Structured State Space Duality (SSD)**: attention and selective SSMs are not two competing architectures so much as two points along one family of structured-masked sequence-mixing matmuls, distinguished by the structure imposed on the mask.
 
 <Callout type="warning">
 **Misconception.** "Selective scan is the algorithm." Selective scan is **one implementation** of the underlying algorithm. The algorithm itself is "compute a time-varying linear recurrence." Mamba (December $2023$) implements it via parallel scan with a custom CUDA kernel that keeps state in SRAM. **Mamba-2 (May $2024$) reformulates the same computation as matmul**, same correctness, $2$–$8\times$ faster on modern GPUs because matmul is what GPUs are built for. The algorithm is one thing; the implementation choice is another. Treat the scan and the matrix form as siblings, not as the algorithm itself.
 </Callout>
-
-With the math and the algorithm in place, the next section steps back from the SSM layer in isolation and looks at how it composes into a full architecture.
 
 ## Mamba in practice: block structure and hybrids
 
@@ -395,21 +393,19 @@ Parameter accounting differs from a transformer block. Mamba blocks roughly matc
 
 Pure-Mamba models exist. Mamba 2.8B and 7B (Gu and Dao), Falcon Mamba 7B (TII, $2024$), Codestral Mamba (Mistral, $2024$). They are competitive, within striking distance of transformers at the same parameter scale, but **slightly underperform** dense or MoE transformers on standard language benchmarks. The gap is small but persistent.
 
-**Hybrid models often win.** **Jamba** (Lieber et al., $2024$) is the canonical example: a frontier-scale model that interleaves Mamba and transformer layers, with MoE FFNs on top of the transformer layers. The reasoning is empirical. Attention is genuinely better for some operations, in-context learning, retrieval, exact recall of demonstrations. Mamba is genuinely better for most operations, efficiency, long-context scaling, throughput. **Hybrid captures both.** The current common pattern is roughly $80\%$ Mamba layers and $20\%$ transformer layers, distributed throughout the network so that attention is available periodically without dominating compute.
+Hybrid models often win. **Jamba** (Lieber et al., $2024$) is the canonical example: a frontier-scale model that interleaves Mamba and transformer layers, with MoE FFNs on top of the transformer layers. The reasoning is empirical. Attention is genuinely better for some operations, in-context learning, retrieval, exact recall of demonstrations. Mamba is genuinely better for most operations, efficiency, long-context scaling, throughput. A hybrid captures both. Jamba's published ratio is one attention layer for every seven Mamba layers ($1$:$7$, roughly $12\%$ attention), distributed throughout the network so that attention is available periodically without dominating compute. Other hybrids occupy nearby points in the same design space: **Samba** (Ren et al. $2024$) interleaves Mamba layers with sliding-window attention instead of full attention, and **Zamba** (Glorioso et al. $2024$) shares a single attention block across the network rather than repeating full attention layers throughout.
 
-Why not pure Mamba at the frontier? The honest answer is that, as of late $2024$, evidence suggests pure-Mamba slightly underperforms transformers at comparable scale. The fixed-size state cannot perfectly capture all the in-context information that attention's growing KV cache provides. **Hybrids hedge the bet.**
+Why not pure Mamba at the frontier? The honest answer is that, as of late $2024$, evidence suggests pure-Mamba slightly underperforms transformers at comparable scale. The fixed-size state cannot perfectly capture all the in-context information that attention's growing KV cache provides. Hybrids hedge the bet.
 
 <Callout type="warning">
 **Misconception.** "SSMs don't need attention." **The best SSM-based models are hybrids.** Pure-Mamba models exist and are reasonable (Mamba 2.8B, Falcon Mamba 7B, Codestral Mamba) but do not yet match transformer quality at scale. The frontier SSM-based releases, Jamba, AI21's hybrid systems, combine Mamba layers with attention layers because each architecture excels at things the other does not. Don't expect Mamba to replace attention; expect them to coexist, with the right mix depending on the workload.
 </Callout>
 
-With the architecture sized up, the final section turns to the honest question: when should you actually choose an SSM-based model, and when should you stick with attention?
-
 ## Trade-offs: where SSMs win and lose
 
 ### Where SSMs win
 
-**Long contexts ($32$K and up.)** This is where the asymptotic advantage finally cashes out. Attention's $O(N^2)$ memory becomes a serving bottleneck; SSMs' constant-per-token memory does not. At $128$K tokens an SSM's per-token inference cost is essentially unchanged from $1$K tokens; an attention-based model's is roughly $128\times$ worse on KV cache and considerably more on compute. For tasks that genuinely require very long contexts, SSMs are not just preferable; they are often the only practical choice.
+**Long contexts ($32$K and up.)** This is where the asymptotic advantage finally cashes out. Attention's $O(T^2)$ memory becomes a serving bottleneck; SSMs' constant-per-token memory does not. At $128$K tokens an SSM's per-token inference cost is essentially unchanged from $1$K tokens; an attention-based model's is roughly $128\times$ worse on KV cache and considerably more on compute. For tasks that genuinely require very long contexts, SSMs are not just preferable; they are often the only practical choice.
 
 **Streaming and online inference.** Fixed state size means predictable, bounded memory per request and low latency per generated token. SSMs don't have a "warm up" cost as context fills; the state is always the same size. For high-throughput streaming applications, that determinism is operationally valuable.
 
@@ -417,7 +413,7 @@ With the architecture sized up, the final section turns to the honest question: 
 
 ### Where SSMs lose
 
-**Short contexts (under $\sim 8$K).** Attention's optimized matmul kernels (FlashAttention, paged attention) are faster in absolute terms than SSM kernels at typical transformer-serving sequence lengths. The crossover where SSMs win on wall-clock is meaningfully past where most production transformers operate. For chatbots and code assistants with contexts under $8$K, attention wins on raw speed.
+**Short contexts (under $\sim 7$K).** Attention's optimized matmul kernels (FlashAttention, paged attention) are faster in absolute terms than SSM kernels at typical transformer-serving sequence lengths. The crossover where SSMs win on wall-clock is meaningfully past where most production transformers operate. For chatbots and code assistants with contexts under $7$K, attention wins on raw speed.
 
 **Exact recall (needle-in-haystack).** SSMs compress all history into a fixed-size state. Attention's KV cache preserves every past token verbatim. For tasks where the model must retrieve a specific distant token, finding a "needle" hidden in a long context, attention is fundamentally better-suited than any compressing architecture, and SSMs measurably struggle on standard needle-in-a-haystack evaluations.
 
@@ -425,9 +421,9 @@ With the architecture sized up, the final section turns to the honest question: 
 
 **Standard language benchmarks.** Across a broad sweep of standard evaluations, pure-Mamba models slightly trail transformers at the same training-compute budget. The gap is small but it is real, and it is the reason frontier SSM-based deployments are hybrids rather than pure Mamba.
 
-### Bridge to Phase 11
+### The architecture-alternatives arc, complete
 
-**Phase 10 closes here.** Together with Chapter 11 (Mixture of Experts), this chapter completes the architectural-alternatives arc. MoE modifies the FFN; SSM replaces attention. Three architecture families now coexist at the frontier: **dense transformers** (Llama-3, Qwen), **MoE transformers** (Mixtral, DeepSeek-V3, reportedly GPT-4), and **SSM-based models** (mostly hybrids like Jamba). None has fully displaced the others. Each excels in different regimes.
+Part IV closes here. Together with Chapter 11 (Mixture of Experts), this chapter completes the architectural-alternatives arc. MoE modifies the FFN; SSM replaces attention. Three architecture families now coexist at the frontier: **dense transformers** (Llama-3, Qwen), **MoE transformers** (Mixtral, DeepSeek-V3, reportedly GPT-4), and **SSM-based models** (mostly hybrids like Jamba). None has fully displaced the others. Each excels in different regimes.
 
 ## Exercises
 
@@ -496,6 +492,27 @@ x = np.zeros(T); x[0] = 1.0
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Discretize once outside the loop, then run the recurrence, accumulating $h$ and reading out $y_t = C \cdot h_t$:
+
+```python
+def discrete_ssm(x, A_diag, B, C, delta):
+    A_bar = np.exp(delta * A_diag)
+    B_bar = delta * B
+    h = np.zeros(len(A_diag))
+    y = np.zeros(len(x))
+    for t in range(len(x)):
+        h = A_bar * h + B_bar * x[t]
+        y[t] = C @ h
+    return y
+```
+
+With $C$ reading component 0 ($a=-3.0$, fastest decay): `y[0]=0.100, y[5]=0.022, y[20]=0.000248` — essentially gone by $t=20$. With $C$ reading component 3 ($a=-0.1$, slowest decay): `y[0]=0.100, y[5]=0.095, y[20]=0.0819` — still 82% of the peak at $t=20$. Same impulse, same $\Delta$; the eigenvalue alone sets the memory horizon.
+
+</details>
+
 ### Exercise 2 (medium): Recurrence-convolution duality
 
 Compute the same SSM output two ways: via recurrence and via convolution. Verify they match.
@@ -503,7 +520,7 @@ Compute the same SSM output two ways: via recurrence and via convolution. Verify
 <details>
 <summary>Hint</summary>
 
-Both methods compute the same function. The recurrence runs in $O(N \cdot \text{state\_dim})$ per token (sequential). The convolution computes the kernel $\bar{K}_j = C \bar{A}^j \bar{B}$ once, then convolves: $y_t = \sum_{i} \bar{K}_{t-i} x_i$. The kernel can be FFT-accelerated for $O(N \log N)$ overall on long sequences. The two outputs should match to numerical precision.
+Both methods compute the same function. The recurrence runs in $O(\text{state\_dim})$ per token (sequential). The convolution computes the kernel $\bar{K}_j = C \bar{A}^j \bar{B}$ once, then convolves: $y_t = \sum_{i} \bar{K}_{t-i} x_i$. The kernel can be FFT-accelerated for $O(T \log T)$ overall on long sequences ($T$ = sequence length). The two outputs should match to numerical precision.
 
 </details>
 
@@ -559,6 +576,34 @@ y_rec = ssm_recurrence(x, A_diag, B, C, delta)
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+The kernel is the impulse response evaluated at each lag; the convolution is a causal weighted sum over past inputs:
+
+```python
+def compute_kernel(A_diag, B, C, delta, length):
+    A_bar = np.exp(delta * A_diag)
+    B_bar = delta * B
+    K = np.zeros(length)
+    for j in range(length):
+        K[j] = np.sum(C * (A_bar ** j) * B_bar)
+    return K
+
+def ssm_convolution(x, kernel):
+    T = len(x); L = len(kernel)
+    y = np.zeros(T)
+    for t in range(T):
+        for i in range(t + 1):
+            if t - i < L:
+                y[t] += kernel[t - i] * x[i]
+    return y
+```
+
+`Recurrence vs convolution max diff: 2.22e-16` — identical to floating-point precision. The recurrence walks the state forward one token at a time; the convolution precomputes $\bar{K}_j = C\bar{A}^j\bar{B}$ and applies it as a causal filter. Same function, two computation orders — sequential (cheap inference, one token at a time) versus parallel (cheap training, one matmul/FFT over the whole sequence).
+
+</details>
 
 ### Exercise 3 (medium): Selective SSM
 
@@ -635,6 +680,36 @@ fixed_states = fixed_delta_ssm(x, A_diag, B, C, fixed_delta)
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+$\Delta_t$ is computed fresh from $x_t$ every step, so the discretization itself becomes input-dependent:
+
+```python
+def selective_ssm(x, A_diag, B, C, W_delta=1.0):
+    T = len(x)
+    h = np.zeros(len(A_diag))
+    states = []
+    for t in range(T):
+        delta_t = softplus(W_delta * x[t])
+        A_bar = np.exp(delta_t * A_diag)
+        B_bar = delta_t * B
+        h = A_bar * h + B_bar * x[t]
+        states.append(h.copy())
+    return np.array(states)
+```
+
+With `fixed_delta = 1.436` (mean of the ten softplus values), the state norms are:
+
+```
+fixed:     [0.29, 5.91, 3.95, 8.35, 6.07, 9.92, 7.51, 11.02, 8.55, 11.83]
+selective: [0.15, 8.58, 6.59, 12.09, 9.90, 14.34, 12.09, 15.93, 13.65, 17.09]
+```
+
+Look at the filler steps (indices 0, 2, 4, 6, 8): the selective model's $\Delta_t = \text{softplus}(0.1) \approx 0.74$ is well below the fixed $\Delta = 1.436$, so $\bar A$ stays close to $1$ and the state barely decays — it *carries the previous important token forward* instead of overwriting it. The fixed-$\Delta$ model uses the same large decay on filler as on signal, so it forgets faster: its filler-to-signal decay ratio (e.g. $3.95/5.91 = 0.67$) is smaller than the selective model's ($6.59/8.58 = 0.77$). That is the mechanism, not just the raw magnitude: selectivity lets $\Delta_t$ gate how much each token is allowed to write and how much prior state survives, instead of applying one compromise rate everywhere.
+
+</details>
+
 ### Exercise 4 (hard): Parallel scan via associative operations
 
 Implement Mamba's parallel scan algorithm. Given a sequence of $(A_t, B_t x_t)$ pairs, compute the prefix product/sum efficiently using the associative composition $(A_2, b_2) \circ (A_1, b_1) = (A_2 A_1, A_2 b_1 + b_2)$.
@@ -705,4 +780,27 @@ direct = direct_recurrence(A_list, b_list, h0)
   packages={["numpy"]}
 />
 
-Whatever architecture you train, the next question is how to turn raw next-token prediction into something useful. **Phase 11 (post-training) is about that.** Chapter 13 covers supervised fine-tuning, the simplest post-training method, and the foundation for everything else. Chapter 14 covers preference optimization (RLHF, DPO, RLVR, CAI), the family of methods that turn a fine-tuned model into a chatbot. Chapter 15 covers parameter-efficient methods (LoRA, adapters). Chapter 16 covers distillation. Together they cover the practical methods that turn pre-trained models into ChatGPT-style assistants. The architecture arc is over; the *useful-model* arc begins.
+<details>
+<summary>Solution</summary>
+
+Compose $(A_t, b_t)$ into a running $(A_{\text{new}}, b_{\text{new}})$ left-to-right, then apply the composed transform to $h_0$ at every step:
+
+```python
+def scan_via_associative(A_list, b_list, h0):
+    composed_A = np.ones_like(A_list[0])
+    composed_b = np.zeros_like(b_list[0])
+    states = [h0.copy()]
+    for t in range(len(A_list)):
+        A_new = A_list[t] * composed_A
+        b_new = A_list[t] * composed_b + b_list[t]
+        composed_A, composed_b = A_new, b_new
+        h_t = composed_A * h0 + composed_b
+        states.append(h_t.copy())
+    return states
+```
+
+`Max difference: 2.26e-16` against `direct_recurrence` — floating-point identical. Composing pairs is associative, so the prefix compositions can be computed with a tree reduction (up-sweep) followed by a propagation pass (down-sweep) in $O(\log T)$ depth instead of unrolling $T$ sequential steps — this is what Mamba's CUDA kernel does, kept in SRAM to avoid the HBM round-trips a naive parallel implementation would pay.
+
+</details>
+
+Whatever architecture you train, the next question is how to turn raw next-token prediction into something useful. Part V (Chapters 13–16, post-training) is about that. Chapter 13 covers supervised fine-tuning, the simplest post-training method, and the foundation for everything else. Chapter 14 covers preference optimization (RLHF, DPO, RLVR, CAI), the family of methods that turn a fine-tuned model into a chatbot. Chapter 15 covers parameter-efficient methods (LoRA, adapters). Chapter 16 covers distillation. Together they cover the practical methods that turn pre-trained models into ChatGPT-style assistants. The architecture arc is over; the *useful-model* arc begins.

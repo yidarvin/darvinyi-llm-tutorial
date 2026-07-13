@@ -199,7 +199,7 @@ export function insightFor(d: Difficulty): InsightBlock {
       difficulty: 'easy',
       title: 'Easy problems plateau quickly',
       body: 'All techniques converge near the ceiling. Extra compute beyond a few × is wasted — the model already knows the answer.',
-      numbers: 'Direct: ~75% · Reasoning model at 100×: ~97% — a 22-point gap, mostly closed by simple CoT.',
+      numbers: 'Direct: ~75% · Reasoning model at 100×: ~93% — an 18-point gap, mostly closed by simple CoT.',
     };
   }
   if (d === 'medium') {
@@ -207,13 +207,13 @@ export function insightFor(d: Difficulty): InsightBlock {
       difficulty: 'medium',
       title: 'Medium problems reward modest compute',
       body: 'Self-consistency and best-of-N pay off; tree-of-thoughts and reasoning models keep climbing. Diminishing returns appear above ~100×.',
-      numbers: 'Direct: ~42% · Reasoning model at 100×: ~91% — a 49-point gap. CoT alone closes ~23 points.',
+      numbers: 'Direct: ~42% · Reasoning model at 100×: ~78% — a 36-point gap. CoT alone closes ~23 points.',
     };
   }
   return {
     difficulty: 'hard',
     title: 'Hard problems benefit dramatically',
-    body: 'Curves spread widely. Modern reasoning models pull 30+ points ahead of all prompting techniques. Compute scaling is *most* valuable here.',
-    numbers: 'Direct: ~12% · Reasoning model at 1000×: ~85% — a 73-point gap. CoT alone only reaches ~26%.',
+    body: 'Curves spread widely. Modern reasoning models pull well ahead of every other technique — roughly 20 points past the closest competitor (best-of-N+PRM) and 60+ points past direct generation. Compute scaling is *most* valuable here.',
+    numbers: 'Direct: ~12% · Reasoning model at 1000×: ~73% — a 61-point gap. CoT alone only reaches ~26%.',
   };
 }

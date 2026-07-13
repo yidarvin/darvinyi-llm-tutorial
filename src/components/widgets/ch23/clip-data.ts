@@ -75,13 +75,13 @@ export const QUERIES: Query[] = [
     id: 'caring',
     text: '"caring for animals"',
     x: 0.20, y: 0.55,
-    insight: '"Caring for animals" pulls in the care-related texts from cats and dogs. Even though the query mentions neither "cats" nor "dogs", CLIP\'s semantic match brings in both clusters — text-text matches dominate here.',
+    insight: '"Caring for animals" pulls in care-related content from cats and dogs. Even though the query mentions neither "cats" nor "dogs", CLIP\'s semantic match brings in items from both clusters — and the single nearest neighbor is the kitten image, not a text snippet, proof the match crosses modalities rather than staying text-to-text.',
   },
   {
     id: 'red',
     text: '"anything red"',
     x: 0.60, y: 0.62,
-    insight: 'Visual properties like color are encoded in CLIP. "Red" finds the red sports car image (literally red) and the orange-cat image (visually similar warm color). Color-based retrieval works because CLIP saw colors in millions of training pairs.',
+    insight: 'Visual properties like color are encoded in CLIP. "Red" lands closest to the cars cluster: the top-3 nearest are the car-review text and both car images, all directly about a literally red sports car. Color-based retrieval works because CLIP saw colors in millions of training pairs.',
   },
 ];
 

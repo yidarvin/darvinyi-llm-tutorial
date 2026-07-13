@@ -18,23 +18,21 @@ The pattern was first proposed in deep learning by Shazeer et al. in 2017 and gr
 
 The fundamental scaling problem of dense models can be stated in one sentence: **parameters and FLOPs per token are coupled**. A $70$B-parameter dense model uses $70$B parameters' worth of compute on every single token it processes. A hypothetical $700$B dense model would use $700$B per token. There is no way to "scale up the brain" without scaling up the per-token bill. Frontier-scale inference costs grow linearly with total parameters, and that linear scaling is the most uncomfortable economic fact about deploying ever-larger models.
 
-MoE's idea is that this coupling is not actually necessary. Not every parameter has to contribute to every token. The architecture builds **sparse activation** in directly: a model can have $N$ "experts" but only the top $k$ of them are computed for any given token. Total parameters scale with $N$ times the per-expert size; active parameters per token scale with $k$ times the per-expert size. Choosing $N = 8$ and $k = 2$ already gives a $4\times$ multiplier on capacity per dollar of inference compute. **Capacity is decoupled from compute.**
+MoE's idea is that this coupling is not actually necessary. Not every parameter has to contribute to every token. The architecture builds **sparse activation** in directly: a model can have $N$ "experts" but only the top $k$ of them are computed for any given token. Total parameters scale with $N$ times the per-expert size; active parameters per token scale with $k$ times the per-expert size. Choosing $N = 8$ and $k = 2$ already gives a $4\times$ multiplier on capacity per dollar of inference compute. Capacity is decoupled from compute.
 
 The intuition is roughly biological. A human brain does not activate every neuron for every thought: different cortical regions handle different tasks, and only the relevant ones engage. MoE applies this principle to transformers. Different experts learn to specialize through training; the router learns which expert to send each token to. After training, code tokens tend to route to one set of experts, factual tokens to another, syntax tokens to a third. Specialization emerges; it is not built in.
 
-The economic argument is what has made MoE the dominant frontier-architecture choice for open-weights models. At inference time, **active parameters drive cost**, not total parameters. Mixtral 8x7B with about $12.9$B active parameters per token routinely beats Llama-2 70B with all $70$B active. Quality-per-inference-dollar is the metric that matters in production, and on that metric MoE wins.
+The economic argument is what has made MoE the dominant frontier-architecture choice for open-weights models. At inference time, active parameters drive cost, not total parameters. Mixtral 8x7B with about $12.9$B active parameters per token routinely beats Llama-2 70B with all $70$B active. Quality-per-inference-dollar is the metric that matters in production, and on that metric MoE wins.
 
 <Callout type="note">
-**Phase 10 transition.** Phase 9 (Chapters 7–10) was a contiguous training arc: data, then loop, then scaling, then infrastructure. Phase 10 is thematic. Chapters 11 (this one) and 12 (state-space models and Mamba) cover the two major architectural alternatives to the standard dense transformer that have emerged in the last few years. Both chapters are largely independent; readers can pick based on interest. After Phase 10, the tutorial pivots into post-training (Chapters 13–16), a different texture again.
+**Part III to Part IV.** Part III (Chapters 7–10) was a contiguous training arc: data, then loop, then scaling, then infrastructure. Part IV is thematic instead. Chapters 11 (this one) and 12 (state-space models and Mamba) cover the two major architectural alternatives to the standard dense transformer that have emerged in the last few years. Both chapters are largely independent; readers can pick based on interest. After Part IV, the tutorial pivots into post-training (Chapters 13–16), a different texture again.
 </Callout>
-
-The next section introduces the MoE block, the actual architectural change that makes sparse activation possible.
 
 ## The MoE block: router + experts
 
 ### What changes
 
-The standard transformer block, from Chapter 5, is: attention, then layer norm, then a dense feed-forward network, then another layer norm. Residual connections wrap each sub-block. The MoE block is: attention, then layer norm, then an **MoE layer**, then another layer norm. The only difference is the middle component. Attention is unchanged. Residuals are unchanged. Layer norms are unchanged. **One sub-block out of the block, one sub-block in.**
+The standard transformer block, from Chapter 5, is: attention, then layer norm, then a dense feed-forward network, then another layer norm. Residual connections wrap each sub-block. The MoE block is: attention, then layer norm, then an **MoE layer**, then another layer norm. The only difference is the middle component. Attention is unchanged. Residuals are unchanged. Layer norms are unchanged. One sub-block out of the block, one sub-block in.
 
 The MoE layer itself has two components. The first is a small **router** (sometimes called the gating network), a single linear layer that produces one logit per expert. The second is a collection of $N$ separate **experts**, each itself a full FFN with its own parameter set. The router decides; the experts compute.
 
@@ -45,23 +43,23 @@ The minimalism of the swap matters. Everything that took Chapters 4–6 to build
 For a standard FFN, the equation is:
 
 $$
-\text{FFN}(x) = W_2 \cdot \text{GeLU}(W_1 x)
+\text{FFN}(x) = W_2 \cdot \sigma(W_1 x)
 $$
 
-One pass through, all parameters used.
+where $\sigma$ is a nonlinearity (GeLU in most production transformers; the runnable demo below uses ReLU for simplicity). One pass through, all parameters used.
 
 For the MoE layer, the equation generalizes to a weighted sum of expert outputs, where most weights are zero:
 
 <Equation label="11.moe">
-$$\text{MoE}(x) = \sum_{i \in \text{top}_k(\ell)} g_i(x) \cdot \text{FFN}_i(x), \quad g_i(x) = \text{softmax}(W_r x)_i$$
+$$\text{MoE}(x) = \sum_{i \in \text{top}_k(\ell)} g_i(x) \cdot \text{FFN}_i(x), \quad g_i(x) = \frac{\exp(\ell_i)}{\sum_{j \in \text{top}_k(\ell)} \exp(\ell_j)}$$
 </Equation>
 
 The router weights $W_r \in \mathbb{R}^{N \times d}$ produce logits $\ell = W_r x \in \mathbb{R}^N$, one per expert. The $\text{top}_k(\ell)$ operator selects the indices of the $k$ largest logits; softmax is then taken over only those $k$ values, producing gate values $g_i(x)$ that sum to $1$ across the selected experts. Each selected expert $\text{FFN}_i$ runs on $x$; the outputs are weighted-summed with the gate values to produce the layer's output.
 
-The critical observation is that only $k$ of the $N$ FFNs are ever actually computed. The remaining $N - k$ have $g_i = 0$ and contribute nothing. They do not need to be invoked at all. **FLOPs per token scale with $k$, independent of $N$.**
+The critical observation is that only $k$ of the $N$ FFNs are ever actually computed. The remaining $N - k$ have $g_i = 0$ and contribute nothing. They do not need to be invoked at all. FLOPs per token scale with $k$, independent of $N$.
 
 <Callout type="warning">
-**Misconception.** "MoE has more parameters, so it must use more compute per token." Wrong. **MoE decouples parameters from compute.** Total parameters scale with $N$ (the number of experts); FLOPs per token scale with $k$ (the number of top-$k$ active experts). Doubling $N$ doubles total parameters and **does not change FLOPs per token** at all. The other $N - k$ experts are not computed, their FFNs sit idle in memory. This decoupling is the entire reason MoE matters.
+**Misconception.** "MoE has more parameters, so it must use more compute per token." Wrong. MoE decouples parameters from compute. Total parameters scale with $N$ (the number of experts); FLOPs per token scale with $k$ (the number of top-$k$ active experts). Doubling $N$ doubles total parameters and does not change FLOPs per token at all. The other $N - k$ experts are not computed, their FFNs sit idle in memory. This decoupling is the entire reason MoE matters.
 </Callout>
 
 A runnable forward pass makes the mechanics concrete. The implementation below is a naive numpy version, clear, not fast, but it shows how routing, selection, and weighted combination compose into a single MoE layer.
@@ -116,19 +114,18 @@ router_W = np.random.normal(0, 0.1, (num_experts, d_model))
 expert_W1s = np.random.normal(0, 0.1, (num_experts, d_ffn, d_model))
 expert_W2s = np.random.normal(0, 0.1, (num_experts, d_model, d_ffn))
 
-output, indices, gates = moe_forward(x, router_W, expert_W1s, expert_W2s, k=2)
+k = 2
+output, indices, gates = moe_forward(x, router_W, expert_W1s, expert_W2s, k=k)
 
 print("Top-2 expert indices per token:")
 for t in range(seq_len):
     print(f"  Token {t}: experts {indices[t].tolist()} "
           f"with gates {gates[t].round(3).tolist()}")
 
-print(f"\nSparsity: {2}/{num_experts} = {2/num_experts:.0%} "
+print(f"\nSparsity: {k}/{num_experts} = {k/num_experts:.0%} "
       f"of experts active per token.")
 ```
 </RunnableCode>
-
-Section 3 looks more carefully at the routing function, the small linear layer that decides, per token, which experts get called.
 
 ## Top-k routing: the gating function
 
@@ -156,11 +153,11 @@ The bookkeeping for an MoE model has two distinct numbers that matter for comple
 
 **Total parameters** = $N$ experts $\times$ per-expert FFN size, plus the shared attention, embedding, output, and router parameters that every layer has anyway. For Mixtral 8x7B: about $46.7$B parameters total, with $8$ experts contributing roughly $5.6$B each to the FFN portion of every MoE layer.
 
-**Active parameters per token** = $k$ experts $\times$ per-expert FFN size, plus the shared attention/embedding/output/router parameters. For Mixtral: about $12.9$B. The other $5.6$B $\times 6 \approx 33.8$B of expert parameters are loaded in memory but not invoked for that token.
+**Active parameters per token** = $k$ experts $\times$ per-expert FFN size, plus the shared attention/embedding/output/router parameters. For Mixtral: about $12.9$B. The other $5.6$B $\times 6 \approx 33.6$B of expert parameters are loaded in memory but not invoked for that token.
 
 **Sparsity ratio** = $k / N$. Mixtral is $2/8 = 25\%$, only a quarter of expert parameters are active per token.
 
-The inference economics fall directly out of this split. GPU memory needs the **total** parameter count, because every expert must be resident in memory to be ready to run on any token. Per-token compute is set by the **active** count. **Memory bandwidth and FFN FLOPs are decoupled**: a Mixtral inference deployment must hold $46.7$B parameters but pays only $12.9$B parameters' worth of compute per token, which is cheaper than serving Llama-2 70B even though Mixtral has more total capacity.
+The inference economics fall directly out of this split. GPU memory needs the **total** parameter count, because every expert must be resident in memory to be ready to run on any token. Per-token compute is set by the **active** count. Memory bandwidth and FFN FLOPs are decoupled: a Mixtral inference deployment must hold $46.7$B parameters but pays only $12.9$B parameters' worth of compute per token, which is cheaper than serving Llama-2 70B even though Mixtral has more total capacity.
 
 <WidgetFrame title="MoE routing visualizer" caption="16 hand-tuned tokens flow into an MoE layer with 8 experts. Curves show top-k routing; thicker curves = higher gate values. Hover any token to highlight its routing; hover any expert to see all routed tokens. Toggle top-k between 1, 2, and 4 to see how routing decisions change. Expert 4 is deliberately under-utilized, a real failure mode the auxiliary loss is designed to prevent. Note: real expert specialization is messier than shown; this widget hand-tunes the routing for pedagogical clarity.">
   <MoERoutingVisualizer client:visible />
@@ -170,7 +167,7 @@ The inference economics fall directly out of this split. GPU memory needs the **
 **Misconception.** "Mixtral 8x7B is $56$B parameters used per inference." Wrong on both counts. **Total** is $46.7$B, not $56$B: experts share attention, embedding, and output layers, so the parameter count is less than $8 \times 7$B even on the FFN side. **Active per token** is roughly $12.9$B (top-2 of $8$ experts in each MoE layer). The active-per-token number is what determines inference cost, and on that basis Mixtral is cheaper to serve than Llama-2 70B despite having a larger headline parameter count.
 </Callout>
 
-Routing decides who does the work. But what happens when the router gets it wrong, when nothing forces all experts to be used and the router collapses onto a favorite few? Section 4.
+Routing decides who does the work. But what happens when the router gets it wrong, when nothing forces all experts to be used and the router collapses onto a favorite few?
 
 ## Load balancing: the practical hard problem
 
@@ -246,7 +243,7 @@ print("  This is the central training signal that prevents router collapse.")
 ```
 </RunnableCode>
 
-Even with balanced routing on average, individual batches can be uneven. Section 5 asks what happens when an expert is asked to do more work than it can fit in its compute budget.
+Even with balanced routing on average, individual batches can be uneven, raising the question of what happens when an expert is asked to do more work than it can fit in its compute budget.
 
 ## Expert capacity and dropped tokens
 
@@ -270,7 +267,7 @@ The auxiliary loss interacts with capacity in a useful way. The more balanced th
 Dropped tokens are an unusual phenomenon in machine learning: the model literally skips computation for some inputs. The residual connection saves the day (the token's hidden state passes through unchanged), but the quality cost is real. Modern MoE training carefully tunes capacity so that drop rates stay below $1$–$2\%$, and inference frameworks generally configure $\rho = 1.0$ knowing that small drop counts are acceptable for the throughput benefit.
 </Callout>
 
-With the architectural pieces established (block structure, routing, balance, capacity), Section 6 surveys the modern variants that have shaped MoE practice.
+With the architectural pieces established (block structure, routing, balance, capacity), the modern variants that have shaped MoE practice follow.
 
 ## Modern MoE variants
 
@@ -284,15 +281,17 @@ GLaM (Generalist Language Model) used **top-2 routing** at $1.2$T total paramete
 
 ### Mixtral 8x7B (2024)
 
-Mixtral 8x7B was the **open-weights breakthrough**. Eight experts per MoE layer, top-2 routing, $46.7$B total parameters and about $12.9$B active per token. Mistral released the weights publicly in January $2024$, and the model performed comparably to Llama-2 70B at a fraction of the inference cost. The release made MoE serving infrastructure (vLLM, Mistral.rs, DeepSpeed-MII) a first-class concern in the open-source community and established that production-quality MoE was deployable, not just trainable in research papers.
+Mixtral 8x7B was the **open-weights breakthrough**. Eight experts per MoE layer, top-2 routing, $46.7$B total parameters and about $12.9$B active per token. Mistral released the weights (via a magnet-link torrent) in December $2023$, with the paper following in January $2024$, and the model performed comparably to Llama-2 70B at a fraction of the inference cost. The release made MoE serving infrastructure (vLLM, Mistral.rs, DeepSpeed-MII) a first-class concern in the open-source community and established that production-quality MoE was deployable, not just trainable in research papers.
 
 ### DeepSeek-MoE (2024)
 
-DeepSeek-MoE pushed the architecture in two directions. First, **fine-grained experts**: many smaller experts (256+ per layer) rather than fewer large ones. Specialization is finer, and the increased granularity gives the router more freedom to combine expertise. Second, **shared experts**: some experts always run for every token, capturing features that are common across all inputs, while the routed experts handle specialization. The combination outperforms standard MoE at the same total parameter count and has become the template for modern Chinese-frontier MoE training.
+DeepSeek-MoE pushed the architecture in two directions. First, **fine-grained experts**: many smaller experts (64 routed experts per layer, versus Mixtral's 8) rather than fewer large ones. Specialization is finer, and the increased granularity gives the router more freedom to combine expertise. Second, **shared experts**: a couple of experts always run for every token, capturing features that are common across all inputs, while the routed experts handle specialization. The combination outperforms standard MoE at the same total parameter count and has become the template for modern Chinese-frontier MoE training; DeepSeek-V3 later pushed the fine-grained-expert count further still, to 256 routed experts per layer.
 
 ### DeepSeek-V3 (December 2024)
 
-DeepSeek-V3 took the DeepSeek-MoE recipe to the frontier: $671$B total parameters, $37$B active per token. It is, as of late $2024$, the current open-weights state of the art on most benchmarks. Notably, it dispenses with the explicit auxiliary loss in favor of **auxiliary-loss-free load balancing**, a bias-adjustment scheme that nudges router logits toward balance without adding a separate loss term. Reports indicate it works better than the classic Switch Transformer auxiliary loss, suggesting that the load-balancing problem is genuinely still being refined.
+DeepSeek-V3 took the DeepSeek-MoE recipe to the frontier: $671$B total parameters, $37$B active per token. It was, as of late $2024$, the open-weights state of the art on most benchmarks. Notably, it dispenses with the explicit auxiliary loss in favor of **auxiliary-loss-free load balancing**, a bias-adjustment scheme that nudges router logits toward balance without adding a separate loss term. Reports indicate it works better than the classic Switch Transformer auxiliary loss, suggesting that the load-balancing problem is genuinely still being refined.
+
+The frontier kept moving on exactly this recipe. DeepSeek itself shipped **DeepSeek-V4** in April $2026$ (open weights, MIT-licensed): a V4-Pro variant at $1.6$T total / $49$B active parameters and a smaller V4-Flash at $284$B total / $13$B active, both with a $1$M-token context window, continuing the fine-grained-expert, loss-free-balancing template set by V3. By mid-$2026$, independent benchmarks (Artificial Analysis's Intelligence Index) put Z.ai's GLM-5.2 ($753$B total, about $40$B active, MIT-licensed, released June $2026$) ahead of DeepSeek-V4-Pro, with Moonshot's Kimi K2.6 (roughly $1$T total, $32$B active) also in the same tier. As of $2026$-$07$-$13$, "the open-weights frontier" names a cluster of Chinese-lab MoE releases rather than any single model, and whichever one leads will likely change again within months; DeepSeek-V3 remains the right teaching example for the loss-free-balancing technique, but it is a $2024$ snapshot, not the current state of the art.
 
 The parameter-counting math for an MoE configuration is short enough to write out. The function below computes total and active parameters for a given config and applies it to Mixtral 8x7B and Llama-2 70B for comparison.
 
@@ -307,7 +306,8 @@ def moe_parameter_count(num_experts, k, d_model,
     # Shared per-layer params (attention + layer norms)
     attn_params = 4 * d_model * d_model          # Q, K, V, O projections
     ln_params = 4 * d_model                       # 2 LayerNorms × 2 params
-    ffn_per_expert = 2 * d_model * d_ffn
+    # SwiGLU FFN (Mixtral/Llama-style): gate (W1), up (W3), down (W2) projections
+    ffn_per_expert = 3 * d_model * d_ffn
     router_params = num_experts * d_model
 
     moe_layer_total = (attn_params + ln_params
@@ -336,8 +336,10 @@ print("Llama-2 70B (dense):")
 print(f"  Total params:  {dense_total/1e9:.1f}B")
 print(f"  Active params: {dense_active/1e9:.1f}B (same as total)\n")
 
-print("→ Mixtral uses ~12B params per token; Llama-2 70B uses 70B.")
+print("→ Mixtral uses ~13B params per token; Llama-2 70B uses 70B.")
 print("  Mixtral has lower per-token inference cost despite more total capacity.")
+print("  (These are simplified estimates: real embeddings, tied weights, and Llama-2's")
+print("   grouped-query attention are not modeled here, so exact published figures differ.)")
 ```
 </RunnableCode>
 
@@ -345,43 +347,43 @@ print("  Mixtral has lower per-token inference cost despite more total capacity.
   <ActiveVsTotalParams client:visible />
 </WidgetFrame>
 
-The progression from Switch (top-1, $2021$) to GLaM (top-2, $2021$) to Mixtral (top-2 open-weights, $2024$) to DeepSeek-V3 (loss-free balancing, late $2024$) is a clean four-step story. Each step solved a different practical problem: Switch made sparse scaling work at all, GLaM established top-2 as standard, Mixtral made MoE production-ready in open weights, DeepSeek-V3 pushed it to frontier scale with refined balancing. Section 7 turns to the honest accounting of why MoE remains harder to use than dense models.
+The progression from Switch (top-1, $2021$) to GLaM (top-2, $2021$) to Mixtral (top-2 open-weights, $2024$) to DeepSeek-V3 (loss-free balancing, late $2024$) is a clean four-step story. Each step solved a different practical problem: Switch made sparse scaling work at all, GLaM established top-2 as standard, Mixtral made MoE production-ready in open weights, DeepSeek-V3 pushed it to frontier scale with refined balancing. What remains is the honest accounting of why MoE is harder to use than dense models.
 
 ## Why MoE is hard
 
 ### Training instability
 
-MoE training is notoriously harder to keep stable than dense training, and the root causes are specific to the architecture. **Router gradients are noisy.** Each token sees only $k$ of the $N$ experts, the routing decision is discrete, and the gradient that reaches the router has to flow through the soft gate values rather than the hard top-$k$ selection. The signal is thin.
+MoE training is notoriously harder to keep stable than dense training, and the root causes are specific to the architecture. Router gradients are noisy: each token sees only $k$ of the $N$ experts, the routing decision is discrete, and the gradient that reaches the router has to flow through the soft gate values rather than the hard top-$k$ selection. The signal is thin.
 
-**Router z-loss** (introduced in ST-MoE, $2022$) adds a penalty on the magnitude of router logits, preventing them from drifting to extreme values that destabilize the softmax. **Numerical precision matters more than for dense training:** router computations must be in higher precision (FP32) even when the rest of the model is in BF16, because the softmax over a small number of values amplifies any precision loss into a routing decision change. **Auxiliary loss tuning is delicate**: the $\alpha$ coefficient must be neither too large (which dominates the language-modeling signal) nor too small (which permits collapse).
+**Router z-loss** (introduced in ST-MoE, $2022$) adds a penalty on the magnitude of router logits, preventing them from drifting to extreme values that destabilize the softmax. Numerical precision matters more than for dense training: router computations must be in higher precision (FP32) even when the rest of the model is in BF16, because the softmax over a small number of values amplifies any precision loss into a routing decision change. Auxiliary loss tuning is delicate: the $\alpha$ coefficient must be neither too large (which dominates the language-modeling signal) nor too small (which permits collapse).
 
 ### Serving complexity
 
-MoE serving is genuinely different from dense serving. **All experts must be resident in GPU memory**: total parameters drive memory requirements, even though only a fraction of them are computed per token. A Mixtral inference cluster needs $46.7$B parameters' worth of HBM whether it is processing one token per second or a million.
+MoE serving is genuinely different from dense serving. All experts must be resident in GPU memory: total parameters drive memory requirements, even though only a fraction of them are computed per token. A Mixtral inference cluster needs $46.7$B parameters' worth of HBM whether it is processing one token per second or a million.
 
-**Per-batch routing decisions** mean that every forward pass has unique expert assignments. Batching efficiency is harder to maintain because the experts a batch needs are not known until the router runs. **All-to-all collectives** appear in distributed MoE serving: when experts are sharded across GPUs, tokens must be sent to the GPU hosting their assigned expert. Network bandwidth matters for inference, not just for training.
+Per-batch routing decisions mean that every forward pass has unique expert assignments. Batching efficiency is harder to maintain because the experts a batch needs are not known until the router runs. **All-to-all collectives** appear in distributed MoE serving: when experts are sharded across GPUs, tokens must be sent to the GPU hosting their assigned expert. Network bandwidth matters for inference, not just for training.
 
 Specialized inference engines (**vLLM**, **Mistral.rs**, **DeepSpeed-MII**) have evolved with MoE-specific optimizations: continuous batching that handles expert load imbalance, KV cache management aware of expert parallelism, fused routing kernels. Running an MoE model with a stock dense inference path is technically possible but leaves substantial throughput on the table.
 
 ### Fine-tuning is harder
 
-Post-training MoE models is harder than post-training dense models for a structural reason: **each expert sees roughly $1/N$ of the data**. A fine-tuning corpus of $10$K examples becomes effectively $\sim 1250$ examples per expert in an $8$-expert model with top-2 routing. Gradient signal per expert is thinner, training is noisier, and overfitting risk is higher.
+Post-training MoE models is harder than post-training dense models for a structural reason: each expert sees roughly $k/N$ of the data. A fine-tuning corpus of $10$K examples becomes effectively $\sim 2500$ examples per expert in an $8$-expert model with top-2 routing. Gradient signal per expert is thinner, training is noisier, and overfitting risk is higher.
 
-**Expert routing can also shift** during fine-tuning. A pre-trained router that has learned to specialize on natural-text patterns may re-route in unexpected ways when shown fine-tuning data, breaking the specialization that made the model good in the first place. The modern remedy is to **freeze the router during fine-tuning** and train only the experts, or to use parameter-efficient methods (Chapter 15) that touch only a small fraction of expert parameters.
+Expert routing can also shift during fine-tuning. A pre-trained router that has learned to specialize on natural-text patterns may re-route in unexpected ways when shown fine-tuning data, breaking the specialization that made the model good in the first place. The modern remedy is to freeze the router during fine-tuning and train only the experts, or to use parameter-efficient methods (Chapter 15) that touch only a small fraction of expert parameters.
 
 <Callout type="warning">
-**Misconception.** "MoE always outperforms dense models." Wrong. **MoE wins on parameters-per-FLOP but loses on parameters-per-quality.** At the *same training compute*, MoE typically matches or modestly beats a dense model, that is the headline result. But the quality scaling per *parameter* is worse: a $100$B MoE does not necessarily beat a $100$B dense model. The correct comparison is at equal training compute or equal inference cost, not at equal parameter count.
+**Misconception.** "MoE always outperforms dense models." Wrong. MoE wins on parameters-per-FLOP but loses on parameters-per-quality. At the *same training compute*, MoE typically matches or modestly beats a dense model, that is the headline result. But the quality scaling per *parameter* is worse: a $100$B MoE does not necessarily beat a $100$B dense model. The correct comparison is at equal training compute or equal inference cost, not at equal parameter count.
 </Callout>
 
 <Callout type="warning">
-**Misconception.** "MoE replaces dense models." Wrong. **They coexist.** Dense is simpler to train, simpler to serve, and simpler to fine-tune; MoE is better at very large scale where inference cost dominates. Llama-3 405B is dense; DeepSeek-V3 is MoE. Both are frontier-class models, and the choice between them depends on use case, infrastructure, and team expertise, not on which architecture is "better" in the abstract.
+**Misconception.** "MoE replaces dense models." Wrong. They coexist. Dense is simpler to train, simpler to serve, and simpler to fine-tune; MoE is better at very large scale where inference cost dominates. Llama-3 405B is dense; DeepSeek-V3 is MoE. Both are frontier-class models, and the choice between them depends on use case, infrastructure, and team expertise, not on which architecture is "better" in the abstract.
 </Callout>
 
 ## What we've covered: and what's next
 
-This chapter introduced the MoE block, router plus $N$ experts replacing the dense FFN, and worked through the math of top-$k$ routing, the central practical problem of load balancing via auxiliary loss, the bookkeeping of expert capacity and dropped tokens, the modern variants from Switch through DeepSeek-V3, and the honest accounting of why MoE training, serving, and fine-tuning are all harder than their dense counterparts. The pedagogical claim is one sentence: **MoE is the architectural pattern that decouples capacity from compute**, scaling total parameters with the number of experts while keeping per-token FLOPs proportional only to the top-$k$ active subset.
+This chapter introduced the MoE block, router plus $N$ experts replacing the dense FFN, and worked through the math of top-$k$ routing, the central practical problem of load balancing via auxiliary loss, the bookkeeping of expert capacity and dropped tokens, the modern variants from Switch through DeepSeek-V3, and the honest accounting of why MoE training, serving, and fine-tuning are all harder than their dense counterparts. The pedagogical claim is one sentence: MoE is the architectural pattern that decouples capacity from compute, scaling total parameters with the number of experts while keeping per-token FLOPs proportional only to the top-$k$ active subset.
 
-MoE wins where very large total capacity and manageable inference cost both matter. The "sweet spot" for frontier open-weights models in $2024$ (Mixtral, DeepSeek-V3) has been exactly that combination. MoE loses on simplicity. If your use case does not need more than roughly $50$B effective capacity, dense models are easier to train, easier to serve, and very nearly as good.
+MoE wins where very large total capacity and manageable inference cost both matter. The "sweet spot" for frontier open-weights models in $2024$ (Mixtral, DeepSeek-V3) was exactly that combination, and the pattern has held as the frontier moved to larger fine-grained MoEs (DeepSeek-V4, GLM-5.2, Kimi K2.6, as of mid-$2026$). MoE loses on simplicity. If your use case does not need more than roughly $50$B effective capacity, dense models are easier to train, easier to serve, and very nearly as good.
 
 ## Exercises
 
@@ -446,6 +448,33 @@ expert_W2s = np.random.normal(0, 0.1, (num_experts, d_model, d_ffn))
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Route by the top-$k$ logits, softmax only over those (not the full vector), and combine each selected expert's FFN output weighted by its gate:
+
+```python
+import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def moe_forward(x, router_W, expert_W1s, expert_W2s, k=2):
+    logits = x @ router_W.T
+    idx = np.argsort(-logits)[:k]              # top-k indices, descending
+    gates = softmax(logits[idx])                # softmax over selected logits only
+    out = np.zeros_like(x)
+    for i, g in zip(idx, gates):
+        h = np.maximum(x @ expert_W1s[i].T, 0)   # ReLU
+        out += g * (h @ expert_W2s[i].T)
+    return out, idx, gates
+```
+
+With the seeded setup: top-1 selects expert `[3]` with gate `[1.]`; top-2 selects experts `[3, 2]` with gates `[0.548, 0.452]`, which sum to 1.
+
+</details>
+
 ### Exercise 2 (medium): Parameter counting (Mixtral 8x7B verification)
 
 Compute total and active parameters for an MoE transformer with a given config. Verify against Mixtral 8x7B's published numbers ($46.7$B total, $12.9$B active).
@@ -456,7 +485,7 @@ Compute total and active parameters for an MoE transformer with a given config. 
 Per MoE layer:
 - Attention: $4 d^2$ (Q, K, V, O projections)
 - LayerNorms: $\approx 4d$
-- Per-expert FFN: $2 d \cdot d_{\text{ffn}}$
+- Per-expert FFN (SwiGLU: gate, up, down projections): $3 d \cdot d_{\text{ffn}}$
 - Router: $N \cdot d$
 
 Total layer params (all experts) = attn $+$ LN $+ N \cdot \text{FFN}_{\text{per-expert}}$ $+$ router.
@@ -476,8 +505,8 @@ For Mixtral 8x7B: $d = 4096$, $d_{\text{ffn}} = 14336$, $N = 8$, $k = 2$, $L = 3
     attn = 4 * d_model * d_model
     # LayerNorms: 4 * d_model per block
     ln = 4 * d_model
-    # FFN per expert: 2 * d_model * d_ffn
-    ffn_per_expert = 2 * d_model * d_ffn
+    # FFN per expert (SwiGLU: gate + up + down projections): 3 * d_model * d_ffn
+    ffn_per_expert = 3 * d_model * d_ffn
     # Router: num_experts * d_model
     router = num_experts * d_model
 
@@ -507,11 +536,35 @@ For Mixtral 8x7B: $d = 4096$, $d_{\text{ffn}} = 14336$, $N = 8$, $k = 2$, $L = 3
 # )
 # print(f"\\nLlama-2 70B (dense):")
 # print(f"  Total = Active = {total_dense/1e9:.1f}B")
-# print(f"\\n-> Mixtral has ~67% the total params and ~18% the active params of Llama-2 70B.")
-# print(f"   Same memory footprint as Llama-2 13B; quality closer to Llama-2 70B.")
+# print(f"\\n-> Mixtral has ~61% the total params and ~17% the active params of Llama-2 70B.")
+# print(f"   Same per-token compute as Llama-2 13B (active ~13B); memory footprint of a ~47B model; quality closer to Llama-2 70B.")
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Total counts every expert's FFN; active counts only the top-$k$ FFNs actually run per token. Everything else (attention, layernorms, router, embeddings) is dense and counted once either way:
+
+```python
+def count_moe_params(num_layers, d_model, d_ffn, num_experts, top_k, vocab_size=32000):
+    attn = 4 * d_model * d_model
+    ln = 4 * d_model
+    ffn_per_expert = 3 * d_model * d_ffn
+    router = num_experts * d_model
+
+    layer_total = attn + ln + num_experts * ffn_per_expert + router
+    layer_active = attn + ln + top_k * ffn_per_expert + router
+
+    total = num_layers * layer_total + 2 * vocab_size * d_model
+    active = num_layers * layer_active + 2 * vocab_size * d_model
+    return total, active
+```
+
+Mixtral 8x7B (computed): total = 47.5B (published: 46.7B), active = 13.7B (published: 12.9B), sparsity = 29%. Llama-2 70B dense: total = active = 78.4B. So Mixtral has ~61% of Llama-2 70B's total params and ~17% of its active params, for quality closer to the 70B model — the payoff of sparsity.
+
+</details>
 
 ### Exercise 3 (medium): Auxiliary load balance loss
 
@@ -574,6 +627,24 @@ collapsed_assign = np.argmax(collapsed_probs, axis=-1)
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+$f_i$ is a hard count (from argmax assignments), $P_i$ is a soft average (from the full softmax) — mixing a hard and soft signal is what makes this loss differentiable despite argmax being involved:
+
+```python
+import numpy as np
+
+def aux_load_balance_loss(router_probs, expert_assignments, num_experts, alpha=0.01):
+    f = np.bincount(expert_assignments, minlength=num_experts) / len(expert_assignments)
+    P = router_probs.mean(axis=0)
+    return alpha * num_experts * np.sum(f * P)
+```
+
+With the seeded setup: balanced routing loss = 0.01001 (close to the theoretical minimum $\alpha \cdot N \cdot N \cdot (1/N)^2 = \alpha = 0.01$), collapsed routing loss = 0.03841, a 3.84x ratio — collapse is heavily penalized.
+
+</details>
+
 ### Exercise 4 (hard): Expert capacity and dropped tokens
 
 Simulate expert capacity. Given a batch of routing decisions, count how many tokens are dropped at each capacity factor. Sweep $\rho$ from $0.5$ to $2.0$ and report the drop rate at each value.
@@ -630,14 +701,47 @@ print(f"\\nDrop rate at various capacity factors:")
 #     drops, rate = simulate_drops(assignments, num_experts, rho)
 #     print(f"  rho={rho}: {drops} drops ({rate*100:.1f}%)")
 
-# At rho=1.0: imperfect routing -> some drops
-# At rho=1.25: most drops eliminated; small efficiency cost
-# At rho=2.0: zero drops but ~50% of capacity wasted
+# At rho=1.0: imperfect routing -> ~29% of tokens dropped
+# At rho=1.25: drop rate roughly a third lower (~20%); some capacity wasted
+# At rho=2.0: drop rate down to ~7% -- this weight skew is severe enough that
+#   even generous capacity doesn't reach zero drops; real router distributions
+#   trained with an aux loss are far less skewed than this synthetic example
 # Modern training: rho ~ 1.25 (sweet spot)
 `}
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Count tokens per expert with `np.bincount`, then any excess over capacity is dropped:
+
+```python
+import numpy as np
+
+def simulate_drops(expert_assignments, num_experts, capacity_factor):
+    num_tokens = len(expert_assignments)
+    capacity = int(capacity_factor * num_tokens / num_experts)
+    counts = np.bincount(expert_assignments, minlength=num_experts)
+    drops = sum(max(0, c - capacity) for c in counts)
+    return drops, drops / num_tokens
+```
+
+With the seeded Zipf-like weights (`[3.0, 2.0, 1.5, 1.0, 1.0, 0.8, 0.5, 0.3]`, normalized), tokens per expert come out to `[318, 179, 167, 85, 92, 80, 57, 22]` against a perfect balance of 125:
+
+| rho | drops | rate |
+|---|---|---|
+| 0.5 | 549 | 54.9% |
+| 0.8 | 364 | 36.4% |
+| 1.0 | 289 | 28.9% |
+| 1.25 | 196 | 19.6% |
+| 1.5 | 131 | 13.1% |
+| 2.0 | 68 | 6.8% |
+
+Even at $\rho = 2.0$ drops don't hit zero, because this synthetic skew is severe (the busiest expert gets 2.5x the fair share); real trained routers, kept balanced by the auxiliary loss, don't skew this hard.
+
+</details>
+
 Chapter 12 takes the other architectural path. MoE keeps the attention mechanism intact and changes only what happens after it; **state-space models** like Mamba replace attention itself, trading attention's $O(N^2)$ memory and compute for $O(N)$ throughout. A different bet on what is actually holding transformers back. Together, Chapters 11 and 12 cover the two major architectural alternatives to standard dense transformers that have emerged in the last few years.
 
-After Chapter 12 closes Phase 10, the tutorial enters post-training (Chapters 13–16), taking a pre-trained model (dense or MoE) and turning it into something useful through SFT, RLHF, DPO, and the rest of the post-training stack.
+After Chapter 12 closes Part IV, the tutorial enters post-training (Chapters 13–16), taking a pre-trained model (dense or MoE) and turning it into something useful through SFT, RLHF, DPO, and the rest of the post-training stack.

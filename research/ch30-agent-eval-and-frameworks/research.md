@@ -1,6 +1,6 @@
 # Chapter 30 — Agent eval and frameworks: research
 
-> **THE FINAL CHAPTER OF THE CURRICULUM.** Curated source material for Chapter 30's build sessions. The closing chapter brings Phase 14's evaluation discipline (Ch 26) to bear on Phase 15's agent systems (Ch 27-29) — and then takes stock of the full 30-chapter journey. **The chapter that closes the curriculum.** Agent evaluation is harder than LLM evaluation because: tasks are complex; success criteria are multi-dimensional (correctness, cost, latency, safety); benchmarks are slow to develop; production-readiness includes observability, deployment, and ongoing monitoring. **Topics:** why agent eval is structurally harder than LLM eval; the 2025 agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, τ-bench, BrowseComp); evaluation methodologies (success rate, partial-credit, cost-quality Pareto frontiers, human-judged scoring); production observability frameworks (LangSmith, Helicone, Braintrust, Anthropic's evaluation tools); deployment patterns and production-readiness checklists; **and the curriculum's closing retrospective**: 30 chapters from numpy primitives to agent systems in production. **Two-topic chapter**; uses the **5-file cadence**. **The chapter that closes the journey.**
+> **THE FINAL CHAPTER OF THE CURRICULUM.** Curated source material for Chapter 30's build sessions. The closing chapter brings Part VIII's evaluation discipline (Ch 26) to bear on Part IX's agent systems (Ch 27-29) — and then takes stock of the full 30-chapter journey. **The chapter that closes the curriculum.** Agent evaluation is harder than LLM evaluation because: tasks are complex; success criteria are multi-dimensional (correctness, cost, latency, safety); benchmarks are slow to develop; production-readiness includes observability, deployment, and ongoing monitoring. **Topics:** why agent eval is structurally harder than LLM eval; the 2025 agent benchmark landscape (SWE-bench Verified, GAIA, OSWorld, τ-bench, BrowseComp); evaluation methodologies (success rate, partial-credit, cost-quality Pareto frontiers, human-judged scoring); production observability frameworks (LangSmith, Helicone, Braintrust, Anthropic's evaluation tools); deployment patterns and production-readiness checklists; **and the curriculum's closing retrospective**: 30 chapters from numpy primitives to agent systems in production. **Two-topic chapter**; uses the **5-file cadence**. **The chapter that closes the journey.**
 
 ---
 
@@ -37,7 +37,7 @@
 4. Cost-quality Pareto (~400 words)
 5. Production observability frameworks (~500 words)
 6. Deployment patterns and readiness (~500 words)
-7. Looking back at Phase 15 (~400 words)
+7. Looking back at the agent arc (~400 words)
 8. **The curriculum closes** (~700 words)
 
 Target: ~4000 words plus 2 widgets and 3 runnable code blocks.
@@ -364,9 +364,9 @@ LLM benchmarks (MMLU, HumanEval) can be assembled in months. **Agent benchmarks 
 
 **The transition from prototype to production** is where most agent projects stall. **Checklists like this make the transition concrete.**
 
-### Concept 7: Looking back at Phase 15
+### Concept 7: Looking back at the agent arc
 
-**Phase 15 covered the agent stack** in four chapters:
+**Part IX covered the agent stack** in four chapters:
 
 | Chapter | Topic | What it taught |
 |---------|-------|----------------|
@@ -375,19 +375,19 @@ LLM benchmarks (MMLU, HumanEval) can be assembled in months. **Agent benchmarks 
 | **Ch 29** Multi-agent | Composition | Architectures, communication, role specialization, frameworks, honest assessment |
 | **Ch 30** (this) | Discipline | Evaluation, observability frameworks, deployment, production readiness |
 
-**The Phase 15 arc**:
+**The Part IX arc**:
 - Ch 27 → Ch 28: from concept to working code
 - Ch 28 → Ch 29: from one agent to many
 - Ch 29 → Ch 30: from building to evaluating
 
-**What the reader can now do after Phase 15**:
+**What the reader can now do after Part IX**:
 - Design an agent loop appropriate to a task
 - Implement production-grade agents with proper tools, schemas, error handling, observability
 - Decide when multi-agent is warranted (and — equally importantly — when it isn't)
 - Evaluate agent systems with appropriate methodologies
 - Deploy agents to production with the right observability and safety patterns
 
-**Phase 15 framing**: agents are real, useful, and improving fast. They are also still maturing. **The reader leaving Phase 15 has the practical foundation to build agent systems that survive production traffic** — and the calibration to avoid over-engineering them.
+**Where agents stand today**: agents are real, useful, and improving fast. They are also still maturing. **The reader leaving Part IX has the practical foundation to build agent systems that survive production traffic** — and the calibration to avoid over-engineering them.
 
 ### Concept 8: The curriculum closes
 

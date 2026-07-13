@@ -15,7 +15,7 @@ function toX(layerIdx: number): number {
   return PAD_L + (layerIdx / (N_LAYERS - 1)) * (CHART_W - PAD_L - PAD_R);
 }
 function toY(accuracy: number): number {
-  const norm = (accuracy - 0.4) / 0.6;
+  const norm = (accuracy - 0.3) / 0.7;
   return CHART_H - PAD_B - norm * (CHART_H - PAD_T - PAD_B);
 }
 

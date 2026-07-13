@@ -181,7 +181,7 @@ The activation is where modern architecture has churned the most. Three choices 
 - **GELU** ($\text{GELU}(x) = x \cdot \Phi(x)$, where $\Phi$ is the standard normal CDF), a smooth approximation of ReLU that does not vanish hard at zero. Introduced by Hendrycks & Gimpel (2016, [arxiv.org/abs/1606.08415](https://arxiv.org/abs/1606.08415)). Adopted by BERT, GPT-2, GPT-3, and most transformers through the 2020 era. The default empirical choice for several years.
 - **SwiGLU** ($\text{SwiGLU}(x) = \text{Swish}(x W_1) \odot (x W_2)$, then projected by $W_3$), a gated variant from Shazeer (2020, [arxiv.org/abs/2002.05202](https://arxiv.org/abs/2002.05202)). Uses three linear projections rather than two; the extra branch acts as a multiplicative gate. Modest empirical improvement over GELU. Used by Llama, Mistral, and most modern open-source LLMs.
 
-GELU has a closed-form definition through the normal CDF, but the formula has no elementary form, so implementations use a tanh-based approximation that is accurate to about three decimal places:
+GELU has a closed-form definition through the normal CDF, but the CDF itself has no elementary closed form. GPT-2/BERT-era code approximated it with a tanh-based formula accurate to about three decimal places; modern frameworks default to the exact erf-based GELU and offer the tanh form as an opt-in (`approximate='tanh'` in PyTorch). The chapter uses the tanh approximation below for a self-contained numpy implementation:
 
 <Equation>
 $$\text{GELU}(x) \approx \frac{1}{2} x \left(1 + \tanh\!\left[\sqrt{\tfrac{2}{\pi}}\left(x + 0.044715 x^3\right)\right]\right)$$
@@ -298,7 +298,7 @@ Several modern open-source LLMs (Llama, T5) use a simplified variant called RMSN
 $$\text{RMSNorm}(x) = \gamma \odot \frac{x}{\sqrt{\frac{1}{d}\sum_i x_i^2 + \epsilon}}$$
 </Equation>
 
-The argument for the simplification is that the mean subtraction in standard layer norm is not load-bearing; most of the benefit comes from the variance normalization, and skipping the mean saves a few operations per token. Empirically RMSNorm performs comparably to layer norm and runs slightly faster. The chapter implements full layer norm because it is the more general operation; RMSNorm is a special case worth knowing about, but the conceptual content is the same.
+The empirical case is solid: RMSNorm matches layer norm's quality across many published ablations, and skipping the mean subtraction saves a few operations per token and runs slightly faster. Why dropping mean-centering costs so little is less settled; the field's working assumption is that most of layer norm's benefit comes from controlling the scale of activations rather than from removing the mean, but that explanation has not been established as rigorously as the empirical result itself. Treat it as a well-supported empirical finding with an intuitive but not fully proven rationale. The chapter implements full layer norm because it is the more general operation; RMSNorm is a special case worth knowing about, but the conceptual content is the same.
 
 ### Implementation
 
@@ -551,6 +551,48 @@ X = rng.normal(0, 5, (4, 8))   # large-scale input
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Mean and variance are computed along `axis=-1` (features), and γ/β apply elementwise after normalization — they don't need to touch the mean/var computation at all.
+
+```python
+import numpy as np
+
+class LayerNorm:
+    def __init__(self, d_model, eps=1e-5):
+        self.gamma = np.ones(d_model)
+        self.beta = np.zeros(d_model)
+        self.eps = eps
+
+    def __call__(self, x):
+        mean = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        x_normed = (x - mean) / np.sqrt(var + self.eps)
+        return self.gamma * x_normed + self.beta
+
+ln = LayerNorm(d_model=8)
+rng = np.random.default_rng(42)
+X = rng.normal(0, 5, (4, 8))
+
+X_normed = ln(X)
+print(f"Per-token mean (expect ≈ 0): {X_normed.mean(axis=-1)}")
+print(f"Per-token std (expect ≈ 1): {X_normed.std(axis=-1)}")
+# [ 1.1e-16 -2.8e-17 -2.8e-17  5.6e-17]
+# [1.0 1.0 1.0 1.0]  (all within 1e-6 of 1)
+
+ln.gamma = np.full(8, 2.0)
+ln.beta = np.full(8, 1.0)
+X_scaled = ln(X)
+print(f"Scaled mean (expect ≈ 1): {X_scaled.mean(axis=-1)}")
+print(f"Scaled std (expect ≈ 2): {X_scaled.std(axis=-1)}")
+# mean ≈ [1, 1, 1, 1], std ≈ [2, 2, 2, 2]
+```
+
+The result confirms both properties: normalization erases the input's original scale (std 5) and shift, and γ/β re-impose an exactly controllable scale and shift on top.
+
+</details>
+
 ### Exercise 2 (medium): Multi-head attention with correct reshape
 
 Implement multi-head attention. The trickiest part is the reshape and transpose: you need to split the `(n, d_model)` Q/K/V matrices into `(n_heads, n, d_k)` per-head matrices, run attention per head, then concatenate back. Verify that the output shape matches `(n, d_model)`.
@@ -598,6 +640,63 @@ X = np.random.default_rng(0).normal(0, 1, (n, d_model))
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+The head split is `reshape(n, n_heads, d_k)` followed by `transpose(1, 0, 2)` to get `(n_heads, n, d_k)`; the concat step is the exact reverse.
+
+```python
+import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+class MultiHeadAttention:
+    def __init__(self, d_model, n_heads, seed=42):
+        assert d_model % n_heads == 0
+        self.n_heads = n_heads
+        self.d_k = d_model // n_heads
+        rng = np.random.default_rng(seed)
+        self.W_Q = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_K = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_V = rng.normal(0, 0.02, (d_model, d_model))
+        self.W_O = rng.normal(0, 0.02, (d_model, d_model))
+
+    def __call__(self, X, mask=None):
+        n, d_model = X.shape
+        Q = X @ self.W_Q
+        K = X @ self.W_K
+        V = X @ self.W_V
+
+        Q = Q.reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        K = K.reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+        V = V.reshape(n, self.n_heads, self.d_k).transpose(1, 0, 2)
+
+        scores = Q @ K.transpose(0, 2, 1) / np.sqrt(self.d_k)
+        if mask is not None:
+            scores = np.where(mask, scores, -np.inf)
+        weights = softmax(scores, axis=-1)
+        head_out = weights @ V   # (n_heads, n, d_k)
+
+        concat = head_out.transpose(1, 0, 2).reshape(n, d_model)
+        return concat @ self.W_O
+
+n, d_model = 6, 16
+mha = MultiHeadAttention(d_model, n_heads=4)
+X = np.random.default_rng(0).normal(0, 1, (n, d_model))
+
+out = mha(X)
+print(f"Input shape:  {X.shape}")
+print(f"Output shape: {out.shape}  (expect (6, 16))")
+# Input shape:  (6, 16)
+# Output shape: (6, 16)  (expect (6, 16))
+```
+
+Each head operates on its own `d_k = 4` slice independently; the `transpose`/`reshape` pair is what lets `Q @ K.transpose(0, 2, 1)` broadcast the batched matmul over the `n_heads` axis without a Python loop.
+
+</details>
 
 ### Exercise 3 (medium): Build a full Pre-LN transformer block
 
@@ -665,6 +764,61 @@ X = np.random.default_rng(0).normal(0, 1, (n, d_model))
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Both residual adds use the *unnormalized* `x`, exactly as the hint's pseudocode shows — LN only feeds the sublayer, never the skip connection.
+
+```python
+import numpy as np
+
+def gelu(x):
+    return 0.5 * x * (1 + np.tanh(np.sqrt(2 / np.pi) * (x + 0.044715 * x**3)))
+
+# LayerNorm and MultiHeadAttention from Exercises 1 and 2
+
+class FFN:
+    def __init__(self, d_model, d_ff=None, seed=42):
+        d_ff = d_ff or 4 * d_model
+        rng = np.random.default_rng(seed)
+        self.W1 = rng.normal(0, 0.02, (d_model, d_ff))
+        self.b1 = np.zeros(d_ff)
+        self.W2 = rng.normal(0, 0.02, (d_ff, d_model))
+        self.b2 = np.zeros(d_model)
+
+    def __call__(self, x):
+        h = gelu(x @ self.W1 + self.b1)
+        return h @ self.W2 + self.b2
+
+class TransformerBlock:
+    def __init__(self, d_model, n_heads, seed=42):
+        self.ln_1 = LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, n_heads, seed=seed)
+        self.ln_2 = LayerNorm(d_model)
+        self.ffn = FFN(d_model, seed=seed)
+
+    def __call__(self, x, mask=None):
+        x = x + self.attn(self.ln_1(x), mask=mask)
+        x = x + self.ffn(self.ln_2(x))
+        return x
+
+n, d_model = 6, 16
+block = TransformerBlock(d_model, n_heads=4)
+X = np.random.default_rng(0).normal(0, 1, (n, d_model))
+
+out = block(X)
+print(f"Input shape:  {X.shape}")
+print(f"Output shape: {out.shape}")
+print(f"Per-token output norms: {np.linalg.norm(out, axis=-1).round(3)}")
+# Input shape:  (6, 16)
+# Output shape: (6, 16)
+# Per-token output norms: [3.671 2.77  4.033 4.022 4.686 3.702]
+```
+
+Shape is preserved (residuals require it) and per-token norms sit in a tight band around 3-5 — no collapse toward zero, no blowup. That's the Pre-LN block doing its job: each sublayer's output magnitude is bounded by its own LN, so what the residual stream accumulates stays controlled even with tiny (0.02-std) random weights.
+
+</details>
+
 ### Exercise 4 (hard): Implement SwiGLU
 
 SwiGLU is the FFN variant used by LLaMA and Mistral. Instead of a single up-projection followed by GELU, SwiGLU uses two parallel up-projections; one is gated by a Swish (sigmoid-linear) activation. The two are element-wise multiplied before the down-projection. Implement SwiGLU and compare its parameter count to a standard GELU FFN at the same effective hidden dimension.
@@ -695,7 +849,7 @@ class SwiGLU_FFN:
         pass
 
     def __call__(self, x):
-        # TODO: forward = W_down(Swish(W_gate @ x) * W_up @ x)
+        # TODO: forward = (Swish(x @ W_gate) * (x @ W_up)) @ W_down
         pass
 
 # Compare parameter counts
@@ -719,5 +873,56 @@ print(f"Ratio: {swiglu_params / standard_params:.3f}, should be ≈ 1.0")
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Three linear layers, no biases; `d_ff = 8/3 * d_model` keeps the parameter count close to the standard 4x FFN despite the extra matrix.
+
+```python
+import numpy as np
+
+def swish(x):
+    return x / (1 + np.exp(-np.clip(x, -30, 30)))   # x * sigmoid(x)
+
+class SwiGLU_FFN:
+    def __init__(self, d_model, d_ff=None, seed=42):
+        d_ff = d_ff or int(d_model * 8 / 3)
+        rng = np.random.default_rng(seed)
+        self.W_gate = rng.normal(0, 0.02, (d_model, d_ff))
+        self.W_up = rng.normal(0, 0.02, (d_model, d_ff))
+        self.W_down = rng.normal(0, 0.02, (d_ff, d_model))
+
+    def __call__(self, x):
+        gate = swish(x @ self.W_gate)
+        up = x @ self.W_up
+        return (gate * up) @ self.W_down
+
+# Compare parameter counts
+d_model = 64
+d_ff_standard = 4 * d_model
+d_ff_swiglu = int(d_model * 8 / 3)
+
+standard_params = 2 * d_model * d_ff_standard   # W1 (d, 4d) + W2 (4d, d)
+swiglu_params = 3 * d_model * d_ff_swiglu       # gate, up, down
+
+print(f"Standard FFN (4x):  {standard_params:>6d} params (d_ff = {d_ff_standard})")
+print(f"SwiGLU FFN (~2.66x): {swiglu_params:>6d} params (d_ff = {d_ff_swiglu})")
+print(f"Ratio: {swiglu_params / standard_params:.3f}, should be ≈ 1.0")
+# Standard FFN (4x):   32768 params (d_ff = 256)
+# SwiGLU FFN (~2.66x): 32640 params (d_ff = 170)
+# Ratio: 0.996, should be ≈ 1.0
+
+rng = np.random.default_rng(42)
+X = rng.normal(0, 1, (6, d_model))
+swiglu = SwiGLU_FFN(d_model)
+out = swiglu(X)
+print(f"SwiGLU output shape: {out.shape}")
+# SwiGLU output shape: (6, 64)
+```
+
+170 isn't exactly `4 * 64 * 2/3 = 170.67`, so the ratio lands at 0.996 rather than exactly 1.0 — the `int()` truncation is the whole gap, and it is negligible at any real model scale.
+
+</details>
 
 What this chapter built is what every subsequent chapter on training, inference, alignment, and deployment assumes.

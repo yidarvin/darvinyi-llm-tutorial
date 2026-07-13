@@ -12,7 +12,7 @@ Chapter 1 ended with a neural network that could classify 2D points by quadrant.
 
 Language is different. A word is not a coordinate. *Cat* is a token (an entry in a discrete vocabulary), and there is no obvious answer to "what is `cat` − `dog`?" The chain rule has nothing to say about discrete IDs.
 
-This chapter is about the bridge: how we turn discrete tokens into continuous vectors that the network from Chapter 1 (or the transformer from Chapter 4) can consume. The bridge is one matrix and one array-indexing operation. It also happens to be where most of the parameters in a small language model live.
+This chapter is about the bridge: how we turn discrete tokens into continuous vectors that the network from Chapter 1 (or the attention stack introduced in Chapter 4) can consume. The bridge is one matrix and one array-indexing operation. It also happens to be where most of the parameters in a small language model live.
 
 ## Why embeddings
 
@@ -149,7 +149,7 @@ The embedding table is just a matrix of parameters. The question is how it gets 
 
 ## Word2vec: skip-gram with negative sampling
 
-Before 2013, learned word representations existed (distributional models going back to LSA and HAL, neural language models like Bengio et al. 2003) but they were expensive and unstable at the scale of web text. Mikolov, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1301.3781](https://arxiv.org/abs/1301.3781)) changed this with a simple, scalable, self-supervised setup: word2vec.
+The idea traces back to the distributional hypothesis: a word's meaning is captured by the contexts it appears in, or as Firth (1957) put it, "you shall know a word by the company it keeps." Before 2013, learned word representations existed (distributional models going back to LSA and HAL, neural language models like Bengio et al. 2003) but they were expensive and unstable at the scale of web text. Mikolov, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1301.3781](https://arxiv.org/abs/1301.3781)) changed this with a simple, scalable, self-supervised setup: word2vec.
 
 The setup is shamelessly simple. For each token in a corpus, predict the tokens around it. No human labels. The corpus is the supervision. Two architectural variants appeared in the same paper, Skip-gram (given a word, predict each context) and CBOW (given a context, predict the word), but Skip-gram with negative sampling, introduced a few months later in Mikolov, Sutskever, Chen, Corrado, and Dean (2013, [arxiv.org/abs/1310.4546](https://arxiv.org/abs/1310.4546)), is the variant that took over and that we walk through here.
 
@@ -188,7 +188,7 @@ $$
 where $\sigma(x) = 1 / (1 + e^{-x})$ is the standard sigmoid.
 
 <Callout type="note">
-The two terms mirror each other. The first wants the real word-context dot product $v_c^\top u_w$ to be large: sigmoid pulls toward 1, so $-\log \sigma(\cdot)$ shrinks toward 0. The second wants each random pair's dot product to be small. Equivalently, $-v_{c'_i}^\top u_w$ should be large, which the sigmoid then pulls toward 1 and the log toward 0. Together, the gradients push real co-occurrences together and random pairs apart. This is contrastive learning in a 2013 wrapper, half a decade before SimCLR and CLIP made the framing standard.
+The two terms mirror each other. The first wants the real word-context dot product $v_c^\top u_w$ to be large: sigmoid pulls toward 1, so $-\log \sigma(\cdot)$ shrinks toward 0. The second wants each random pair's dot product to be small. Equivalently, $-v_{c'_i}^\top u_w$ should be large, which the sigmoid then pulls toward 1 and the log toward 0. Together, the gradients push real co-occurrences together and random pairs apart. This is contrastive learning in a 2013 wrapper, most of a decade before SimCLR and CLIP made the framing standard.
 </Callout>
 
 The noise distribution from which negatives are drawn is not uniform over the vocabulary. Mikolov et al. empirically chose
@@ -203,7 +203,7 @@ Hyperparameter sketch: $k = 5$ negatives per positive at large scale, $k = 15$ t
 
 ### A working implementation
 
-The runnable block below trains SGNS on a 22-word toy corpus for 100 epochs. Pyodide handles the whole loop in about a second. After training, the cosine similarities between word pairs should reflect their distributional similarity in the corpus: *cat* and *dog* should be more similar than *cat* and *rug*, because *cat* and *dog* appear in overlapping contexts (*sat on*, *the*) while *rug* appears with a narrower set.
+The runnable block below trains SGNS on a 21-token corpus over a 10-word vocabulary for 100 epochs. Pyodide handles the whole loop in about a second. After training, the cosine similarities between word pairs should reflect their distributional similarity in the corpus: *cat* and *dog* should be more similar than *cat* and *rug*, because *cat* and *dog* appear in overlapping contexts (*sat on*, *the*) while *rug* appears with a narrower set.
 
 <RunnableCode
   client:visible
@@ -274,7 +274,7 @@ print(f"sat <-> napped: {cos(U[word_to_id['sat']], U[word_to_id['napped']]):.3f}
   height={520}
 />
 
-The widget below scales the same idea to a slightly larger toy and animates training. Each click advances a step of SGD; positive pairs visibly pull together and negative pairs push apart in a 2D projection of the embedding space.
+The widget below scales the same idea to a slightly larger toy and animates training. Drag the scrubber or press Play to advance training; positive pairs visibly pull together and negative pairs push apart in a 2D projection of the embedding space.
 
 <WidgetFrame title="Skip-gram dynamics" caption="A 15-word corpus trained with skip-gram negative sampling in 2D. Drag the scrubber or hit Play to watch the embeddings evolve. Categories separate; connector words stay in the middle.">
   <Word2VecDynamics client:visible />
@@ -310,7 +310,7 @@ The argument is hand-wavy in exactly the way that the empirical evidence is robu
 Linear analogies are *evidence* that learned embeddings encode compositional structure. They are not *proof* that embeddings "understand" language. A substantial critical literature, starting with Linzen 2016 and Rogers et al. 2020, has shown that analogy-task success depends heavily on evaluation methodology: whether the query word is excluded from the candidate set, whether nearest-neighbor search is restricted to a vocabulary of analogous candidates, how ties are broken. With strict evaluation, accuracy drops considerably from the headline numbers in the original word2vec paper. Linear analogies are a real but oversold phenomenon. Treat them as evidence about embedding geometry, not as a benchmark for semantic understanding.
 </Callout>
 
-The widget below shows a 2D projection of pre-computed word2vec embeddings colored by semantic category, with analogy overlays drawn on top. The clusters (animals, colors, countries) are clearly visible; the parallel-arrows pattern for analogies is visible too, with the usual caveat that 2D projection compresses information and the parallelism in the projection underestimates the structure in the full 300-dimensional space.
+The widget below shows illustrative, word2vec-like 2D coordinates colored by semantic category, with analogy overlays drawn on top. The clusters (animals, colors, countries) are clearly visible; the parallel-arrows pattern for analogies is exact here by construction, since the coordinates were hand-placed to demonstrate the pattern cleanly. Real trained embeddings show the same qualitative structure, but noisier: the arrows are approximately, not exactly, parallel, and projecting a 300-dimensional space down to 2D compresses away some of that structure besides.
 
 <WidgetFrame title="Word2vec embedding space" caption="A 2D projection of pre-computed word2vec-like embeddings, colored by semantic category. Toggle the analogy overlays to see the approximate parallelism of vector pairs.">
   <EmbeddingSpace client:visible />
@@ -425,10 +425,10 @@ print(f"Logits over vocab (10 entries): {logits[0].round(3)}")
   height={320}
 />
 
-Tying is the default in most open-source LLMs. GPT-2 ties. Llama ties. Mistral ties. Gemma ties. Some larger closed models (GPT-3 and later, by various reports) do not tie; at frontier scale the parameter budget is less binding, and the extra flexibility of independent input and output spaces may be worth the cost. The default is "tie until you have a reason not to."
+Tying is common but far from universal, and the pattern is scale-dependent rather than a blanket default. GPT-2 ties. Gemma ties, notably, despite (or because of) its unusually large 256K-token vocabulary, where the embedding block would otherwise be a large cost. Many 7B-and-up open models, including Llama-2-7B and Mistral-7B, do NOT tie — their reference configs set `tie_word_embeddings: false`. At that scale the embedding is a small enough fraction of the parameter budget that the extra flexibility of independent input and output spaces is cheap to buy. The practical rule: check `tie_word_embeddings` in a model's config rather than assuming either way, and expect ties to be more common at small scale and less common as models grow.
 
 <Callout type="aside">
-The parameter savings from tying are dramatic at small scale (~30% of a GPT-2-small) and diminish at large scale. For a 7B-parameter model, tied versus untied is a ~1% parameter difference, barely visible against the FFN and attention blocks that dominate. Tying remains the default at all scales mostly because it costs nothing and occasionally helps perplexity by a small margin (Press and Wolf reported ~5%). The marginal gain is empirical and not always reproducible; the parameter savings are mechanical and always real.
+The parameter savings from tying are dramatic at small scale (~30% of a GPT-2-small) and diminish at large scale. For a 7B-parameter model, tied versus untied is a ~1% parameter difference, barely visible against the FFN and attention blocks that dominate. Tying costs nothing and occasionally helps perplexity by a small margin (Press and Wolf reported ~5%), which is why smaller models tend to keep it; once the savings shrink to a percent or two, many larger models drop it instead, trading the (now-marginal) parameter savings for the flexibility of independent input and output spaces. The perplexity gain is empirical and not always reproducible; the parameter savings are mechanical and always real.
 </Callout>
 
 ## Exercises
@@ -437,7 +437,7 @@ The exercises below build on the chapter. Each is a self-contained problem with 
 
 ### Exercise 1 (easy): Verify category separation by cosine similarity
 
-Train the toy skip-gram model from section 4 (the 12-word corpus). Then compute cosine similarities for several pairs: within-category (e.g., `cat ↔ dog`), across-category (e.g., `cat ↔ rug`), and to connector words (e.g., `cat ↔ sat`). Report which pairs are most/least similar.
+Train the toy skip-gram model from section 4 (the 21-token corpus over a 10-word vocabulary). Then compute cosine similarities for several pairs: within-category (e.g., `cat ↔ dog`), across-category (e.g., `cat ↔ rug`), and to connector words (e.g., `cat ↔ sat`). Report which pairs are most/least similar.
 
 <details>
 <summary>Hint</summary>
@@ -464,9 +464,77 @@ def cos(a, b):
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Re-run section 4's training loop unchanged (same seed, same 100 epochs), then compute cosine similarity for each pair against the trained `U`.
+
+```python
+import numpy as np
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-np.clip(x, -30, 30)))
+
+corpus = """the cat sat on the mat the dog sat on the rug
+            the cat purred the dog barked the cat napped""".split()
+vocab = sorted(set(corpus))
+word_to_id = {w: i for i, w in enumerate(vocab)}
+V = len(vocab)
+dim = 8
+k = 3
+
+pairs = []
+for i, w in enumerate(corpus):
+    for j in range(max(0, i-2), min(len(corpus), i+3)):
+        if i != j:
+            pairs.append((word_to_id[w], word_to_id[corpus[j]]))
+
+rng = np.random.default_rng(42)
+U = rng.normal(0, 0.1, (V, dim))
+W = rng.normal(0, 0.1, (V, dim))
+counts = np.bincount([w for w, _ in pairs], minlength=V).astype(float)
+P_n = counts ** 0.75
+P_n /= P_n.sum()
+
+lr = 0.05
+for epoch in range(100):
+    rng.shuffle(pairs)
+    for w_id, c_id in pairs:
+        neg_ids = rng.choice(V, size=k, replace=False, p=P_n)
+        u, v, neg = U[w_id], W[c_id], W[neg_ids]
+        pos_grad = sigmoid(u @ v) - 1
+        neg_grad = sigmoid(neg @ u)
+        grad_u = pos_grad * v + (neg_grad[:, None] * neg).sum(axis=0)
+        grad_v = pos_grad * u
+        grad_neg = neg_grad[:, None] * u
+        U[w_id]    -= lr * grad_u
+        W[c_id]    -= lr * grad_v
+        W[neg_ids] -= lr * grad_neg
+
+def cos(a, b):
+    return (a @ b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+for a, b in [('cat','dog'), ('cat','mat'), ('cat','the'), ('mat','rug'), ('dog','mat')]:
+    print(f"{a} <-> {b}: {cos(U[word_to_id[a]], U[word_to_id[b]]):.3f}")
+```
+
+Output:
+
+```
+cat <-> dog:    0.552
+cat <-> mat:    0.354
+cat <-> the:    0.372
+mat <-> rug:    0.586
+dog <-> mat:    0.100
+```
+
+`mat <-> rug` is the most similar pair (0.586), not `cat <-> dog` — both are surface objects that co-occur with *on* in the corpus, and with only 21 tokens the "surfaces" cluster is tighter than the "animals" cluster. `dog <-> mat` is least similar (0.100): a pet and a surface it never directly co-occurs with in this tiny corpus.
+
+</details>
+
 ### Exercise 2 (medium): Intruder detection
 
-Given a list of 4 words, identify the one that doesn't belong using only embedding similarities. For example, in `[cat, dog, fish, car]`, the intruder is `car`. The basic approach: compute the average pairwise similarity within the list, then check which word has the lowest average similarity to the others.
+Given a list of 4 words, identify the one that doesn't belong using only embedding similarities. For example, using the section-4 corpus, in `[purred, barked, napped, the]`, the intruder is `the`: the three verbs describe animal actions and cluster tightly together, while `the` co-occurs with everything and clusters with nothing in particular. The basic approach: compute the average pairwise similarity within the list, then check which word has the lowest average similarity to the others.
 
 <details>
 <summary>Hint</summary>
@@ -479,7 +547,7 @@ For each candidate word $w$ in the list, compute its average cosine similarity t
   client:visible
   defaultCode={`import numpy as np
 
-# Assume you have a trained embedding matrix E and word_to_id dict from section 4 or 6.
+# Assume you have a trained embedding matrix E and word_to_id dict from section 4.
 
 def find_intruder(words, E, word_to_id):
     """Return the word in the list with lowest avg similarity to the others."""
@@ -488,11 +556,32 @@ def find_intruder(words, E, word_to_id):
     pass
 
 # Test cases (train embeddings first, then test):
-# find_intruder(['cat', 'dog', 'fish', 'car'], E, word_to_id)  → 'car'
-# find_intruder(['red', 'blue', 'green', 'cat'], E, word_to_id) → 'cat'
+# find_intruder(['purred', 'barked', 'napped', 'the'], E, word_to_id) → 'the'
+# find_intruder(['mat', 'rug', 'sat', 'dog'], E, word_to_id)          → 'dog'
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+For each word, average its cosine similarity to the other words in the list; the lowest average is the intruder.
+
+```python
+def find_intruder(words, E, word_to_id):
+    avgs = {}
+    for w in words:
+        others = [o for o in words if o != w]
+        avgs[w] = np.mean([cos(E[word_to_id[w]], E[word_to_id[o]]) for o in others])
+    return min(avgs, key=avgs.get)
+
+print(find_intruder(['purred', 'barked', 'napped', 'the'], U, word_to_id))  # 'the'
+print(find_intruder(['mat', 'rug', 'sat', 'dog'], U, word_to_id))          # 'dog'
+```
+
+With the trained `U` from Exercise 1, the per-word average similarities are `{purred: 0.722, barked: 0.700, napped: 0.674, the: 0.234}` — `the` co-occurs with nearly every word in the corpus so it sits far from any tight cluster, making it the clear intruder. Same story for the second list: `{mat: 0.525, rug: 0.576, sat: 0.649, dog: 0.177}` — `dog` is the intruder against three words that co-occur heavily with *the mat/the rug*.
+
+</details>
 
 ### Exercise 3 (medium): Implement CBOW
 
@@ -533,6 +622,59 @@ def cbow_step(U, W, center_id, context_ids, neg_ids, lr=0.05):
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Average the context embeddings into `u_bar`, run the same sigmoid/negative-sampling update as skip-gram but with `u_bar` standing in for the single center embedding, then split the gradient on `u_bar` equally across every context word.
+
+```python
+def cbow_step(U, W, center_id, context_ids, neg_ids, lr=0.05):
+    u_bar = U[context_ids].mean(axis=0)
+    pos_logit = u_bar @ W[center_id]
+    neg_logits = W[neg_ids] @ u_bar
+    pos_grad = sigmoid(pos_logit) - 1
+    neg_grad = sigmoid(neg_logits)
+
+    grad_u_bar = pos_grad * W[center_id] + (neg_grad[:, None] * W[neg_ids]).sum(axis=0)
+    grad_w_center = pos_grad * u_bar
+    grad_w_neg = neg_grad[:, None] * u_bar
+
+    W[center_id] -= lr * grad_w_center
+    W[neg_ids]   -= lr * grad_w_neg
+    per_context_grad = grad_u_bar / len(context_ids)
+    for cid in context_ids:
+        U[cid] -= lr * per_context_grad
+
+# Group the corpus into (center, context_set) examples instead of (center, context) pairs
+examples = []
+for i, w in enumerate(corpus):
+    ctx = [word_to_id[corpus[j]] for j in range(max(0, i-2), min(len(corpus), i+3)) if j != i]
+    examples.append((word_to_id[w], ctx))
+
+rng = np.random.default_rng(42)
+U_cbow = rng.normal(0, 0.1, (V, dim))
+W_cbow = rng.normal(0, 0.1, (V, dim))
+counts_c = np.bincount([c for c, _ in examples], minlength=V).astype(float)
+P_n_c = (counts_c ** 0.75); P_n_c /= P_n_c.sum()
+
+for epoch in range(100):
+    for idx in rng.permutation(len(examples)):
+        center_id, context_ids = examples[idx]
+        neg_ids = rng.choice(V, size=k, replace=False, p=P_n_c)
+        cbow_step(U_cbow, W_cbow, center_id, context_ids, neg_ids, lr=0.05)
+
+within = np.mean([cos(U_cbow[word_to_id[a]], U_cbow[word_to_id[b]])
+                   for a, b in [('purred','barked'), ('purred','napped'), ('barked','napped')]])
+cross = np.mean([cos(U_cbow[word_to_id[a]], U_cbow[word_to_id[b]])
+                  for a, b in [('purred','the'), ('barked','the'), ('napped','the')]])
+print(f"CBOW within-category: {within:.3f}, cross-category: {cross:.3f}")
+print(f"CBOW cat<->dog: {cos(U_cbow[word_to_id['cat']], U_cbow[word_to_id['dog']]):.3f}")
+```
+
+Output: `CBOW within-category: 0.892, cross-category: 0.193`, and `cat<->dog: 0.953` versus skip-gram's 0.552 on the same pair. CBOW's averaging pulls context words toward a shared prediction target every step, which produces noticeably tighter within-category clustering than skip-gram on a corpus this small — consistent with the standard finding that CBOW smooths over rare-word noise at the cost of losing some of skip-gram's fine-grained distinctions.
+
+</details>
+
 ### Exercise 4 (hard): Linear analogy search
 
 Given three words $a$, $b$, $c$, find the word $d$ such that $\vec{d} - \vec{c} \approx \vec{b} - \vec{a}$, i.e., $d$ completes the analogy "$a$ is to $b$ as $c$ is to ?". Implement this search using your trained embeddings.
@@ -560,7 +702,7 @@ def find_analogy(a, b, c, E, word_to_id, vocab):
     pass
 
 # Test:
-# find_analogy('cat', 'dog', 'fish', E, word_to_id, vocab)
+# find_analogy('cat', 'dog', 'mat', E, word_to_id, vocab)
 # (On the toy corpus, the result may not be meaningful. That's fine.
 # The point is to implement the algorithm; with real word2vec on 6B words,
 # 'king' / 'man' / 'woman' produces 'queen'.)
@@ -568,11 +710,35 @@ def find_analogy(a, b, c, E, word_to_id, vocab):
   packages={["numpy"]}
 />
 
-If you finish Exercise 4 with a working implementation and want to see it succeed on real data, download a pre-trained GloVe or word2vec model from [nlp.stanford.edu/projects/glove](https://nlp.stanford.edu/projects/glove/), load the vectors with numpy, and run your analogy search on a 6-billion-word vocabulary. With real embeddings, `king - man + woman` returns `queen` with high probability, the empirical result that put word vectors on the map.
+<details>
+<summary>Solution</summary>
+
+Compute the target vector, then a linear scan over the vocabulary for the nearest cosine neighbor, excluding the three query words.
+
+```python
+def find_analogy(a, b, c, E, word_to_id, vocab):
+    target = E[word_to_id[b]] - E[word_to_id[a]] + E[word_to_id[c]]
+    best_word, best_score = None, -np.inf
+    for w in vocab:
+        if w in (a, b, c):
+            continue
+        score = cos(target, E[word_to_id[w]])
+        if score > best_score:
+            best_word, best_score = w, score
+    return best_word, best_score
+
+print(find_analogy('cat', 'dog', 'mat', U, word_to_id, vocab))
+```
+
+Output: `('sat', 0.724)` — on this 10-word toy corpus the result is not semantically meaningful (as the prompt warns), but the algorithm is doing exactly what it should: compute `dog - cat + mat` and return the closest untried vocabulary vector by cosine similarity.
+
+</details>
+
+If you finish Exercise 4 with a working implementation and want to see it succeed on real data, download a pre-trained GloVe or word2vec model from [nlp.stanford.edu/projects/glove](https://nlp.stanford.edu/projects/glove/), load the vectors with numpy, and run your analogy search on it. GloVe's 6B release is trained on a corpus of 6 billion tokens with a vocabulary of about 400,000 words. With real embeddings, `king - man + woman` returns `queen` with high probability, the empirical result that put word vectors on the map.
 
 The chapter's embedding is, fundamentally, *static*. Every occurrence of *cat* maps to the same row of $E$ at the input. That is exactly the right behavior for a lookup table, and exactly the wrong behavior for understanding language. The meaning of *cat* in *the cat purred* is not the same as its meaning in *cat -lvf is a flag for tar*, and any model that treats them as identical is going to make the same mistakes on both.
 
-The fix is what the rest of Part II builds. A transformer takes the sequence of static embeddings produced by Chapter 2's lookup and runs it through a stack of attention blocks, each of which takes the previous layer's representations and refines them by mixing in information from surrounding positions. By the time the network has run twelve layers (or seventy, or two hundred), the representation at position $t$ has absorbed signal from every other position in the sequence. It is no longer "the embedding of token $t$"; it is "what token $t$ means in this context, given everything around it."
+The fix is what Part II builds. A transformer takes the sequence of static embeddings produced by Chapter 2's lookup and runs it through a stack of attention blocks, each of which takes the previous layer's representations and refines them by mixing in information from surrounding positions. By the time the network has run twelve layers (or seventy, or two hundred), the representation at position $t$ has absorbed signal from every other position in the sequence. It is no longer "the embedding of token $t$"; it is "what token $t$ means in this context, given everything around it."
 
 That is the transformer's structural job, and Chapter 4 introduces the operation (attention) that does it. Chapter 5 builds the full block. Chapter 6 adds the missing piece: how the model knows *which* position a token is at, since attention is permutation-equivariant without help.
 

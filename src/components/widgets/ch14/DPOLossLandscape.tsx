@@ -14,7 +14,6 @@ const RESOLUTION = 25;
 export default function DPOLossLandscape() {
   const [rChosen, setRChosen] = useState(0.5);
   const [rRejected, setRRejected] = useState(-0.5);
-  const [beta, setBeta] = useState(0.1);
 
   const grid = useMemo(
     () => buildLossGrid(DOMAIN_MIN, DOMAIN_MAX, RESOLUTION),
@@ -28,22 +27,6 @@ export default function DPOLossLandscape() {
 
   return (
     <div className={styles.widget}>
-      <div className={styles.controlRow}>
-        <label className={styles.controlLabel}>
-          β (temperature): <span className={styles.controlValue}>{beta.toFixed(2)}</span>
-        </label>
-        <input
-          type="range"
-          min={0.01}
-          max={1.0}
-          step={0.01}
-          value={beta}
-          onChange={(e) => setBeta(Number(e.target.value))}
-          className={styles.slider}
-          aria-label="beta"
-        />
-      </div>
-
       <div className={styles.landscapePanel}>
         <LandscapeSvg
           grid={grid}

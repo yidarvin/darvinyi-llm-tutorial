@@ -1,6 +1,6 @@
 # Chapter 14 — Preference optimization: RLHF, DPO, and RLVR: research
 
-> Curated source material for Chapter 14's build sessions. **The algorithmic centerpiece of Phase 11 (Post-training).** Where Ch 13 (SFT) taught the model *format* (be a chatbot), Ch 14 teaches it *quality* (be a *good* chatbot — helpful, honest, harmless, aligned with human preferences). This chapter covers the family of methods that turn an SFT'd model into something humans prefer: classical **RLHF** (Reward Model + PPO), **DPO** (Direct Preference Optimization — the math trick that skips RL), the DPO variant zoo (**IPO, KTO, ORPO, SimPO**), and the recent **RLVR** breakthrough (RL with Verifiable Rewards — what powered DeepSeek-R1 and OpenAI o1). The chapter is dense: this is where modern post-training gets *interesting*. Two-topic chapter (classical RLHF + modern DPO/RLVR); uses the **5-file cadence**.
+> Curated source material for Chapter 14's build sessions. **The algorithmic centerpiece of Part V (Post-training).** Where Ch 13 (SFT) taught the model *format* (be a chatbot), Ch 14 teaches it *quality* (be a *good* chatbot — helpful, honest, harmless, aligned with human preferences). This chapter covers the family of methods that turn an SFT'd model into something humans prefer: classical **RLHF** (Reward Model + PPO), **DPO** (Direct Preference Optimization — the math trick that skips RL), the DPO variant zoo (**IPO, KTO, ORPO, SimPO**), and the recent **RLVR** breakthrough (RL with Verifiable Rewards — what powered DeepSeek-R1 and OpenAI o1). The chapter is dense: this is where modern post-training gets *interesting*. Two-topic chapter (classical RLHF + modern DPO/RLVR); uses the **5-file cadence**.
 
 ---
 
@@ -599,7 +599,7 @@ Nine outcomes. Exercises hit outcomes 1 (Bradley-Terry), 4 (DPO), 6 (RLVR vs DPO
 
 **Two-topic justification:** RLHF (classical) and modern DPO/RLVR are *conceptually* and *algorithmically* distinct. Classical RLHF is RL with a learned reward; DPO is supervised learning that recovers the same optimum; RLVR is RL with objective rewards. Conflating them obscures the key insights. Treating them separately within one chapter (with the bridge being "they all optimize for preferences") is the right organization.
 
-**This chapter is Phase 11's algorithmic centerpiece.** Where Ch 13 was practical engineering, Ch 14 introduces *new objectives* — preference data, reward models, RL. The reader will see the alignment side of post-training. **Density is high; budget care.**
+**This chapter is Part V's algorithmic centerpiece.** Where Ch 13 was practical engineering, Ch 14 introduces *new objectives* — preference data, reward models, RL. The reader will see the alignment side of post-training. **Density is high; budget care.**
 
 **The DeepSeek-R1 / o1 moment**: late 2024 - early 2025 saw RLVR demonstrate that reasoning can be *learned* via RL on verifiable tasks. This is the most exciting recent development; section 7 should reflect that. Open-source caught up to closed-source on reasoning specifically because RLVR works.
 

@@ -426,7 +426,7 @@ def lora_merge(W_base, A, B, alpha=16, r=8):
     
     Returns the merged weight matrix.
     """
-    W_merged = W_base + (alpha / r) * (B @ A)
+    W_merged = W_base + (alpha / r) * (A.T @ B.T)
     return W_merged
 
 # Demo: verify merged version produces same output as adapter-mode
@@ -550,4 +550,4 @@ Seven outcomes. Exercises hit outcomes 2 (LoRA forward), 3 (hyperparameter selec
 
 **Tonal framing**: practical engineering. This chapter is about the *operational* side of post-training — how to make it work in practice on the GPUs you actually have. Voice: grounded, like Ch 7 (data engineering) and Ch 10 (training infrastructure). LoRA isn't conceptually deep; it's a beautifully simple idea that happens to work extremely well.
 
-**Importance to Phase 11**: PEFT is what makes Phase 11's methods (SFT, DPO, RLVR) practical at scale. **Most production post-training is LoRA-based.** Reader needs to understand both the *methods* (Ch 13-14) and the *engineering* (this chapter) to work in modern post-training.
+**Importance to Part V**: PEFT is what makes Part V's methods (SFT, DPO, RLVR) practical at scale. **Most production post-training is LoRA-based.** Reader needs to understand both the *methods* (Ch 13-14) and the *engineering* (this chapter) to work in modern post-training.

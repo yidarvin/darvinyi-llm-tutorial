@@ -1,6 +1,6 @@
 # Chapter 25 — Interpretability: research
 
-> Curated source material for Chapter 25's build sessions. **The chapter that puts a microscope on alignment.** Phase 14 opened with safety (Ch 24): what we want the model to do, and how we make it do that. **Interpretability asks the complementary question**: *what is the model actually doing inside?* If safety is the behavioral discipline, interpretability is the mechanistic one — pulling apart the weights and activations to surface meaningful computations. Linear probes; the polysemanticity problem (one neuron, many concepts); sparse autoencoders as a path through superposition (Anthropic's "Towards Monosemanticity" 2023 and "Scaling Monosemanticity" 2024); mechanistic interpretability — finding circuits in neural networks (Olah et al.); causal interventions — logit lens, tuned lens, activation patching, ROME; the current state of the field. **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns black-box models into systems we can inspect — and explains why that's still hard.**
+> Curated source material for Chapter 25's build sessions. **The chapter that puts a microscope on alignment.** Part VIII opened with safety (Ch 24): what we want the model to do, and how we make it do that. **Interpretability asks the complementary question**: *what is the model actually doing inside?* If safety is the behavioral discipline, interpretability is the mechanistic one — pulling apart the weights and activations to surface meaningful computations. Linear probes; the polysemanticity problem (one neuron, many concepts); sparse autoencoders as a path through superposition (Anthropic's "Towards Monosemanticity" 2023 and "Scaling Monosemanticity" 2024); mechanistic interpretability — finding circuits in neural networks (Olah et al.); causal interventions — logit lens, tuned lens, activation patching, ROME; the current state of the field. **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns black-box models into systems we can inspect — and explains why that's still hard.**
 
 ---
 
@@ -8,7 +8,7 @@
 
 **Chapter title:** Interpretability
 
-**Premise:** A trained LLM is a black box in two senses: (1) we can't easily tell what it's doing internally; (2) we can't always predict what it will do externally. Phase 14's safety chapter (Ch 24) addressed the external problem — alignment, refusals, red-teaming. **This chapter addresses the internal problem.** Can we read off concepts from hidden states? Can we identify circuits — specific weight subgraphs — that implement specific computations? Can we causally intervene to test our hypotheses? **Interpretability research says yes, partially**: probes read some concepts; circuits explain some behaviors; sparse autoencoders decompose activations into more-monosemantic features. **It's an empirical field in rapid motion**, not a settled science.
+**Premise:** A trained LLM is a black box in two senses: (1) we can't easily tell what it's doing internally; (2) we can't always predict what it will do externally. Part VIII's safety chapter (Ch 24) addressed the external problem — alignment, refusals, red-teaming. **This chapter addresses the internal problem.** Can we read off concepts from hidden states? Can we identify circuits — specific weight subgraphs — that implement specific computations? Can we causally intervene to test our hypotheses? **Interpretability research says yes, partially**: probes read some concepts; circuits explain some behaviors; sparse autoencoders decompose activations into more-monosemantic features. **It's an empirical field in rapid motion**, not a settled science.
 
 **The framing:** interpretability research has two complementary goals:
 1. **Understanding** — explain what computations the model performs
@@ -39,7 +39,7 @@ The chapter treats both as engineering practices, not philosophy.
 5. Mechanistic interpretability — circuits (~500 words)
 6. Causal interventions (~400 words)
 7. The current state of the field (~400 words)
-8. Phase 14 ahead — connecting interp to eval (~400 words)
+8. From interpretability to evaluation (~400 words)
 
 Target: ~3700 words plus 2 widgets and 3 runnable code blocks.
 
@@ -120,7 +120,7 @@ A trained LLM is opaque in two senses:
 1. **Internal**: we can't easily tell what computations are happening at each layer
 2. **External**: we can't always predict what the model will do on new inputs
 
-Phase 14's safety chapter (Ch 24) addressed the external opacity through **alignment training and red-teaming**. **This chapter addresses internal opacity through interpretability research.**
+Part VIII's safety chapter (Ch 24) addressed the external opacity through **alignment training and red-teaming**. **This chapter addresses internal opacity through interpretability research.**
 
 **Two complementary goals**:
 
@@ -365,9 +365,9 @@ The interpretability discipline pivots from "concept X is present" to "concept X
 - **EleutherAI** — open-source interpretability tools (TransformerLens)
 - **Academic groups** — Conjecture, Redwood Research, university labs
 
-### Concept 8: Phase 14 ahead — connecting interp to eval
+### Concept 8: From interpretability to evaluation
 
-**The three Phase 14 disciplines**:
+**The three Part VIII disciplines**:
 - **Ch 24 (Safety)** — what we want; how we train it; how we red-team
 - **Ch 25 (Interpretability, this chapter)** — what the model is actually computing internally
 - **Ch 26 (Evaluation, next)** — how we measure capability and safety quantitatively
@@ -379,7 +379,7 @@ The interpretability discipline pivots from "concept X is present" to "concept X
 
 **All three together**: a complete safety practice — *what* we want, *what* the model is computing, *whether* it's improving.
 
-**Then Phase 15 (Agents)** composes the capability stack with the discipline arc into complete agent architectures. **The curriculum's final arc.**
+**Then Part IX (Agents)** composes the capability stack with the discipline arc into complete agent architectures. **The curriculum's final arc.**
 
 ---
 
@@ -804,6 +804,6 @@ Eight outcomes. Exercises hit outcomes 2, 4, 6, 7.
 
 **Tonal framing**: empirical research with operational honesty. **Interpretability is making real progress but is not a solved science.** Concrete numbers (probe accuracies; SAE feature counts in millions; ~25 attention heads in the IOI circuit; circuits found in dozens of papers) and honest open problems (coverage, scale, automation, verification). **Anthropic's SAE work** is the modern reference — the chapter centers it without overpromising.
 
-**Phase 14 progression**: Ch 25 is the **middle** chapter of Phase 14. Ch 24 set up "what we want;" Ch 25 covers "what's actually there;" Ch 26 will cover "how to measure both." Section 8 should bridge to Ch 26.
+**Part VIII progression**: Ch 25 is the **middle** chapter of Part VIII. Ch 24 set up "what we want;" Ch 25 covers "what's actually there;" Ch 26 will cover "how to measure both." Section 8 should bridge to Ch 26.
 
 **Importance**: interpretability is the **only known route to mechanistic verification** of alignment claims — particularly important post-sleeper-agents (Ch 24). For engineers, interpretability tools are increasingly used in production (Anthropic's monitoring, OpenAI's interp team, deployed feature-clamping). **This chapter is the working-engineer's introduction to a rapidly-evolving field.**

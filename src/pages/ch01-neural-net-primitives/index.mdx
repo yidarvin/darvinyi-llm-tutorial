@@ -40,14 +40,16 @@ $$
 
 ReLU does three useful things at once. It is cheap (a single comparison per element). It does not saturate for positive inputs (gradients of magnitude 1 flow through unchanged). And it induces sparsity: about half of the activations at a randomly initialized layer are exactly zero, which acts as an implicit regularizer.
 
-There is a small zoo of alternatives. Sigmoid and tanh squash inputs into bounded ranges; they are historical defaults that still appear in attention gates and recurrent cells, but they saturate badly and make deep networks hard to train. GELU and SiLU are smooth ReLU-likes that show up in modern transformer FFN layers; Chapter 5 picks them up when we look at the SwiGLU variant Llama uses. For the implementations in this chapter, ReLU is what every hidden layer uses.
+That third property has a dark side. Look back at the backward rule for ReLU: the gradient is the mask $\mathbb{1}[z > 0]$, exactly zero wherever the pre-activation is negative. If a single unit's pre-activation happens to be negative on *every* example in the training distribution, its gradient is zero on every example, forever. No update ever reaches the weights feeding that unit, so nothing about them ever changes, so the pre-activation stays negative, so the gradient stays zero. The unit is dead, and backprop has no mechanism to revive it. This is the "dying ReLU" problem, and it's a permanent failure rather than a slow one: a large learning rate or an unlucky initialization can push a chunk of a layer's units negative in one bad early step, and that fraction of the layer simply stops participating for the rest of training. It's diagnosed empirically by checking what fraction of units are exactly zero across a full batch; a healthy layer shows well under half, a dying one climbs toward all of it.
+
+There is a small zoo of alternatives, and part of their appeal is fixing exactly this. Sigmoid and tanh squash inputs into bounded ranges; they are historical defaults that still appear in attention gates and recurrent cells, but they saturate badly and make deep networks hard to train. GELU and SiLU are smooth ReLU-likes that show up in modern transformer FFN layers; Chapter 5 picks them up when we look at the SwiGLU variant Llama uses. Both are nonzero for negative inputs and their gradients only decay toward zero as the input gets very negative, never clamping to it outright the way ReLU's mask does — a unit computing GELU or SiLU can be pushed deep into its negative region and still receive a (small) gradient to climb back out. For the implementations in this chapter, ReLU is what every hidden layer uses; its dead-unit risk is a real cost, paid for simplicity and speed.
 
 The bias term deserves a sentence of its own. Without it, the affine map $y = Wx$ forces the output to pass through the origin: $x = 0 \Rightarrow y = 0$. For centered data this is benign; for almost everything else it isn't. Image pixels are in $[0, 1]$, not symmetric around zero. Token embeddings learn their own offsets but rely on biases downstream to recenter them. The conventional initialization for $b$ is zero; it contributes nothing to the first forward pass, and gradient descent fills it in.
 
 A note on terminology: "layer" in this chapter means one affine map plus its activation. Some references count them separately, so a "ten-layer MLP" might mean five affine-plus-activation pairs or ten alternating ones. We will be explicit when it matters; in this chapter "two-layer MLP" means two affine maps (with a ReLU between).
 
 <Callout type="aside">
-Modern transformer architectures often *omit* the bias on attention projections (query, key, value, output). The saving in memory and compute is small but non-zero at scale, and the empirical loss is undetectable. They keep biases in the FFN layers. The Llama family is the standard reference for this pattern; the choice is empirical, not principled.
+Modern transformer architectures often *omit* the bias on attention projections (query, key, value, output). The saving in memory and compute is small but non-zero at scale, and the empirical loss is undetectable. Models that drop attention biases typically drop them from the FFN projections too: Llama and PaLM use no biases anywhere in their linear layers. GPT-2 and GPT-3, by contrast, keep biases on every linear layer, attention and FFN alike. The choice is empirical, not principled.
 </Callout>
 
 A single affine-plus-activation pair, by itself, is a one-layer network. Real architectures stack many of them. To train such a stack we need a way to ask, after one forward pass, *how wrong was this?*, and a way to translate the answer into an update to every parameter. Those are the next two sections.
@@ -78,7 +80,7 @@ Here $y$ is the one-hot encoding of the true class and $p$ is the predicted prob
 
 This is the loss every LLM training loop is minimizing. Next-token prediction is classification over the vocabulary; cross-entropy is the loss; the logit vector at each position is what the transformer produces. A model that has memorized its training corpus assigns probability 1 to the correct next token and the cross-entropy is zero. A model that has learned nothing assigns the uniform distribution and the cross-entropy is $\log K$, where $K$ is the vocabulary size, about 11.5 nats for a 100K-token vocabulary. The training loss for an LLM lives between those extremes, and reductions in cross-entropy translate directly to perplexity ($\exp(L)$) and to held-out generalization.
 
-The runnable block below shows the numerically stable softmax (max-subtraction inside the exponent) and cross-entropy on a small logit vector. Different target classes produce wildly different losses: confident-and-right is near zero, confident-and-wrong is large.
+The runnable block below shows the numerically stable softmax (max-subtraction inside the exponent) and cross-entropy on a small logit vector. Different target classes produce wildly different losses: right-but-only-moderately-confident costs less than half a nat, and confidently-wrong costs over four nats.
 
 <RunnableCode
   client:visible
@@ -101,6 +103,16 @@ print("CE if target=2:  ", cross_entropy(logits, 2).round(3))
 `}
   packages={["numpy"]}
 />
+
+The `cross_entropy` function above computes `-log(softmax(logits))`: softmax first, then log. That's fine numerically for the logits in this example, but it's not what production frameworks do, and the reason is worth a sentence. Once $p_i$ underflows toward a very small float, `log(p_i)` amplifies whatever rounding error softmax already introduced; composing two separately-stabilized operations doesn't guarantee the composition is stable. The fix is to skip the intermediate probability entirely and compute $\log p_i$ directly from the logits:
+
+<Equation>
+$$
+\log p_i = z_i - \log \sum_k e^{z_k} = z_i - \operatorname{LogSumExp}(z), \qquad \operatorname{LogSumExp}(z) = m + \log \sum_k e^{z_k - m}, \; m = \max_k z_k.
+$$
+</Equation>
+
+The right-hand form is the same max-subtraction trick as stable softmax, applied one level up: every exponent is non-positive, so the sum can't overflow, and there's no separate `log` of a tiny probability to lose precision in. This is what `log_softmax` (and the fused `cross_entropy(logits, targets)`) computes in PyTorch and every other framework — never `log(softmax(z))` as two separate calls, always the LogSumExp identity in one.
 
 There is a clean payoff hiding inside cross-entropy that we will earn in section 4: the gradient of $L_\text{CE}$ with respect to the *pre-softmax* logits is the unreasonably tidy $p - y$. No quotient rule, no chain through the softmax. It is the cleanest gradient in this chapter, and frameworks fuse softmax with cross-entropy precisely to take advantage of it.
 
@@ -270,7 +282,7 @@ The ReLU step deserves a glance. The gradient through ReLU is one wherever the i
 
 What the matrix form makes obvious is the linear cost of backprop. Each gradient computation is a single matrix product or a single broadcast, the same order of compute as the corresponding forward operation. Total cost: roughly twice the forward pass, regardless of network depth. That is why backprop scales; that is why every framework is built around it.
 
-The widget below animates exactly this trace: forward pass, then backward pass, with shapes labeled at every step. Hover any operation to see the gradient flowing through it.
+The widget below animates exactly this trace: forward pass, then backward pass, with values labeled at every step. Hover any operation to see the gradient flowing through it.
 
 <WidgetFrame title="Backprop through a 2-layer MLP" caption="Animated trace of the forward and backward pass through a small MLP. Switch between input presets to see how different inputs flow through the network. Hover any node or edge for the math at that point.">
   <BackpropVisualizer client:visible />
@@ -462,7 +474,13 @@ AdamW decouples weight decay from the gradient. The Adam update runs on the raw 
 A subtle consequence of AdamW's decay being scaled by $\alpha$: weight decay automatically follows the learning rate schedule. When a cosine schedule warms the learning rate down toward the end of training, the effective weight decay shrinks too. Some implementations decouple this further (decay independent of LR), but most do not, and arguably the coupled behavior is what you want most of the time.
 </Callout>
 
-The runnable block below puts an Adam implementation on a different problem, a simple elongated quadratic $f(x, y) = x^2 + 10 y^2$, to make the per-parameter scaling visible. Plain SGD on this loss takes large $x$-steps and small $y$-steps. Adam normalizes them.
+### Choosing among them
+
+Everything said so far about Adam is a claim about *optimization*: how fast the training loss comes down, and how forgiving the method is of a badly-chosen learning rate. It is not a claim about the model you end up with. Wilson et al. 2017 (arxiv.org/abs/1705.08292) is the canonical counterpoint: on several image-classification and language tasks, SGD with momentum, given a comparable or slightly longer training budget, reaches *better* final test performance than Adam, even though Adam's training loss dropped faster in the early going. The usual explanation is that Adam's per-parameter rescaling distorts the implicit regularization that plain SGD's isotropic steps provide, so Adam finds a sharper, more overfitting-prone region of parameter space in some architectures — faster descent, worse destination.
+
+That result is old enough, and specific enough to certain architectures (vision CNNs, mostly), that it hasn't displaced AdamW as the default for transformer pretraining. At LLM scale, the raw problem of getting the loss down at all inside a fixed compute budget dominates any secondary generalization gap, and AdamW's robustness to learning-rate misspecification matters enormously when a single training run costs weeks of cluster time and a bad optimizer choice isn't something you get to retry cheaply. The rule this tutorial follows from here on: SGD-family optimizers are worth a second look on smaller, well-studied architectures where compute is abundant and generalization (not raw convergence speed) is the bottleneck; AdamW is the default whenever the model is large, the schedule is compute-constrained, or the architecture is a transformer — which, from Chapter 4 onward, is every architecture in this book.
+
+The runnable block below puts an Adam implementation on a different problem, a simple elongated quadratic $f(x, y) = x^2 + 10 y^2$, to make the per-parameter scaling visible. The gradient is $[2x, 20y]$, so $y$ is the steep, high-curvature direction and $x$ is the shallow one. Plain SGD takes large steps in $y$ (and can oscillate there) while crawling slowly along $x$. Adam normalizes both to a uniform step size.
 
 <RunnableCode
   client:visible
@@ -495,6 +513,7 @@ for step in range(50):
     grad = np.array([2 * x, 20 * y])
     opt.step([grad])
     if step % 10 == 0:
+        x, y = params[0]
         loss = x**2 + 10 * y**2
         print(f"step {step:2d}  x={params[0][0]:6.3f}  y={params[0][1]:6.3f}  loss={loss:.4f}")
 `}
@@ -560,7 +579,7 @@ Each node stores four things: its data (the forward value), its grad (the accumu
 
 # A tiny computation: L = (x * w + b).relu()
 x = Value(2.0)
-w = Value(-3.0)
+w = Value(3.0)
 b = Value(1.0)
 L = (x * w + b).relu()
 L.backward()
@@ -572,6 +591,10 @@ print(f"dL/db = {b.grad}")
   packages={[]}
   height={500}
 />
+
+<Callout type="aside">
+Look at `_backward` for `__add__` and `__mul__`: both write `self.grad += ...`, never `self.grad = ...`. That `+=` is not a style preference. If a value is consumed more than once in an expression — the same `Value` feeding two different terms, as every weight in a real network does — each consumer contributes its own share of the gradient, and the correct total is their *sum* (the multivariable chain rule). This is the difference between the gradient flowing through one particular edge into a node, and the gradient *with respect to* the node itself: the latter is what `.grad` holds after `.backward()`, and it's the sum over every edge that touches the node, however many there are. Autograd always computes the latter. If `Value` overwrote instead of accumulating, a parameter reused twice would silently report only one of its two contributions, and the reported gradient would be wrong without raising an error.
+</Callout>
 
 The structure is the entire idea. Every framework (PyTorch, JAX, TensorFlow) implements this pattern with more primitives, GPU kernels, broadcasting, and a great deal of engineering, but the conceptual core is what is on the screen. PyTorch's eager mode builds this graph dynamically on every forward pass, then walks it on `.backward()`. JAX traces the graph once and JIT-compiles it. The data structure and the algorithm are identical.
 
@@ -621,6 +644,30 @@ print("stable: ", softmax_stable(z))
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+The naive version computes `np.exp(z)` before dividing; `exp(1000)` already overflows a float64, giving `inf`, and `inf / inf` is `nan`. The stable version subtracts `z.max()` first, so the largest exponent is `exp(0) = 1` and every division stays finite.
+
+```python
+import numpy as np
+
+def softmax_naive(z):
+    e = np.exp(z)
+    return e / e.sum()
+
+def softmax_stable(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+z = np.array([1000.0, 999.0, 998.0])
+print("naive:  ", softmax_naive(z))   # [nan nan nan]
+print("stable: ", softmax_stable(z))  # [0.66524096 0.24472847 0.09003057]
+```
+
+</details>
+
 ### Exercise 2 (medium): Extend the MLP to 3 hidden layers
 
 The MLP in section 5 has one hidden layer. Extend it to three hidden layers (input → h1 → h2 → h3 → output) and train it on the same quadrant task. Does it converge faster, slower, or similarly to the 1-hidden-layer version? The toy task is benign enough that the answer is interesting either way.
@@ -665,6 +712,74 @@ class MLP3:
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Each layer needs its own weight matrix, bias, and gradient computation; the backward pass just chains `dz`/`da` through one more (affine + ReLU) block per layer, propagating from the output back to `W1`.
+
+```python
+import numpy as np
+
+def softmax(z, axis=-1):
+    z = z - z.max(axis=axis, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=axis, keepdims=True)
+
+def relu(x): return np.maximum(0, x)
+def relu_grad(x): return (x > 0).astype(x.dtype)
+
+class MLP3:
+    def __init__(self, d_in, d_h, d_out, seed=42):
+        rng = np.random.default_rng(seed)
+        self.W1 = rng.normal(0, np.sqrt(2.0 / d_in), size=(d_in, d_h))
+        self.b1 = np.zeros(d_h)
+        self.W2 = rng.normal(0, np.sqrt(2.0 / d_h), size=(d_h, d_h))
+        self.b2 = np.zeros(d_h)
+        self.W3 = rng.normal(0, np.sqrt(2.0 / d_h), size=(d_h, d_h))
+        self.b3 = np.zeros(d_h)
+        self.W_out = rng.normal(0, np.sqrt(2.0 / d_h), size=(d_h, d_out))
+        self.b_out = np.zeros(d_out)
+
+    def forward(self, x):
+        self.x = x
+        self.z1 = x @ self.W1 + self.b1
+        self.a1 = relu(self.z1)
+        self.z2 = self.a1 @ self.W2 + self.b2
+        self.a2 = relu(self.z2)
+        self.z3 = self.a2 @ self.W3 + self.b3
+        self.a3 = relu(self.z3)
+        self.z_out = self.a3 @ self.W_out + self.b_out
+        return self.z_out
+
+    def backward(self, y_true):
+        B, K = self.z_out.shape
+        p = softmax(self.z_out)
+        y_onehot = np.eye(K)[y_true]
+        dz_out = (p - y_onehot) / B
+        dW_out = self.a3.T @ dz_out
+        db_out = dz_out.sum(axis=0)
+
+        da3 = dz_out @ self.W_out.T
+        dz3 = da3 * relu_grad(self.z3)
+        dW3 = self.a2.T @ dz3
+        db3 = dz3.sum(axis=0)
+
+        da2 = dz3 @ self.W3.T
+        dz2 = da2 * relu_grad(self.z2)
+        dW2 = self.a1.T @ dz2
+        db2 = dz2.sum(axis=0)
+
+        da1 = dz2 @ self.W2.T
+        dz1 = da1 * relu_grad(self.z1)
+        dW1 = self.x.T @ dz1
+        db1 = dz1.sum(axis=0)
+        return dW1, db1, dW2, db2, dW3, db3, dW_out, db_out
+```
+
+Trained with the same data (`seed=0`), same `mlp` seed (`42`), `d_h=16`, `lr=0.05`, 500 steps: the 3-hidden-layer net reaches lower loss earlier than the 1-hidden-layer version (step 150: `loss 0.084` vs `loss 0.221`; step 400: `loss 0.032` vs `loss 0.098`), and both hit 100% batch accuracy by step 400. Extra depth converges *faster* here, not slower — the quadrant task is linearly separable per-layer-transformed input, so more capacity just gives the optimizer more ways to carve the boundary, and He init keeps every layer's activations well-scaled so the added depth doesn't destabilize training.
+
+</details>
+
 ### Exercise 3 (medium): Implement AdamW from scratch
 
 Take the Adam class from section 7 and modify it to implement AdamW (Loshchilov & Hutter 2017). The key difference: weight decay is applied to the parameter directly (`p -= lr * weight_decay * p`) AFTER the standard Adam update, NOT added to the gradient. Compare AdamW (with `weight_decay=0.01`) to plain Adam on the elongated quadratic from section 7.
@@ -699,6 +814,44 @@ class AdamW:
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+`step` is identical to `Adam.step` except for one line added after the adaptive update: `p -= self.lr * self.weight_decay * p`. The decay is applied to the raw parameter, not folded into the gradient, so it isn't rescaled by `v_hat`.
+
+```python
+import numpy as np
+
+class AdamW:
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
+        self.params = params
+        self.lr = lr
+        self.b1, self.b2 = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+        self.m = [np.zeros_like(p) for p in params]
+        self.v = [np.zeros_like(p) for p in params]
+        self.t = 0
+
+    def step(self, grads):
+        self.t += 1
+        for i, (p, g) in enumerate(zip(self.params, grads)):
+            self.m[i] = self.b1 * self.m[i] + (1 - self.b1) * g
+            self.v[i] = self.b2 * self.v[i] + (1 - self.b2) * g**2
+            m_hat = self.m[i] / (1 - self.b1**self.t)
+            v_hat = self.v[i] / (1 - self.b2**self.t)
+            p -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+            p -= self.lr * self.weight_decay * p
+
+# f(x, y) = x^2 + 10 * y^2, starting at (5, 5), lr=0.1
+params = [np.array([5.0, 5.0])]
+opt = AdamW(params, lr=0.1, weight_decay=0.01)
+```
+
+Starting from `(5, 5)` with `lr=0.1`, both optimizers follow the same near-diagonal path (Adam's per-parameter normalization already equalizes the `x` and `y` step sizes despite their 1:10 curvature ratio). AdamW's extra `-lr * weight_decay * p` pulls harder toward the origin at every step, so it's consistently a bit ahead: at step 40, AdamW is at `(1.316, 1.316)` with `loss=19.04` while plain Adam is at `(1.411, 1.411)` with `loss=21.90`. The gap is exactly the decoupled decay term accumulating — nothing in the adaptive `m`/`v` machinery changed.
+
+</details>
 
 ### Exercise 4 (hard): Build a tiny autograd engine
 
@@ -740,16 +893,76 @@ class Value:
         pass
 
 # Test:
-x, w, b = Value(2.0), Value(-3.0), Value(1.0)
+x, w, b = Value(2.0), Value(3.0), Value(1.0)
 L = (x * w + b).relu()
 L.backward()
 print(f"L = {L.data}")
 print(f"dL/dx = {x.grad}, dL/dw = {w.grad}, dL/db = {b.grad}")
-# Expected: L = 0.0 (because x*w + b = -5, and relu(-5) = 0)
-# So all grads should be 0 too.
+# Expected: L = 7.0 (because x*w + b = 7, and relu(7) = 7, so ReLU passes the
+# gradient through unchanged: dL/dx = w = 3.0, dL/dw = x = 2.0, dL/db = 1.0)
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+`__add__` and `__mul__` each build an output `Value` whose `_backward` applies the local derivative to `out.grad` and accumulates into the parents (`+=`, since a `Value` can feed into more than one downstream op). `relu` passes the gradient through unchanged when `data > 0`, and zeroes it otherwise. `backward()` builds a topological order by recursing into `_prev` before appending a node, seeds `self.grad = 1.0`, then walks that order in reverse.
+
+```python
+class Value:
+    def __init__(self, data, _children=(), _op=''):
+        self.data = data
+        self.grad = 0.0
+        self._backward = lambda: None
+        self._prev = set(_children)
+        self._op = _op
+
+    def __add__(self, other):
+        out = Value(self.data + other.data, (self, other), '+')
+        def _backward():
+            self.grad += out.grad
+            other.grad += out.grad
+        out._backward = _backward
+        return out
+
+    def __mul__(self, other):
+        out = Value(self.data * other.data, (self, other), '*')
+        def _backward():
+            self.grad += other.data * out.grad
+            other.grad += self.data * out.grad
+        out._backward = _backward
+        return out
+
+    def relu(self):
+        out = Value(max(0.0, self.data), (self,), 'relu')
+        def _backward():
+            self.grad += (out.data > 0) * out.grad
+        out._backward = _backward
+        return out
+
+    def backward(self):
+        topo, visited = [], set()
+        def build(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev:
+                    build(child)
+                topo.append(v)
+        build(self)
+        self.grad = 1.0
+        for v in reversed(topo):
+            v._backward()
+
+x, w, b = Value(2.0), Value(3.0), Value(1.0)
+L = (x * w + b).relu()
+L.backward()
+print(f"L = {L.data}")                                       # L = 7.0
+print(f"dL/dx = {x.grad}, dL/dw = {w.grad}, dL/db = {b.grad}")
+# dL/dx = 3.0, dL/dw = 2.0, dL/db = 1.0
+```
+
+</details>
 
 If you finish Exercise 4 in working form, you have essentially recreated [Karpathy's micrograd](https://github.com/karpathy/micrograd), the smallest serious autograd engine that ships. PyTorch, JAX, and TensorFlow are doing the same thing, just at scale.
 

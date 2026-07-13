@@ -1,24 +1,24 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch23-multimodal
-description: Multimodal, how LLMs perceive images, audio, and video. From the unifying technical pattern (any modality, tokenize, transformer), through Vision Transformers (images as patches), CLIP contrastive image-text alignment, modern vision-language models (LLaVA, GPT-4V, Claude with vision, Gemini), Whisper and voice-native audio, multimodal RAG, and computer use as the visual-agent frontier. Closes Phase 13's capability arc, reasoning, tool use, retrieval, and now perception, and sets up Phase 14's disciplines (safety, interpretability, evaluation).
+description: Multimodal, how LLMs perceive images, audio, and video. From the unifying technical pattern (any modality, tokenize, transformer), through Vision Transformers (images as patches), CLIP contrastive image-text alignment, modern vision-language models (LLaVA, GPT-4V, Claude with vision, Gemini), Whisper and voice-native audio, multimodal RAG, and computer use as the visual-agent frontier. Closes Part VII's capability arc, reasoning, tool use, retrieval, and now perception, and sets up Part VIII's disciplines (safety, interpretability, evaluation).
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { CLIPEmbeddingSpace, ViTPatchTokenizer } from '@components/widgets';
 
-Most of the world is not text. Images, audio, video, screenshots, charts, faces, voices, these carry vast information that text alone cannot represent. A text-only LLM can describe a chart it has been told about, but it cannot directly *see* one. **Multimodal models extend the language-model framework to non-text inputs and outputs.** The core technical question is mechanically simple and conceptually deep: how do you turn a non-text modality into something a transformer can process? The answer for vision is to chop the image into patches and treat each patch as a "visual token." The answer for audio is to compute a mel-spectrogram, split it into patches, and do the same thing. **The recipe generalizes. Once a modality is tokenized, the transformer doesn't know the difference between a text token, a visual token, or an audio token, they're all just vectors.**
+Most of the world is not text. Images, audio, video, screenshots, charts, faces, voices, these carry vast information that text alone cannot represent. A text-only LLM can describe a chart it has been told about, but it cannot directly *see* one. Multimodal models extend the language-model framework to non-text inputs and outputs. The core technical question is mechanically simple and conceptually deep: how do you turn a non-text modality into something a transformer can process? The answer for vision is to chop the image into patches and treat each patch as a "visual token." The answer for audio is to compute a mel-spectrogram, split it into patches, and do the same thing. The recipe generalizes. Once a modality is tokenized, the transformer doesn't know the difference between a text token, a visual token, or an audio token, they're all just vectors.
 
 This chapter walks the production multimodal stack. **Vision Transformers (ViT)** are the foundational mechanism, images become token sequences via patch embedding. **CLIP** trains image and text encoders jointly so their embeddings share a space; cosine similarity becomes a cross-modal bridge. **Modern vision-language models**, LLaVA, GPT-4V, Claude with vision, Gemini, connect CLIP-style vision encoders to LLMs. **Audio** follows the same recipe: Whisper turned spectrograms into a strong open-source ASR; voice-native models (GPT-4o, Gemini Live) handle audio in and out end-to-end with sub-second latency. **Multimodal RAG** retrieves images alongside text in shared embedding spaces. **Computer use** ties everything together, a visual agent that operates a desktop via screenshots, mouse, and keyboard, combining vision (this chapter) with tool use (Chapter 21) and reasoning (Chapter 20).
 
-**This chapter closes Phase 13.** The capability arc, reasoning, tool use, retrieval, multimodal, turns raw next-token generation into something closer to a generally-capable digital assistant. By the end you should understand how LLMs perceive beyond text, and where the limits still bite. Then Phase 14 opens with the disciplines that turn capable systems into trustworthy ones: safety (Chapter 24), interpretability (Chapter 25), and evaluation (Chapter 26).
+This chapter closes Part VII. The capability arc, reasoning, tool use, retrieval, multimodal, turns raw next-token generation into something closer to a generally-capable digital assistant. By the end you should understand how LLMs perceive beyond text, and where the limits still bite. Then Part VIII opens with the disciplines that turn capable systems into trustworthy ones: safety (Chapter 24), interpretability (Chapter 25), and evaluation (Chapter 26).
 
 ## Why multimodal matters
 
 ### The unstated assumption of text-only models
 
-Text-only LLMs carry an unstated assumption: the world is describable in text. **It mostly is not.** Documents have layout; diagrams have spatial structure; voices carry tone and emotion; videos have motion; charts have geometry that no caption fully captures. A text-only model can describe these things post-hoc, *after* someone has converted them to a textual description, but it cannot directly perceive them. The interface between the world and a text-only LLM is a human who has done the perception work first. Multimodal removes that intermediary.
+Text-only LLMs carry an unstated assumption: the world is describable in text. It mostly is not. Documents have layout; diagrams have spatial structure; voices carry tone and emotion; videos have motion; charts have geometry that no caption fully captures. A text-only model can describe these things post-hoc, *after* someone has converted them to a textual description, but it cannot directly perceive them. The interface between the world and a text-only LLM is a human who has done the perception work first. Multimodal removes that intermediary.
 
 What multimodal unlocks is a list that any production team feels the absence of within a week of trying to build with text-only models. **Document understanding**: read PDFs with figures, tables, and formulas as documents rather than as flat text. **Diagram and chart reasoning**: answer questions about an architecture diagram or a sales chart that no caption fully captures. **Voice interfaces**: conversational AI that actually listens, with prosody intact. **Computer use**: agents that can see their environment, the bridge from Chapter 21 to genuine UI automation. **Robotics and embodied AI**, perception-action loops grounded in visual observation.
 
@@ -30,15 +30,13 @@ The technical claim that organizes the entire chapter is one equation.
 $$\text{modality} \;\xrightarrow{\text{tokenizer}}\; \text{token sequence} \;\xrightarrow{\text{transformer}}\; \text{output}$$
 </Equation>
 
-**Once a modality is tokenized, the transformer treats it like any other sequence.** The novelty in multimodal is the tokenizer; the architecture is not new. This is why multimodal is conceptually simple but engineering-heavy, the transformer is the same machine you've spent twenty-two chapters with; the tokenization layer is where all the work happens.
+Once a modality is tokenized, the transformer treats it like any other sequence. The novelty in multimodal is the tokenizer; the architecture is not new. This is why multimodal is conceptually simple but engineering-heavy, the transformer is the same machine you've spent twenty-two chapters with; the tokenization layer is where all the work happens.
 
 The empirical scale of multimodal in early $2025$ is worth keeping in mind throughout the chapter. **VLM input** runs $196$ to $4{,}000$ visual tokens per image depending on resolution and the specific encoder. **Multimodal context** reaches $100$K to $1$M tokens when video is included. **Voice latency** targets are under $500$ms end-to-end for GPT-4o and Gemini Live, the threshold at which conversation starts to feel natural rather than transactional. **Quality**: frontier VLMs match or exceed humans on many visual-QA benchmarks, though "many" hides a long tail of failure modes that the rest of this chapter will name.
 
 <Callout type="aside">
-"Multimodal is fundamentally different from text-only" is **false.** The transformer architecture is identical. The only difference is the tokenizer, text uses BPE; images use ViT patches; audio uses spectrogram patches. **Once tokenized, the transformer doesn't know the difference.** This is why multimodal is conceptually simple but engineering-heavy: the transformer stays the same; the tokenization layer is what changes. Hold this in mind for every section that follows.
+"Multimodal is fundamentally different from text-only" is **false.** The transformer architecture is identical. The only difference is the tokenizer, text uses BPE; images use ViT patches; audio uses spectrogram patches. Once tokenized, the transformer doesn't know the difference. This is why multimodal is conceptually simple but engineering-heavy: the transformer stays the same; the tokenization layer is what changes. Hold this in mind for every section that follows.
 </Callout>
-
-The next section introduces the canonical vision tokenizer, Vision Transformers.
 
 ## Vision Transformers: images as tokens
 
@@ -48,17 +46,17 @@ The **Vision Transformer** (Dosovitskiy $2020$) is the paper that established th
 
 Take an image, say $224 \times 224$ pixels, RGB. **Split it into patches** of $16 \times 16$ pixels each, which gives $14 \times 14 = 196$ patches in total. **Flatten** each patch into a vector of $16 \times 16 \times 3 = 768$ values. **Linearly project** that flat vector to the transformer's embedding dimension (also $768$ in the standard ViT-B configuration). **Add a positional encoding** that captures where the patch sits in the image. **Prepend a `[CLS]` token** for a global representation. **Feed the resulting sequence into a standard transformer.** The transformer's output for the `[CLS]` token is a representation of the whole image; per-patch outputs represent regions.
 
-The remarkable empirical claim of the paper is that **a transformer with no convolutions, trained on enough data, matches or exceeds CNNs on image classification.** The locality bias that convolutional networks hard-code, the assumption that nearby pixels matter most, can be *learned* from data instead, given enough of it. The implication for multimodal is structural: the same architecture that processes text can process images; only the embedding layer differs.
+The remarkable empirical claim of the paper is that a transformer with no convolutions, trained on enough data, matches or exceeds CNNs on image classification. The locality bias that convolutional networks hard-code, the assumption that nearby pixels matter most, can be *learned* from data instead, given enough of it. The implication for multimodal is structural: the same architecture that processes text can process images; only the embedding layer differs.
 
 ### Patch size tradeoffs
 
 The patch size is the main tunable, and it controls the cost-quality curve directly. **Smaller patches** ($8 \times 8$) produce more tokens, capture finer-grained detail, and cost more compute per image. **Larger patches** ($32 \times 32$) produce fewer tokens, coarser detail, and less compute. **Standard sizes** are $14 \times 14$ or $16 \times 16$ for $224$-resolution input, the sweet spot for general visual understanding.
 
-The token-count math is unavoidable and dominates the cost of any production VLM. A $224 \times 224$ image with $16 \times 16$ patches yields $196$ visual tokens. A $336 \times 336$ image with $14 \times 14$ patches, LLaVA's default, yields $576$ tokens. A $1024 \times 1024$ image with $16 \times 16$ patches yields $4{,}096$ tokens, which is most of a context window for a single image. **Tokens scale quadratically with resolution**: so high-detail VLM input is genuinely expensive; production VLMs typically run adaptive resolution, high for OCR-heavy queries, low for general image understanding.
+The token-count math is unavoidable and dominates the cost of any production VLM. A $224 \times 224$ image with $16 \times 16$ patches yields $196$ visual tokens. A $336 \times 336$ image with $14 \times 14$ patches, LLaVA's default, yields $576$ tokens. A $1024 \times 1024$ image with $16 \times 16$ patches yields $4{,}096$ tokens, which is most of a context window for a single image. Tokens scale quadratically with resolution, so high-detail VLM input is genuinely expensive; production VLMs typically run adaptive resolution, high for OCR-heavy queries, low for general image understanding.
 
 ### What this enables
 
-The reason the ViT recipe matters beyond image classification is what it enables downstream. **Any architecture that operates on token sequences now operates on images.** Cross-attention from a text decoder over visual tokens (the Flamingo pattern). Concatenating visual tokens with text tokens (the LLaVA pattern). Joint training on mixed-modality sequences (the Gemini pattern). All of these are downstream of the ViT decision to treat an image as a sequence.
+The reason the ViT recipe matters beyond image classification is what it enables downstream. Any architecture that operates on token sequences now operates on images. Cross-attention from a text decoder over visual tokens (the Flamingo pattern). Concatenating visual tokens with text tokens (the LLaVA pattern). Joint training on mixed-modality sequences (the Gemini pattern). All of these are downstream of the ViT decision to treat an image as a sequence.
 
 <WidgetFrame title="ViT patch tokenizer" caption="A 128×128 stylized landscape image is split into an 8×8 grid of 16×16-pixel patches. Click any patch to inspect what becomes one visual token: position in the grid, mean RGB color, the flatten arithmetic (16×16×3 = 768 raw values), and a sparkline sketch of the 768-dim projected embedding. After patch embedding, the transformer doesn't know it's processing an image, it sees a token sequence, just like text.">
   <ViTPatchTokenizer client:visible />
@@ -122,13 +120,27 @@ print(f"Each flattened patch: {16*16*3} values, projected to {tokens.shape[1]}-d
 ```
 </RunnableCode>
 
-The next section introduces how visual tokens get aligned with text, the conceptual bridge that opens the modern multimodal era.
+### Discrete tokenization: VQ-VAE and lookup-free quantization
+
+ViT patches are continuous vectors, floating-point projections of pixel values, not symbols drawn from a fixed vocabulary. A second paradigm tokenizes images the way BPE tokenizes text: into integers from a finite codebook.
+
+**VQ-VAE**-style codebook tokenization (Esser $2020$'s VQGAN is the version that scaled the idea to high-resolution transformer training) works in three pieces. An encoder maps the image to a grid of continuous feature vectors, structurally the same as ViT's patch embeddings. Each vector is then snapped to its nearest neighbor in a **learned codebook**, a fixed table of, say, $8{,}192$ embedding vectors, and replaced by that neighbor's integer index. The image is now literally a sequence of integers, exactly like a BPE-tokenized sentence is a sequence of integers. A decoder reconstructs the image from the codebook indices; encoder, codebook, and decoder train jointly, with a straight-through gradient estimator carrying gradients through the non-differentiable nearest-neighbor lookup.
+
+Why bother making tokens discrete when continuous ViT patches already work for understanding tasks? **Generation.** An autoregressive transformer predicts one token from a fixed vocabulary at a time, the same next-token recipe this book has built on since Chapter 3. Continuous patches have no fixed vocabulary to predict over. Discrete image tokens let the same GPT-style decoder that generates text also generate images, one codebook index at a time, with no separate continuous-output architecture required.
+
+The catch is **codebook collapse**: during training, a handful of codebook entries end up absorbing most of the traffic while the rest sit dead and unused, wasting capacity that was supposed to represent visual diversity. Codebook resets, exponential-moving-average updates, and commitment losses all mitigate this; none eliminate it outright.
+
+**Lookup-free quantization** removes the codebook, and the collapse failure mode along with it, by changing what gets quantized. Instead of a nearest-neighbor search over a large learned table, split the embedding into a handful of independent scalar dimensions, Mentzer $2023$'s Finite Scalar Quantization (FSQ, [arxiv.org/abs/2309.15505](https://arxiv.org/abs/2309.15505)) uses on the order of $5$–$10$, and round each dimension independently to one of a small fixed set of values: no learned table, no nearest-neighbor search. The implicit vocabulary size is just the product of the per-dimension level counts, and since there is nothing to collapse to, every entry in that implicit vocabulary gets used.
+
+<Callout type="insight">
+Three paradigms tokenize images, and production systems pick based on the job. **ViT patches** (continuous) are what vision-language *understanding* models use, LLaVA, GPT-4V, Claude with vision, none of them need to output pixels. **VQ-VAE / VQGAN codebook indices** (discrete, learned) and **lookup-free quantization** (discrete, no learned table) are what image-*generation* transformers use, since generation needs a fixed vocabulary to predict over. The three are not competing solutions to the same problem, the deciding question is "does this model need to output images, or only consume them?"
+</Callout>
 
 ## CLIP: aligning image and text
 
 ### The training objective
 
-ViT turns an image into a sequence of tokens, but on its own that sequence lives in a space disjoint from any text encoder's output. **CLIP** (Radford $2021$) is the technique that puts them in the same space. The setup is two encoders trained jointly: an image encoder (ViT or a CNN) maps images to a $512$- or $768$-dim embedding; a text encoder (a small transformer) maps captions to a same-dim embedding. **Contrastive loss** on a batch of $N$ (image, caption) pairs asks the $N \times N$ cosine-similarity matrix to be the identity, paired pairs at high similarity on the diagonal, unpaired pairs at low similarity off it.
+ViT turns an image into a sequence of tokens, but on its own that sequence lives in a space disjoint from any text encoder's output. **CLIP** (Radford $2021$) is the technique that puts them in the same space. The setup is two encoders trained jointly: an image encoder (ViT or a CNN) maps images to a $512$- or $768$-dim embedding; a text encoder (a small transformer) maps captions to a same-dim embedding. **Contrastive loss**, specifically the **InfoNCE** objective, on a batch of $N$ (image, caption) pairs asks the $N \times N$ cosine-similarity matrix to be the identity, paired pairs at high similarity on the diagonal, unpaired pairs at low similarity off it.
 
 <Equation label="23.clip-contrastive">
 $$\mathcal{L}_{\text{CLIP}} = -\frac{1}{2}\left[\frac{1}{N}\sum_{i} \log \frac{\exp(s_{ii} / \tau)}{\sum_j \exp(s_{ij} / \tau)} + \frac{1}{N}\sum_{j} \log \frac{\exp(s_{jj} / \tau)}{\sum_i \exp(s_{ij} / \tau)}\right]$$
@@ -142,7 +154,7 @@ The training scale is what made CLIP work. The original paper used **$400$M (ima
 
 **Zero-shot classification.** Compare an image's embedding to the embeddings of class-name prompts like "a photo of a cat", "a photo of a dog", and so on; the highest-similarity prompt is the predicted class. No labeled training data needed for the target task. **Text-to-image search.** Embed a query text; find nearest images in the vector store. **Image-to-text search.** Embed a query image; find nearest text passages. Each of these is one cosine-similarity computation away from the same embeddings. **Vision encoder for VLMs.** CLIP's image encoder is the most common visual encoder in modern VLMs, LLaVA uses CLIP-ViT-L; many derivatives swap in SigLIP or other contrastive variants. The shared-space property is what makes the next section's bolt-on architecture possible at all.
 
-<WidgetFrame title="CLIP embedding space" caption="A 2D projection of a CLIP-style shared embedding space. Twelve items, 6 image emojis and 6 text snippets, form four content clusters (cats, dogs, cars, boats). Pick a text query; watch its position; see which items light up as its top-3 nearest neighbors. Images and texts both appear in the results because they live in the same embedding space. This is what CLIP gives you: cosine similarity that bridges modalities, the foundation of every modern vision-language model.">
+<WidgetFrame title="CLIP embedding space" caption="A 2D projection of a CLIP-style shared embedding space. Twelve items, 7 image emojis and 5 text snippets, form four content clusters (cats, dogs, cars, boats). Pick a text query; watch its position; see which items light up as its top-3 nearest neighbors. Images and texts both appear in the results because they live in the same embedding space. This is what CLIP gives you: cosine similarity that bridges modalities, the foundation of every modern vision-language model.">
   <CLIPEmbeddingSpace client:visible />
 </WidgetFrame>
 
@@ -196,8 +208,6 @@ print(f"(Lower is better; perfect alignment → 0)")
 ```
 </RunnableCode>
 
-The next section covers what happens when CLIP's vision encoder gets connected to an LLM, the modern VLM stack.
-
 ## Modern vision-language models
 
 ### The LLaVA-style pattern
@@ -210,17 +220,23 @@ The architectural decision that makes the pattern work is the use of a frozen, p
 
 The LLaVA recipe formalized a two-stage training pattern that most open-source VLMs still follow. **Stage 1, projection-only.** Freeze the vision encoder and the LLM; train only the projection layer on a large caption corpus. The projection learns to align CLIP's visual semantics with the LLM's input space. This stage is cheap and fast. **Stage 2, visual instruction tuning.** Unfreeze the LLM (and sometimes the vision encoder); fine-tune on visual question-answering data, image-conditioned chat, and the kind of multi-turn prompts a real user produces. This stage is where VLM "personality" gets shaped.
 
+### The Flamingo pattern: gated cross-attention
+
+LLaVA concatenates visual tokens into the text sequence and lets the LLM's existing self-attention do the mixing. **Flamingo** (Alayrac $2022$, [arxiv.org/abs/2204.14198](https://arxiv.org/abs/2204.14198)) makes a different architectural bet: freeze the LLM entirely, and instead of touching its input sequence, splice new **gated cross-attention** layers between its existing blocks. Text tokens attend to visual tokens through these new layers; the LLM's own self-attention over text never sees a visual token directly.
+
+Two mechanisms make this practical. The **Perceiver Resampler** solves a token-budget problem: a vision encoder can emit hundreds of tokens per image, and far more across a multi-frame video, so Flamingo compresses this down to a small fixed number ($64$ in the original paper) using a fixed set of learned latent queries that cross-attend to the raw visual features. The compressed count doesn't grow with input resolution or frame count, only the number of learned queries determines it. The **gated cross-attention** itself is wrapped in a learned scalar gate initialized near zero (a $\tanh$ gate), so at the start of training the newly inserted layers are close to a no-op and the frozen LLM behaves as it always did; training gradually opens the gate as the cross-attention layers learn to extract useful signal from the compressed visual tokens.
+
+The tradeoff against LLaVA's concatenation is architectural cost versus token-budget flexibility. **LLaVA** is cheap to implement, since the LLM's forward pass is untouched, but every visual token concatenated into the sequence eats context length, $576$ tokens for one $336$-resolution image, more for multiple images or video frames. **Flamingo** inserts new parameters and a new attention pathway, more invasive to build, but the Perceiver Resampler decouples visual-token count from context length entirely, an advantage that matters most once the modality is video, where there could otherwise be hundreds of frames' worth of tokens to fit.
+
 ### The frontier landscape
 
-As of early $2025$, the frontier VLM landscape has four families worth recognizing, and a clear caveat that any list will date itself fast. **GPT-4V / GPT-4o** (OpenAI), broad visual capabilities, strong OCR, capable chart reasoning, voice-native conversation. **Claude $3.5$ / $4$ with vision** (Anthropic), strong document understanding and the canonical computer-use deployment. **Gemini $1.5$ / $2.0$** (Google), **native multimodal** trained on text, images, audio, and video together from the start, with the longest video context windows on the market. **Open-source**, LLaVA, Qwen-VL, InternVL, Pixtral; the open frontier moves fast and the gap to closed models has narrowed considerably in $2024 - 2025$.
+As of $2026$-$07$-$13$, the frontier VLM landscape has moved well past this book's earlier snapshot, and the same caveat applies with more force: any list like this dates itself within months. **GPT-4V / GPT-4o** (OpenAI) opened the modern VLM era; OpenAI's line has since moved through **GPT-5** (August $2025$), natively multimodal from the start of training rather than a vision encoder bolted onto a text model, with a run of point releases since (GPT-5.1 through GPT-5.6 as of mid-$2026$). **Claude $3.5$ / $4$ with vision** (Anthropic) established strong document understanding and the canonical computer-use deployment; the current lineup, **Claude Opus $4.8$**, **Claude Sonnet $5$**, and the frontier **Claude Fable $5$** (June $2026$), keeps the same vision profile, image input rather than native video understanding. **Gemini $1.5$ / $2.0$** (Google) pioneered native multimodal training on text, images, audio, and video together; **Gemini $3$** (November $2025$) extends the same recipe with a $1$M-token context window and state-of-the-art scores on visual-reasoning benchmarks like MMMU-Pro and Video-MMMU. **Open-source**, LLaVA, Qwen-VL, InternVL, Pixtral; the open frontier continues to narrow the gap with closed models. Treat every specific model name in this paragraph as a snapshot, not a ceiling.
 
 The architectural variants behind these are worth distinguishing. **Bolt-on** (LLaVA-style): vision encoder + projector + LLM. **Cross-attention** (Flamingo-style): text tokens attend to visual tokens via dedicated cross-attention layers. **Native** (Gemini-style): a single architecture trained on mixed-modality tokens from the start.
 
 <Callout type="note">
-"Native multimodal models are always better than bolt-on", it depends. **Native** (Gemini) has better cross-modal reasoning because the model has co-trained on all modalities from scratch, but it is much more expensive to train. **Bolt-on** (LLaVA) is cheaper and benefits directly from advances in text-LLM training, since the LLM half can be swapped in from a stronger checkpoint without retraining the vision side. **Both are competitive at the frontier** as of $2025$; the architectural choice is a research bet, not a clear win.
+"Native multimodal models are always better than bolt-on", it depends. **Native** (Gemini) has better cross-modal reasoning because the model has co-trained on all modalities from scratch, but it is much more expensive to train. **Bolt-on** (LLaVA) is cheaper and benefits directly from advances in text-LLM training, since the LLM half can be swapped in from a stronger checkpoint without retraining the vision side. Both are competitive at the frontier as of $2025$; the architectural choice is a research bet, not a clear win.
 </Callout>
-
-The next section extends the same recipe to a different modality, audio.
 
 ## Audio: Whisper and voice-native models
 
@@ -230,19 +246,39 @@ The audio analog of ViT is **Whisper** (Radford $2022$). The pipeline is the sam
 
 The training scale is the part that made Whisper a turning point: **$680$K hours of audio with paired transcripts**, scraped from the internet across many languages, accents, and acoustic conditions. The dataset is deliberately noisy: Whisper sees music in the background, overlapping speakers, low-bitrate phone calls, badly mixed podcasts, and the model emerged robust to all of it. Whisper's practical value follows from that scale. **Open-source and accurate**: it drops in as the transcription layer for any voice product; **multitask**: it handles transcription, translation, and language ID in a single model; **robust**: it handles noisy real-world audio that earlier ASR systems would choke on.
 
+### Discrete audio tokenization: codecs
+
+Whisper's spectrogram-patch pipeline is built for audio *understanding*, turning speech into text. Voice-native models that also generate audio (the next subsection) face the same problem VQ-VAE solved for images: an autoregressive transformer predicts one token from a fixed vocabulary at a time, and a raw waveform is a continuous, effectively infinite-precision signal, not a sequence of discrete symbols.
+
+**Neural audio codecs** solve it the same way VQ-VAE solves it for pixels. SoundStream (Zeghidour $2021$) and EnCodec (Défossez $2022$, Meta) both train an encoder-decoder pair to compress raw audio into a sequence of discrete tokens and reconstruct a perceptually faithful waveform from them. The mechanism is **residual vector quantization** (RVQ): a cascade of several codebooks, where the first codebook quantizes the audio feature and each subsequent codebook quantizes only the *residual* left over from the previous stage's error. The result is a stack of parallel discrete token streams (commonly $4$ to $32$ codebooks, depending on target bitrate) that jointly reconstruct high-fidelity audio at a small fraction of the raw waveform's size.
+
+These codec tokens are what let voice-native models generate audio autoregressively: a decoder-only transformer predicts the next codec token conditioned on the conversation so far, the same next-token recipe this book has used since Chapter 3, just with a codec's vocabulary in place of BPE's, and a codec decoder turns the predicted tokens back into a waveform. Once audio is a token stream, "generate audio" stops being a new architecture and becomes the unifying pattern from the start of this chapter, applied one more time.
+
 ### Voice-native models
 
-The modern frontier has moved past Whisper-as-a-step toward **voice-native models**, architectures that take audio in and produce audio out without text necessarily appearing in the middle. **GPT-4o** (OpenAI, May $2024$) was the first widely-deployed example, with voice-native conversation at sub-$500$ms latency. **Gemini Live** (Google, $2024$) followed with similar capabilities. **Claude voice** (Anthropic, on the roadmap) and other variants are converging on the same architectural shift.
+The modern frontier has moved past Whisper-as-a-step toward **voice-native models**, architectures that take audio in and produce audio out without text necessarily appearing in the middle. **GPT-4o** (OpenAI, May $2024$) was the first widely-deployed example, with voice-native conversation at sub-$500$ms latency; OpenAI retired ChatGPT's Advanced Voice Mode in favor of **GPT-Live**, a full-duplex voice model, in July $2026$. **Gemini Live** (Google, $2024$) followed with similar capabilities and remains part of the Gemini line through **Gemini 3**. **Claude voice** (Anthropic) shipped in mid-$2025$ and is no longer "on the roadmap," but as of $2026$-$07$-$13$ it is not the same architecture as GPT-4o or Gemini Live: Anthropic's voice mode chains speech-to-text and text-to-speech through a third-party provider (ElevenLabs) around the Claude text model, the older pipeline pattern the next paragraph contrasts against, rather than a single model that natively hears and speaks. Whether Anthropic ships a fully end-to-end voice model is exactly the kind of claim this book cannot make in advance; check current documentation.
 
-The shift is significant rather than cosmetic. **Previously, voice systems chained Whisper → LLM → TTS**, three models, three serial latencies, and text as the unavoidable intermediate representation. **Voice-native models do this end-to-end.** The model takes audio in and produces audio out, with text appearing as an optional intermediate or skipped entirely.
+The shift is significant rather than cosmetic. Previously, voice systems chained Whisper → LLM → TTS, three models, three serial latencies, and text as the unavoidable intermediate representation. Voice-native models do this end-to-end. The model takes audio in and produces audio out, with text appearing as an optional intermediate or skipped entirely.
 
 Why end-to-end matters comes down to three properties that the chained pipeline cannot easily reproduce. **Latency** is the obvious one, collapsing three model calls into one removes the serial bottleneck. **Prosody** is the subtler one, an end-to-end model can capture tone, emphasis, and emotional register because it has the raw audio to learn from rather than a transcript that has stripped them. **Interrupts** are the conversational one, natural human conversation involves overlapping speech and quick recoveries, which require the model to be listening continuously while speaking. The pipeline architecture cannot do this without significant engineering; the end-to-end architecture gets it nearly for free.
 
 <Callout type="aside">
-"Voice-native models are just Whisper + LLM + TTS in one model", half true at most. **End-to-end voice-native captures things the pipeline cannot**: prosody (tone, emphasis), natural interrupts, and sub-word audio cues that get destroyed when you transcribe and re-synthesize. **The architectural change is significant**: not cosmetic, the model truly hears the speaker, rather than reading transcripts of what it heard. Whether the user notices depends on the deployment, but the underlying capability difference is real.
+"Voice-native models are just Whisper + LLM + TTS in one model", half true at most. End-to-end voice-native captures things the pipeline cannot: prosody (tone, emphasis), natural interrupts, and sub-word audio cues that get destroyed when you transcribe and re-synthesize. The architectural change is significant, not cosmetic: the model truly hears the speaker, rather than reading transcripts of what it heard. Whether the user notices depends on the deployment, but the underlying capability difference is real.
 </Callout>
 
-The next section covers what happens when retrieval extends to non-text modalities.
+## Video: sparse frame sampling and temporal attention
+
+### Frames are the easy part
+
+Video looks at first like "images with a time axis," and the recipe starts exactly there: decode the video into frames and run each frame through the same ViT patch-embedding pipeline used for a still image. Two problems appear as soon as this gets scaled naively.
+
+**The frame-count problem.** A one-minute video at $30$ fps is $1{,}800$ frames. At LLaVA's $576$-tokens-per-image budget, that is over a million visual tokens for sixty seconds of footage, more than most context windows, and mostly redundant, since adjacent frames barely differ from each other. **Sparse frame sampling** is the standard fix: encode a small fixed number of frames spread across the video's duration ($8$, $32$, sometimes more depending on the model and video length) rather than every frame. The bet is that most of a video's information content survives a sparse sample; fast cuts, rapid motion, and single-frame events (a flash of text on screen) are where the bet loses.
+
+**The temporal problem.** Even with sparse sampling, treating each sampled frame as an independent image throws away exactly the information that makes it a *video*: a hand at position A in frame $3$ and position B in frame $4$ only encodes "the hand moved" if something connects the two frames. **Temporal attention** is that something, an attention pathway dedicated to mixing information across frames, separate from the spatial self-attention that already mixes information across each frame's own patches. Production video transformers usually factorize the two, spatial attention within a frame, then temporal attention across the same spatial position in different frames, rather than paying for full attention over every patch of every frame jointly, which would be quadratic in frame count on top of quadratic in patch count.
+
+### Where the earlier patterns come back
+
+The Flamingo-style Perceiver Resampler generalizes cleanly to video: the same fixed-size set of learned latent queries can cross-attend to features pooled across every sampled frame, giving a visual token budget that stays constant regardless of how many frames get sampled. Native multimodal models trained on video from the start (the Gemini family, as of the R1/o1 generation of frontier models) push furthest on long-video understanding, at the cost of the same "we can't inspect the architecture" honesty caveat that applies to native multimodal generally.
 
 ## Multimodal RAG
 
@@ -278,11 +314,12 @@ def mock_clip_embed(descriptor):
     seed = sum(ord(c) for c in descriptor)
     rng = np.random.RandomState(seed)
     base = rng.randn(DIM)
-    if 'cat' in descriptor.lower():
+    words = set(descriptor.lower().replace('.', '').replace(',', '').split())
+    if 'cat' in words or 'cats' in words:
         base[:5] += 2.0
-    if 'dog' in descriptor.lower() or 'labrador' in descriptor.lower():
+    if 'dog' in words or 'labrador' in words:
         base[5:10] += 2.0
-    if 'car' in descriptor.lower():
+    if 'car' in words or 'cars' in words:
         base[10:15] += 2.0
     return base / np.linalg.norm(base)
 
@@ -292,7 +329,7 @@ for item in corpus:
     item['embedding'] = mock_clip_embed(descriptor)
 
 # Query: text input, retrieve mixed image+text results
-query = "tips for taking care of cats"
+query = "tips for taking care of my cat"
 query_emb = mock_clip_embed(query)
 
 sims = [(item, float(np.dot(query_emb, item['embedding']))) for item in corpus]
@@ -307,20 +344,18 @@ for item, sim in sims:
 
 # Observations:
 # - Top results mix images and text: both are searched in the shared CLIP space
-# - "tips for taking care of cats" retrieves both the cat image AND the cat-care text
+# - "tips for taking care of my cat" retrieves both the cat image AND the cat-care text
 # - Production multimodal RAG returns both kinds to a VLM for grounded answers
 ```
 </RunnableCode>
 
 ### Production patterns
 
-The honest production picture differs from the elegant one. **Multimodal embeddings still lag** behind text-only embeddings at fine-grained semantic distinctions; the open-source multimodal models that ship today are noticeably worse than the best text-only models at retrieving "the document that exactly answers this question." **Cost** is meaningful, every image requires a CLIP forward pass to index, and a single image consumes the storage of a small text document's worth of vectors. **Modality drift**: text and image queries have different precision/recall profiles, and a single retrieval threshold rarely works well across both.
+The honest production picture differs from the elegant one. Multimodal embeddings still lag behind text-only embeddings at fine-grained semantic distinctions; the open-source multimodal models that ship today are noticeably worse than the best text-only models at retrieving "the document that exactly answers this question." **Cost** is meaningful, every image requires a CLIP forward pass to index, and a single image consumes the storage of a small text document's worth of vectors. **Modality drift**: text and image queries have different precision/recall profiles, and a single retrieval threshold rarely works well across both.
 
 <Callout type="warning">
-"Multimodal RAG is just regular RAG with image embeddings", half true. The retrieval-quality profile is different: noisier, more biased by visual appearance than by content, and less reliable than text retrieval. **Production multimodal RAG often uses text-only retrieval over OCR'd content**, with images surfaced as references rather than as the primary retrieval channel. **Treat multimodal embeddings as supplementary, not primary**, for high-precision retrieval, and benchmark on your corpus before betting an architecture on the assumption that image retrieval is as good as text retrieval. It usually isn't, yet.
+"Multimodal RAG is just regular RAG with image embeddings", half true. The retrieval-quality profile is different: noisier, more biased by visual appearance than by content, and less reliable than text retrieval. Production multimodal RAG often uses text-only retrieval over OCR'd content, with images surfaced as references rather than as the primary retrieval channel. Treat multimodal embeddings as supplementary, not primary, for high-precision retrieval, and benchmark on your corpus before betting an architecture on the assumption that image retrieval is as good as text retrieval. It usually isn't, yet.
 </Callout>
-
-The next section ties together vision, reasoning, and tool use into the chapter's convergence point, computer use.
 
 ## Computer use as visual agent
 
@@ -332,7 +367,7 @@ The tool catalog becomes a small set with a precise interface. **`computer_scree
 
 ### The agent loop, with vision
 
-The loop reads exactly like Chapter 20's ReAct pattern crossed with Chapter 21's tool-use scaffolding. **Take a screenshot**: the visual observation. **Reason about what to do**: the ReAct thought step from Chapter 20. **Emit a tool call**: the Chapter 21 action ("click at $640, 384$"). **Tool executes; the new screenshot is the next observation.** **Loop until the task is complete.** The architectural novelty is zero. The chapter has been building toward this convergence point since the start of Phase 13.
+The loop reads exactly like Chapter 20's ReAct pattern crossed with Chapter 21's tool-use scaffolding. **Take a screenshot**: the visual observation. **Reason about what to do**: the ReAct thought step from Chapter 20. **Emit a tool call**: the Chapter 21 action ("click at $640, 384$"). Tool executes; the new screenshot is the next observation. Loop until the task is complete. The architectural novelty is zero. The chapter has been building toward this convergence point since the start of Part VII.
 
 Why this matters is the same reason every general-purpose technique matters: it removes a constraint. **No custom API integration**, the model can use any application a human can use, including legacy desktop software with no programmatic interface. **Legacy app automation**: the long tail of enterprise software that ships without an API becomes scriptable. **Web automation**: operating a browser visually, with all the brittleness of screen scraping replaced by the model's general vision capabilities.
 
@@ -341,10 +376,8 @@ Why this matters is the same reason every general-purpose technique matters: it 
 The limitations matter as much as the promise. **Latency** is real, each step costs a screenshot, a model call, and an action, so the loop runs at roughly $2$ – $5$ seconds per step in $2025$. **Error-prone**, misclicks, hallucinated UI elements, and clicks on the wrong element of a busy interface all happen with measurable frequency. **High-stakes risk**, a model that can operate a computer can also delete files, send emails, and make purchases; production deployments need careful sandboxing. **Coordinate system mismatches**, DPI scaling, browser zoom, and retina displays all create gaps between "the pixel coordinate the model emits" and "the pixel that actually gets clicked."
 
 <Callout type="note">
-"Computer use will automate everything soon" is unlikely as of $2025$. **Computer use is impressive but slow and error-prone.** Production tasks where it works today: web form filling, accessibility testing, repetitive UI workflows, QA automation. **Tasks where it does not work yet**: anything that needs sub-second latency, high-stakes financial actions, deep domain reasoning over a complex interface. **It is a tool in the toolkit, not a universal automator**, the right framing is "another capability to compose," not "the end of UI engineering."
+"Computer use will automate everything soon" is unlikely as of $2025$. Computer use is impressive but slow and error-prone. Production tasks where it works today: web form filling, accessibility testing, repetitive UI workflows, QA automation. **Tasks where it does not work yet**: anything that needs sub-second latency, high-stakes financial actions, deep domain reasoning over a complex interface. It is a tool in the toolkit, not a universal automator, the right framing is "another capability to compose," not "the end of UI engineering."
 </Callout>
-
-The next section closes Phase 13 and sets up the disciplines that come after.
 
 ## Exercises
 
@@ -414,6 +447,50 @@ image = np.random.rand(224, 224, 3) * 255
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+The trick is a reshape-transpose-reshape: split `(H, W, C)` into `(H/P, P, W/P, P, C)`, transpose to group the two patch-index axes together `(H/P, W/P, P, P, C)`, then flatten. Each seeded random draw supplies one piece (projection, position embedding, CLS token), concatenated in that order.
+
+```python
+import numpy as np
+
+def patch_embed(image, patch_size=16, embed_dim=768):
+    H, W, C = image.shape
+    n_patches_h = H // patch_size
+    n_patches_w = W // patch_size
+    n_patches = n_patches_h * n_patches_w
+
+    patches = image.reshape(n_patches_h, patch_size, n_patches_w, patch_size, C)
+    patches = patches.transpose(0, 2, 1, 3, 4)          # (n_ph, n_pw, P, P, C)
+    patches = patches.reshape(n_patches, patch_size * patch_size * C)
+
+    patch_flat_dim = patch_size * patch_size * C
+    np.random.seed(0)
+    W_proj = np.random.randn(patch_flat_dim, embed_dim)
+    tokens = patches @ W_proj
+
+    np.random.seed(1)
+    pos_embed = np.random.randn(n_patches, embed_dim)
+    tokens = tokens + pos_embed
+
+    np.random.seed(2)
+    cls_token = np.random.randn(1, embed_dim)
+
+    return np.concatenate([cls_token, tokens], axis=0)
+
+
+np.random.seed(42)
+image = np.random.rand(224, 224, 3) * 255
+
+tokens = patch_embed(image)
+print(f"Token sequence shape: {tokens.shape}")   # (197, 768): 196 patches + 1 CLS
+```
+
+Output: `Token sequence shape: (197, 768)`, exactly the shape a BERT-Base encoder would consume for a 196-token sentence.
+
+</details>
 
 ### Exercise 2 (medium): CLIP cosine similarity matrix
 
@@ -493,6 +570,39 @@ for i in range(N):
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+L2-normalize both sets of rows, then the dot product `image_embs @ text_embs.T` is exactly the cosine similarity matrix. The paired bias (`text_embs[i] += 0.7 * image_embs[i]`) pulls each diagonal entry toward 1.0 relative to its row/column.
+
+```python
+import numpy as np
+
+def cosine_similarity_matrix(image_embs, text_embs):
+    img_norm = image_embs / np.linalg.norm(image_embs, axis=1, keepdims=True)
+    txt_norm = text_embs / np.linalg.norm(text_embs, axis=1, keepdims=True)
+    return img_norm @ txt_norm.T
+
+
+np.random.seed(0)
+N, D = 5, 256
+image_embs = np.random.randn(N, D)
+text_embs = np.random.randn(N, D)
+for i in range(N):
+    text_embs[i] += 0.7 * image_embs[i]
+
+sim_matrix = cosine_similarity_matrix(image_embs, text_embs)
+diag_mean = np.mean(np.diag(sim_matrix))
+off_diag_mean = (sim_matrix.sum() - sim_matrix.trace()) / (N * N - N)
+print(f"Diagonal mean (paired):       {diag_mean:.3f}")
+print(f"Off-diagonal mean (unpaired): {off_diag_mean:.3f}")
+print(f"Gap:                          {diag_mean - off_diag_mean:.3f}")
+```
+
+Output: diagonal mean `0.609`, off-diagonal mean `0.009`, gap `0.601`, a clean separation between paired and unpaired entries.
+
+</details>
+
 ### Exercise 3 (medium): Multimodal RAG with CLIP embeddings
 
 Build a tiny multimodal RAG system. Index a small corpus of items (images and texts) using mock CLIP embeddings; answer a text query by retrieving top-K nearest items across both modalities.
@@ -534,8 +644,15 @@ def mock_clip_embed(text, dim=512):
     rng = np.random.RandomState(seed)
     v = rng.randn(dim)
     # Bias by keyword presence (mimicking what CLIP learns)
-    for keyword, axis_start in [('cat', 0), ('dog', 10), ('labrador', 10), ('car', 20), ('sailboat', 30), ('sailing', 30)]:
-        if keyword in text.lower():
+    words = set(text.lower().replace(',', '').replace('.', '').split())
+    keyword_groups = [
+        (('cat', 'cats'), 0),
+        (('dog', 'dogs', 'labrador', 'labradors', 'puppy', 'puppies'), 10),
+        (('car', 'cars'), 20),
+        (('sailboat', 'sailboats', 'sailing'), 30),
+    ]
+    for keywords, axis_start in keyword_groups:
+        if words & set(keywords):
             v[axis_start:axis_start + 5] += 2.0
     return v / np.linalg.norm(v)
 
@@ -555,9 +672,9 @@ def multimodal_rag_retrieve(query_text, corpus, top_k=3):
 
 # Test
 queries = [
-    "tips for caring for a cat",     # should retrieve cat items (image + text)
-    "fast vehicles",                  # should retrieve car (and maybe boat)
-    "sailing for beginners",          # should retrieve sailing items
+    "tips for taking care of my cat",  # should retrieve cat items (image + text)
+    "sports cars are fast vehicles",   # should retrieve car items (image + text)
+    "sailing for beginners",           # should retrieve sailing items
 ]
 
 # for q in queries:
@@ -568,12 +685,54 @@ queries = [
 #
 # # Observations:
 # # - Top-K mixes images and texts: both are searched in the same embedding space
-# # - "tips for caring for a cat" finds BOTH the cat image AND the cat-care text
+# # - "tips for taking care of my cat" finds BOTH the cat image AND the cat-care text
 # # - Cross-modal retrieval is what CLIP enables; no separate image and text indexes needed
 # # - This is multimodal RAG in 30 lines of code.
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Embed the query and every corpus item's `content` with the same `mock_clip_embed`, score by dot product (both sides are already L2-normalized so this is cosine similarity), sort descending, slice to `top_k`.
+
+```python
+import numpy as np
+
+def multimodal_rag_retrieve(query_text, corpus, top_k=3):
+    q_emb = mock_clip_embed(query_text)
+    scored = []
+    for item in corpus:
+        item_emb = mock_clip_embed(item['content'])
+        sim = float(np.dot(q_emb, item_emb))
+        scored.append((item, sim))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored[:top_k]
+```
+
+Running the three queries:
+
+```
+Query: 'tips for taking care of my cat'
+  sim= 0.09  [ text]  How to care for an orange tabby cat
+  sim= 0.08  [image]  a fluffy orange cat
+  sim= 0.04  [image]  a black labrador puppy
+
+Query: 'sports cars are fast vehicles'
+  sim= 0.07  [image]  a red sports car
+  sim= 0.07  [ text]  Review of red sports cars
+  sim= 0.01  [image]  a black labrador puppy
+
+Query: 'sailing for beginners'
+  sim= 0.13  [ text]  Beginner sailing technique
+  sim= 0.05  [ text]  Review of red sports cars
+  sim= 0.03  [ text]  How to care for an orange tabby cat
+```
+
+The cat and car queries confirm the cross-modal claim directly: both pull in an image item and a text item for the same concept, ranked by a single shared-space similarity score. The sailing query surfaces only the sailing text at rank 1, the boat image doesn't reach the top-3, because its keyword boost is a handful of biased dimensions inside a 512-dim mostly-random mock embedding, and that signal is weaker than it is for "cat" or "car" (which each get reinforced by two corpus items). This is a property of the mock's noise floor, not a retrieval-logic bug: real CLIP embeddings encode semantic content everywhere, not just in a handful of injected axes.
+
+</details>
 
 ### Exercise 4 (hard): Multimodal hallucination detection
 
@@ -635,7 +794,7 @@ test_cases = [
     {
         'image_id': 'img_001',
         'ground_truth': {'cat', 'window', 'sun'},
-        'model_caption': 'A fluffy orange cat sitting on a sunny windowsill.',
+        'model_caption': 'A fluffy orange cat sitting in the window, warmed by the sun.',
     },
     {
         'image_id': 'img_002',
@@ -668,18 +827,54 @@ test_cases = [
   packages={[]}
 />
 
-## Closing Phase 13 / opening Phase 14
+<details>
+<summary>Solution</summary>
 
-### Phase 13 recap
+`mentioned` is set intersection with the vocab; `hallucinated` and `missed` are just the two set differences between `mentioned` and `ground_truth_tags`.
+
+```python
+def detect_hallucinations(caption, ground_truth_tags, vocab=OBJECT_VOCAB):
+    mentioned = extract_objects(caption, vocab)
+    hallucinated = mentioned - ground_truth_tags
+    missed = ground_truth_tags - mentioned
+    return mentioned, hallucinated, missed
+```
+
+Results on the three test cases:
+
+```
+Image: img_001
+  Mentioned:      ['cat', 'sun', 'window']
+  Hallucinated:   []
+  Missed:         []
+
+Image: img_002
+  Mentioned:      ['ball', 'grass', 'puppy', 'tree']
+  Hallucinated:   ['ball', 'puppy']
+  Missed:         ['dog']
+
+Image: img_003
+  Mentioned:      ['car', 'mountain', 'person']
+  Hallucinated:   ['person']
+  Missed:         []
+```
+
+Case 1 is clean, both `sun` and `window` are literal words in the caption so they hit the vocab exactly. Case 2 flags `ball` (never in the ground truth) and, more subtly, `puppy` (which *is* correct, "puppy" is a dog, but exact-match logic doesn't know the two vocab words are synonyms, so `dog` shows up as "missed" even though the caption isn't wrong). Case 3 flags `person`, a genuine hallucination since the ground truth is only `{car, mountain}`. This double failure mode, missing true synonyms while catching real hallucinations, is exactly why production systems use embeddings or NLI models instead of exact vocabulary matching.
+
+</details>
+
+## The capability arc closes, the discipline arc opens
+
+### The four capabilities
 
 Four chapters, four capabilities. **Chapter 20 (Reasoning)**, the model can think before it answers, via chain-of-thought, self-consistency, and the modern test-time-compute paradigm. **Chapter 21 (Tool use)**, the model can act in the world, via structured function calls. **Chapter 22 (RAG)**, the model can retrieve grounded knowledge, via the hybrid BM25 + dense + reranking stack. **Chapter 23 (Multimodal)**, the model can perceive beyond text, via tokenized modalities and shared embedding spaces.
 
-Together, these four capabilities turn raw next-token generation into something **closer to a generally-capable digital assistant.** A model that reasons, retrieves, acts, and perceives can, in principle, handle most cognitive office-work tasks. The "in principle" is loadbearing: doing it reliably is what the rest of the curriculum addresses. Phase 13 was about *capability*, what the model can do. The work that remains is about *discipline*, whether the model can be trusted to do it.
+Together, these four capabilities turn raw next-token generation into something **closer to a generally-capable digital assistant.** A model that reasons, retrieves, acts, and perceives can, in principle, handle most cognitive office-work tasks. The "in principle" is loadbearing: doing it reliably is what the rest of the curriculum addresses. Part VII was about *capability*, what the model can do. The work that remains is about *discipline*, whether the model can be trusted to do it.
 
 ### What's next
 
-Phase 14 opens with three chapters that answer the questions Phase 13 deliberately set aside. **Are these models safe?**, Chapter 24 on guardrails, jailbreaks, refusal calibration, and red-teaming. **What is actually happening inside them?**, Chapter 25 on interpretability, mechanistic analysis, probing, and sparse autoencoders. **How do we measure progress?**, Chapter 26 on benchmarks, leaderboards, what they measure, and what they miss. The capability arc (Phase 13) and the discipline arc (Phase 14) are **complementary, not sequential**, modern AI labs run both in parallel because the two arcs constrain each other.
+Part VIII opens with three chapters that answer the questions Part VII deliberately set aside. **Are these models safe?**, Chapter 24 on guardrails, jailbreaks, refusal calibration, and red-teaming. **What is actually happening inside them?**, Chapter 25 on interpretability, mechanistic analysis, probing, and sparse autoencoders. **How do we measure progress?**, Chapter 26 on benchmarks, leaderboards, what they measure, and what they miss. The capability arc (Part VII) and the discipline arc (Part VIII) are **complementary, not sequential**, modern AI labs run both in parallel because the two arcs constrain each other.
 
-**Phase 15** then composes the full capability stack into complete agent architectures: ReAct foundations, agents built from scratch, multi-agent orchestration, and the frontier agent patterns that combine everything this curriculum has covered. It is the final arc.
+**Part IX** then composes the full capability stack into complete agent architectures: ReAct foundations, agents built from scratch, multi-agent orchestration, and the frontier agent patterns that combine everything this curriculum has covered. It is the final arc.
 
-Phase 13 ends here. Reasoning, tool use, retrieval, and multimodal, the four capabilities that turn an LLM from a chat box into something approaching a digital assistant. By this point you have seen what modern LLMs can do. What is left is the harder question, whether they can be trusted to do it, and the engineering disciplines that turn capable systems into trustworthy ones. **The capability arc closes; the discipline arc opens.** The curriculum keeps building.
+Part VII ends here. Reasoning, tool use, retrieval, and multimodal, the four capabilities that turn an LLM from a chat box into something approaching a digital assistant. By this point you have seen what modern LLMs can do. What is left is the harder question, whether they can be trusted to do it, and the engineering disciplines that turn capable systems into trustworthy ones. The capability arc closes; the discipline arc opens. The curriculum keeps building.

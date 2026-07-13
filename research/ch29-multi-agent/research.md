@@ -1,6 +1,6 @@
 # Chapter 29 — Multi-agent: research
 
-> Curated source material for Chapter 29's build sessions. **The composition chapter of Phase 15.** Where Ch 27 gave the conceptual foundation and Ch 28 the engineering toolkit, this chapter is about **when one agent isn't enough.** Multi-agent architectures (manager-worker, peer-to-peer, hierarchical); communication patterns (shared workspaces, message passing, blackboard); role specialization (proposer-critic-judge); the 2025 framework landscape (CrewAI, AutoGen, OpenAI Swarm, LangGraph multi-actor); generative-agent simulations (Park 2023 Smallville); honest assessment of multi-agent's production reality. **Two-topic chapter**; uses the **5-file cadence**. **The chapter that composes everything that came before — and honestly admits how rarely that composition is the right answer.**
+> Curated source material for Chapter 29's build sessions. **The composition chapter of Part IX.** Where Ch 27 gave the conceptual foundation and Ch 28 the engineering toolkit, this chapter is about **when one agent isn't enough.** Multi-agent architectures (manager-worker, peer-to-peer, hierarchical); communication patterns (shared workspaces, message passing, blackboard); role specialization (proposer-critic-judge); the 2025 framework landscape (CrewAI, AutoGen, OpenAI Swarm, LangGraph multi-actor); generative-agent simulations (Park 2023 Smallville); honest assessment of multi-agent's production reality. **Two-topic chapter**; uses the **5-file cadence**. **The chapter that composes everything that came before — and honestly admits how rarely that composition is the right answer.**
 
 ---
 
@@ -90,8 +90,8 @@ Target: ~3900 words plus 2 widgets and 3 runnable code blocks.
 - **Resource:** [anthropic.com/news/3-5-models-and-computer-use](https://anthropic.com/news/3-5-models-and-computer-use)
 - **What it contributed:** Computer-use agents that can drive a desktop UI. **Sometimes orchestrate sub-agents for sub-tasks** — a recent production multi-agent example.
 
-### Hoff and Anderson 1976 — "Distributed Problem Solving via the Blackboard Architecture" (historical)
-- Pre-LLM origin of the blackboard pattern: shared write-and-read workspace for multiple expert systems. **Multi-agent LLM systems often rediscover this architecture.**
+### Erman, Hayes-Roth, Lesser, and Reddy 1980 — "The Hearsay-II Speech-Understanding System" (historical)
+- Pre-LLM origin of the blackboard pattern: shared write-and-read workspace for multiple expert systems, built in the 1970s. **Multi-agent LLM systems often rediscover this architecture.**
 
 ---
 
@@ -392,7 +392,7 @@ workspace = {
 
 ### Concept 8: One chapter remains
 
-**Phase 15 status**:
+**Part IX status**:
 
 | Chapter | Topic | Status |
 |---------|-------|--------|
@@ -407,7 +407,7 @@ workspace = {
 **The trajectory**:
 - Ch 27 conceptual → Ch 28 engineering → **Ch 29 composition** (you are here) → Ch 30 evaluation
 - Each builds on the prior
-- The curriculum closes by bringing eval discipline (Phase 14) to bear on the composition arc
+- The curriculum closes by bringing eval discipline (Part VIII) to bear on the composition arc
 
 **After Ch 30**: the reader has the full stack — numpy primitives (Ch 1) → transformer internals (Ch 4-6) → pretraining (Ch 7-10) → alt architectures (Ch 11-12) → post-training (Ch 13-16) → inference (Ch 17-19) → capabilities (Ch 20-23) → safety/interp/eval (Ch 24-26) → agent systems (Ch 27-30).
 
@@ -800,12 +800,12 @@ Planned file layout:
 5. Survey the 2025 framework landscape and pick one for a given task
 6. Articulate what Park 2023 demonstrated and its limits
 7. Argue against multi-agent for cases where single-agent suffices
-8. Locate Ch 29 within Phase 15 and anticipate Ch 30's eval focus
+8. Locate Ch 29 within Part IX and anticipate Ch 30's eval focus
 
 Eight outcomes. Exercises hit outcomes 1, 4, 7.
 
 **Tonal anchor**: respectful skepticism. Multi-agent is a real and useful pattern in narrow cases, and overhyped in most. **Honest framing throughout** — the chapter should respect the field's work while pushing back on the "more agents = better" reflex. **Production reality emphasized over speculation.**
 
-**Phase 15 advancing**: composition layer over Ch 28's engineering and Ch 27's concepts. **Two chapters from the curriculum's end.**
+**Part IX advancing**: composition layer over Ch 28's engineering and Ch 27's concepts. **Two chapters from the curriculum's end.**
 
 **Importance**: this chapter has unique value because the field is full of multi-agent hype. **Engineers leaving this chapter should know when to and when not to use multi-agent** — a calibration most public discourse fails to provide. **The chapter's "honest assessment" framing is its most important pedagogical contribution.**

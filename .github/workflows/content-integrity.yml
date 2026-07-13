@@ -1,0 +1,22 @@
+name: Content Integrity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/pages/ch*/index.mdx'
+      - 'scripts/check-content-integrity.mjs'
+  workflow_dispatch:
+
+jobs:
+  check-content:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check content integrity
+        run: node scripts/check-content-integrity.mjs

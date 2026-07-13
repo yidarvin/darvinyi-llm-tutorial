@@ -91,7 +91,11 @@ Linear layer, activation functions (ReLU, GELU, SiLU), softmax with numerical st
 
 ### Widgets
 
-- **BackpropVisualizer** — interactive computational graph for a 2-layer MLP. User clicks a node to see its forward value, gradient, and the upstream gradient-flow path lighting up.
+Shipped as three widgets (spec called for one):
+
+- **BackpropVisualizer** — animated forward/backward trace through a small MLP with input presets; hover any node or edge for the math at that point.
+- **TrainingCurves** — SGD vs Momentum vs Adam on the same MLP and data; scrub the time slider to watch the decision boundary form alongside the loss curves.
+- **AutogradGraph** — a six-node DAG for scalar autograd; step through forward to compute values and backward to watch gradients flow, with each node's `_backward` closure shown as Python code.
 
 ### Runnable code
 
@@ -140,7 +144,10 @@ One-hot vs dense embedding, the distributional hypothesis, word2vec (CBOW and sk
 
 ### Widgets
 
-- **EmbeddingSpaceExplorer** — 2D PCA projection of pretrained GloVe vectors with interactive nearest-neighbor lookup. Type a word, see its 10 nearest neighbors highlighted in the projection.
+Shipped as two widgets; renamed from the spec's single **EmbeddingSpaceExplorer**:
+
+- **Word2VecDynamics** — a 15-word corpus trained with skip-gram negative sampling in 2D; drag the scrubber or hit play to watch the embeddings evolve as categories separate.
+- **EmbeddingSpace** — a 2D projection of pre-computed word2vec-like embeddings, colored by semantic category, with analogy overlays showing the approximate parallelism of vector pairs.
 
 ### Runnable code
 
@@ -190,7 +197,10 @@ Character-level vs word-level vs subword tokenization, BPE merges, vocabulary si
 
 ### Widgets
 
-- **TokenizerPlayground** — paste text, see how it tokenizes under BPE, WordPiece, and tiktoken (cl100k_base). Shows token IDs, token boundaries colored, and the merge history for BPE.
+Shipped as two widgets, superseding the spec's single **TokenizerPlayground**:
+
+- **BPETraining** — watch BPE learn merges step by step on a small corpus; each merge picks the most frequent adjacent pair and the vocabulary grows by one token per step.
+- **TokenizerComparison** — see how the same text breaks into tokens under GPT-2 (byte-level BPE), GPT-4 (cl100k_base), and SentencePiece (T5), including how token counts differ across languages and content types.
 
 ### Runnable code
 
@@ -248,8 +258,8 @@ Query/key/value abstraction, dot-product as similarity measure, scaling factor �
 
 ### Widgets
 
-- **AttentionHeatmap** — 12-token sequence with adjustable Q, K, V projections (or selectable presets). Heatmap updates to show attention weights. Click a query token to highlight what it attends to.
-- **CausalMaskExplainer** — toggle between bidirectional and causal attention; show how the mask zeros out the upper triangle and what this means for next-token prediction.
+- **AttentionHeatmap** — scaled dot-product attention computed step by step on "the cat sat on the mat"; hand-tuned Q, K, V matrices show the near-uniform attention pattern that results without positional encoding.
+- **CausalMask** — renamed from the spec's **CausalMaskExplainer**. Toggle between bidirectional and causally-masked attention on the same 6-token sequence; the mask matrix and the two resulting attention matrices are shown side by side.
 
 ### Runnable code
 
@@ -297,7 +307,10 @@ Multi-head attention as multiple parallel attention subspaces, head dimension ($
 
 ### Widgets
 
-- **TransformerBlockDissection** — animated diagram of data flowing through one block. User clicks a layer (attn, norm, MLP, residual) to see the shape transformation and a one-sentence "what this does" explanation. Highlights the residual paths.
+Shipped as two widgets, superseding the spec's single **TransformerBlockDissection**:
+
+- **MultiHeadDecomposition** — four parallel attention heads on the same 6-token sequence, each with its own hand-tuned pattern (local, backward, "the"-detection, ending-broadcast), to build intuition for why heads specialize.
+- **TransformerBlockFlow** — data flowing through one Pre-LN transformer block (input → LN → attention → residual → LN → FFN → residual → output), with the two residual arrows highlighted as the gradient "highway."
 
 ### Runnable code
 
@@ -344,7 +357,10 @@ Why position matters (attention is permutation-equivariant without it), absolute
 
 ### Widgets
 
-- **PositionEncodingVisualizer** — plot the encoding values for each position. Toggle between sinusoidal, RoPE (visualized as rotation angle), and ALiBi (as bias matrix). User changes sequence length to see how each handles extrapolation beyond the training length.
+Shipped as two widgets, superseding the spec's single **PositionEncodingVisualizer** (no separate ALiBi widget shipped; ALiBi is covered in prose):
+
+- **SinusoidalPE** — the sinusoidal PE matrix as a heatmap (position × dimension); click any column to see its underlying sin or cos wave plotted below.
+- **RoPERotation** — drag the position slider to watch RoPE rotate each of 4 Q/K dimension-pairs by an angle proportional to position × frequency, low pairs rotating quickly and high pairs slowly.
 
 ### Runnable code
 
@@ -399,7 +415,10 @@ Common Crawl, RefinedWeb, FineWeb, The Pile, RedPajama, deduplication (exact, Mi
 
 ### Widgets
 
-- **DedupInteractive** — paste two documents, see exact match, fuzzy match (MinHash similarity), and semantic match (cosine similarity of embeddings) scores update live as the documents are edited.
+Shipped as two widgets (spec called for one):
+
+- **DedupInteractive** — eight sample documents with intentional near-duplicates; hand-computed Jaccard similarity from character 5-shingles, with an adjustable threshold to see how aggressive dedup affects the kept set.
+- **QualityFilter** — ten text samples spanning the quality spectrum; toggle each filter (length, language, repetition, classifier) to see which samples survive, and how many each filter catches alone.
 
 ### Runnable code
 
@@ -446,7 +465,10 @@ The training loop, batch construction (packed vs padded sequences), learning-rat
 
 ### Widgets
 
-- **LossCurveInteractive** — pre-recorded training-run data; user scrubs through training steps, sees the loss curve, the attention pattern at that step (cached snapshots), and a generated sample at that step. Demonstrates how generation quality improves with training.
+Shipped as two widgets; renamed from the spec's single **LossCurveInteractive**:
+
+- **OptimizerComparison** — SGD, Adam, and AdamW navigating the same ill-conditioned 2D loss landscape; watch SGD oscillate, Adam smooth the path via adaptive scaling, and AdamW's decoupled weight decay pull the endpoint toward the origin.
+- **LossCurve** — a small character-level transformer training on Tiny Shakespeare for 5000 steps, loss dropping from ~4.4 to ~1.2; scrub through training to see sample generations at 9 snapshots improve from random characters to Shakespeare-style dialogue.
 
 ### Runnable code
 
@@ -499,7 +521,12 @@ Scaling laws (Kaplan 2020 → Chinchilla 2022), compute-optimal training, Data D
 
 ### Runnable code
 
-- `scaling_law_fit.py` — fit a Chinchilla-style scaling law to mock data using least squares, then predict loss at unseen scale. Distributed training itself isn't runnable in browser; reference snippets shown statically.
+Ships more runnable code than the spec: six `RunnableCode` blocks total (not just one), all in Pyodide/numpy:
+
+- a Chinchilla compute-optimal sweep — brute-force search of the D/N ratio minimizing loss along the 6ND=C constraint across several compute budgets
+- a data-parallel all-reduce simulator — average per-rank gradients across 4 simulated GPUs and inspect the per-step communication cost
+- an FSDP illustrative snippet (mostly commented-out `torch.distributed`/FSDP setup code, since a real multi-GPU run isn't runnable in-browser — the point is that the training loop is identical to Chapter 8)
+- four end-of-chapter exercises: a Chinchilla loss calculator, compute-optimal allocation, a parallelism memory-footprint calculator, and 3D-parallelism communication cost
 
 ### Pre-research file `research/ch09-scaling-and-distributed/research.md` scope
 
@@ -541,11 +568,22 @@ Megatron-LM, DeepSpeed, NeMo, Lightning, torch-native FSDP, Triton kernels, Flas
 
 ### Widgets
 
-- **TrainingStackPicker** — interactive flowchart: model size, available hardware, framework preference → recommends a stack (Megatron, DeepSpeed, FSDP, JAX/MaxText, etc.). Shows the reasoning behind each recommendation.
+Shipped as two widgets (spec called for one):
+
+- **TrainingStackPicker** — pick a model size, GPU type, and GPU count; the widget computes per-GPU memory under each parallelism stack (DP, FSDP, Megatron+FSDP, Megatron-DeepSpeed), recommends the simplest stack that fits, and estimates MFU, training time, and cost.
+- **StepTimeline** — one training step visualized as a timeline of compute and communication phases; toggle between sequential and overlapped modes to see when hiding communication behind compute helps most.
 
 ### Runnable code
 
-None runnable. This chapter is reference-heavy; the actual stacks need cluster-grade hardware. Static reference snippets only.
+Contrary to the original spec, this chapter ships six `RunnableCode` blocks plus four end-of-chapter exercises — the cluster-grade stacks themselves aren't runnable, but numpy-level simulations and calculators of their behavior are:
+
+- a ring all-reduce simulator (final per-rank accumulation and communication-cost savings vs naive all-to-all)
+- a Triton "hello world" vector-add kernel, shown as illustrative-only code (Triton needs a CUDA GPU, unavailable in Pyodide)
+- an activation-checkpointing memory calculator (none / selective / full, for a 70B-class layer stack)
+- an MFU (Model FLOPs Utilization) calculator
+- exercises: NVLink vs InfiniBand bandwidth math, plus three more building on the chapter's cost/communication material
+
+Static reference snippets (illustrative, non-runnable) are used only for the actual multi-GPU/distributed-framework code (e.g. the FSDP setup shown mostly commented-out in Chapter 9).
 
 ### Pre-research file `research/ch10-training-infra/research.md` scope
 
@@ -595,7 +633,10 @@ Sparse experts, gating network, top-k routing (typically top-2), load-balancing 
 
 ### Widgets
 
-- **MoERoutingVisualizer** — sequence of tokens flowing into N experts. User adjusts gating temperature and load-balance penalty; watches routing change in real time. Bar chart shows load distribution per expert.
+Shipped as two widgets (spec called for one):
+
+- **MoERoutingVisualizer** — 16 hand-tuned tokens flow into an MoE layer with 8 experts; toggle top-k between 1, 2, and 4 to see routing decisions and per-expert load change in real time, including a deliberately under-utilized expert to motivate the auxiliary loss.
+- **ActiveVsTotalParams** — the inference economics of MoE made concrete: bars show total parameters (memory cost) vs active parameters per token (compute cost) for real dense and MoE models, plus a configurator to design a custom MoE.
 
 ### Runnable code
 
@@ -642,8 +683,8 @@ State-space models, linear time-invariant (LTI) systems, HiPPO matrices, S4, S5,
 
 ### Widgets
 
-- **SSMVsAttentionScaling** — plot compute and memory as sequence length grows. User adjusts sequence length and model size; sees the asymptotic difference ($O(L^2)$ vs $O(L)$).
-- **SelectiveScanAnimation** — visualize how the state evolves through a sequence under a selective SSM. Each token updates a hidden state that's then used to produce output.
+- **SSMvsAttentionScaling** — shipped name (spec had "SSMVsAttentionScaling"). Log-log plot of compute (FLOPs) and memory (bytes) per layer vs sequence length; toggle between compute and memory to see the O(N²) vs O(N) crossover (~7K tokens).
+- **SelectiveScanAnimation** — a 16-token sequence with hand-tuned Δ_t per token; press play to scrub through and watch the 8-component state heatmap evolve, slow-decay components retaining information and fast-decay components forgetting.
 
 ### Runnable code
 
@@ -698,7 +739,10 @@ Instruction tuning, chat templates (ChatML, Llama 3, Alpaca, Mistral, Gemma), lo
 
 ### Widgets
 
-- **ChatTemplateVisualizer** — type messages on the left; see them rendered as a flat token sequence on the right under different chat templates. Loss mask shown as a colored overlay on assistant tokens.
+Shipped as two widgets, superseding the spec's single **ChatTemplateVisualizer**:
+
+- **SFTLossMasking** — a 5-turn conversation tokenized in ChatML, colored by role; toggle the response mask to see that only assistant tokens (~34% in this example) contribute to the loss.
+- **ChatTemplateComparison** — the same 3-turn conversation rendered under ChatML, Llama-3, Mistral, and Gemma templates, including how models without a native system role fold system messages into the first user turn.
 
 ### Runnable code
 
@@ -750,8 +794,11 @@ The token-level MDP framing of generation (state = prompt + tokens so far; actio
 
 ### Widgets
 
-- **DPOLossLandscape** — plot the implicit reward induced by DPO for a 2-class toy problem. User adjusts β; sees how the loss reshapes preferences.
-- **PPOClipExplorer** — slider for the clip ratio ε; show how it constrains the policy update around the reference policy.
+Shipped as three widgets (spec called for two):
+
+- **PreferenceLearningPipeline** — the data flow from a preference pair to a trained policy, comparing classical RLHF's two-stage pipeline (reward model + PPO) against DPO's single-stage direct loss; click any step for what it trains, what's frozen, and what's needed.
+- **DPOLossLandscape** — the DPO loss surface as a function of the implicit rewards for chosen and rejected responses, with a gradient arrow always pointing toward "increase chosen, decrease rejected."
+- **PPOClipExplorer** — the clipped surrogate loss as a function of the per-token ratio r_t(θ); slide the advantage A_t from positive to negative and watch the zero-gradient (clip-binding) region jump sides.
 
 ### Runnable code
 
@@ -810,7 +857,10 @@ LoRA (Low-Rank Adaptation), rank $r$, alpha scaling factor, target modules, QLoR
 
 ### Widgets
 
-- **LoRARankVisualizer** — show a weight update matrix $\Delta W$. Slider for rank; see the reconstructed $\Delta W \approx BA$ vary. Display parameter counts and savings.
+Shipped as two widgets; renamed from the spec's single **LoRARankVisualizer**:
+
+- **LoRAArchitecture** — a single attention block with W_Q/W_K/W_V/W_O shown as large frozen matrices alongside their tiny trainable B·A adapters; a rank slider and target-module selector show how trainable parameter count scales while staying a tiny fraction of the base.
+- **ParameterBudgetCalculator** — pick model size, method (full FT / LoRA / QLoRA), rank, and target modules; see the memory breakdown and a per-GPU fits/does-not-fit assessment with a recommended option.
 
 ### Runnable code
 
@@ -857,7 +907,10 @@ Soft targets, temperature scaling, KL divergence loss, hard vs soft distillation
 
 ### Widgets
 
-- **TemperatureScalingVisualizer** — show teacher logits, then the sharpened/softened distribution at different temperatures $T$. Demonstrate why high $T$ surfaces more information for the student.
+Shipped as two widgets; renamed from the spec's single **TemperatureScalingVisualizer**:
+
+- **TemperatureScaling** — the teacher's softmax distribution for "Paris is the capital of ___" across 15 candidates; raise T to see the next tier (Spain, Italy, Germany) emerge before the distribution flattens and signal is lost past T≈32.
+- **DistillationPipeline** — the end-to-end hard-distillation pipeline used by R1-Distill, Phi, and Orca (teacher → diverse prompts → teacher responses → quality filter → student SFT → deployable student); click any stage for details.
 
 ### Runnable code
 
@@ -911,8 +964,8 @@ KV cache, prefill phase vs decode phase, memory-bound vs compute-bound inference
 
 ### Widgets
 
-- **KVCacheAnimation** — animate a decoder generating tokens one by one. Show $K$ and $V$ matrices growing as tokens are added. Toggle between "no cache" (recomputes everything each step) and "with cache" (recomputes only the new column). Compare FLOPs.
-- **SpeculativeDecodingVisualizer** — show draft model proposing 4 tokens, target model verifying. Walk through accept/reject logic step by step; demonstrate the average tokens-per-target-call speedup.
+- **KVCacheAnimation** — animate a cache filling during prefill (all prompt tokens at once) and decode (one new token per step), using "The capital of France is" → "Paris." as the running example.
+- **SpeculativeDecoding** — renamed from the spec's **SpeculativeDecodingVisualizer**. The draft model proposes k tokens, the target model verifies them in one parallel pass; sliders for k and α show the resulting speedup (e.g. ~2.6× at k=5, α=0.7).
 
 ### Runnable code
 
@@ -959,7 +1012,10 @@ INT8/INT4 quantization, symmetric vs asymmetric, per-tensor vs per-channel vs pe
 
 ### Widgets
 
-- **QuantizationExplorer** — show a weight matrix. User picks quantization scheme (FP16, INT8 symmetric, INT4 symmetric, INT4 group). See quantized values, reconstruction error, and a histogram of quantization error per element.
+Shipped as two widgets (spec called for one):
+
+- **QuantizationExplorer** — 1000 weights from N(0, 0.1); pick a bit width (16/8/4/3/2) and, at 4 bits, toggle INT4 vs NF4; histograms show the original distribution, quantization grid points, and per-weight error.
+- **GranularityVisualizer** — an 8×64 weight matrix with one outlier row, quantized at INT4 under per-tensor, per-channel, and per-group granularity; toggle to see how per-row MSE changes and why per-group wins.
 
 ### Runnable code
 
@@ -1007,7 +1063,10 @@ Greedy decoding, temperature scaling, top-k truncation, top-p (nucleus) truncati
 
 ### Widgets
 
-- **SamplingDistributionInteractive** — given a fixed logit distribution, user adjusts temperature, top-k, top-p, min-p. See the effective distribution after each truncation step. Display entropy.
+Shipped as two widgets; renamed from the spec's single **SamplingDistributionInteractive**:
+
+- **SamplingDistribution** — pick a distribution shape (peaked / bimodal / flat) and adjust temperature, top-p, top-k; the original and post-pipeline distributions are shown with nucleus size, top probability, and entropy stats.
+- **ConstrainedDecoding** — step-by-step generation of valid JSON where invalid vocabulary tokens are masked at each FSM state; a star marks the model's unconstrained preferred token, often invalid.
 
 ### Runnable code
 
@@ -1063,7 +1122,10 @@ Chain-of-thought prompting, zero-shot CoT, self-consistency (majority vote over 
 
 ### Widgets
 
-- **TestTimeComputeCurves** — plot accuracy vs FLOPs spent at inference for different methods (greedy, self-consistency-N, search-based). Show how more compute increases accuracy and the diminishing returns curve.
+Shipped as two widgets (spec called for one):
+
+- **SelfConsistencyAggregator** — three math problems, each with 20 pre-generated CoT traces; adjust N from 1 to 20 and watch majority vote emerge, with large gains up to N≈10-15 and little after.
+- **TestTimeComputeCurves** — accuracy vs inference compute across six reasoning techniques at a chosen problem difficulty; on hard problems, modern reasoning models pull far ahead of best-of-N+PRM and direct generation (Snell 2024).
 
 ### Runnable code
 
@@ -1112,12 +1174,21 @@ Tool schemas, function-calling protocol, `tool_use` / `tool_result` message role
 
 ### Widgets
 
-- **ToolCallTraceViewer** — show a multi-step tool-using conversation. User clicks each step, sees the model's reasoning, the tool call (with JSON args), the tool result, and the next reasoning step. Highlight where errors happen and how the model recovers.
+Shipped as two widgets; renamed from the spec's single **ToolCallTraceViewer**:
+
+- **ToolCallTrace** — step through a real multi-step ReAct-style agent loop (Tokyo weather in Celsius): Thought → tool call → Observation → Thought → tool call → Observation → Final answer.
+- **ToolSchemaValidator** — three preset tool schemas with example valid and invalid tool calls; watch what structural validation catches (missing required fields, wrong types, out-of-range values, invalid enums, unknown tool names).
 
 ### Runnable code
 
-- `tool_loop_anthropic.py` — minimal client-side loop using the Anthropic API. The user supplies their own API key via a small input form in the widget; key is stored in localStorage. Example task: a tiny weather + calendar tool combo. (Pyodide can run this; the `fetch` call is made via JS bridge.)
-- `tool_schema_validation.py` — validate tool-call JSON against a JSON Schema before dispatching to the actual tool
+Shipped as four exercise-embedded `RunnableCode` blocks, not the two spec'd standalone scripts. None call a live API — the spec'd `tool_loop_anthropic.py`'s "Pyodide can run this via a JS bridge to the Anthropic API" did not ship (there is no network bridge; see "Live-API runnables" note below). Instead:
+
+- Exercise 1: convert a Python function signature into a tool schema (JSON Schema style)
+- Exercise 2: implement the agent loop against a **mocked** model (`mock_model` simulates tool_use/end_turn turns; no real API call)
+- Exercise 3: embedding-based multi-tool routing over a 20-tool catalog, using mock (seeded random) embeddings
+- Exercise 4: an idempotent tool dispatcher with an idempotency-key cache and audit log
+
+**Live-API runnable note:** `RunnableCode` runs Python in Pyodide entirely client-side and sandboxed, with no network access and no JS-to-network bridge (see `src/components/code/RunnableCode.tsx`). Anywhere the chapter shows an Anthropic-API tool-call loop, it is static/schematic reference code or a mocked in-browser model — never a live API call.
 
 ### Pre-research file `research/ch21-tool-use/research.md` scope
 
@@ -1159,7 +1230,10 @@ Sparse retrieval (BM25), dense retrieval (bi-encoders, dual encoders), cross-enc
 
 ### Widgets
 
-- **RetrievalComparator** — paste a query and a corpus of 10–20 docs. See top results under BM25, dense embeddings, and a reranker. Color-code which docs are actually relevant. Show score breakdowns.
+Shipped as two widgets (spec called for one):
+
+- **RetrievalComparator** — a 10-document corpus with four query types (keyword-heavy, semantic, paraphrased, mixed) showing BM25, dense, and hybrid results side by side; hybrid stays robust across all query types.
+- **ChunkingVisualizer** — the same document re-chunked under fixed-size-with-overlap, sentence-based, paragraph-based, and parent-document strategies, showing how chunk count, size variance, and coverage change.
 
 ### Runnable code
 
@@ -1206,7 +1280,10 @@ ViT (patch embedding, position embedding for image patches), CLIP contrastive ob
 
 ### Widgets
 
-- **CLIPEmbeddingSpace** — show 2D projection of image and text embeddings from a small pretrained CLIP variant. User types text; see which image embeddings are nearest. Demonstrate the joint embedding space.
+Shipped as two widgets (spec called for one):
+
+- **ViTPatchTokenizer** — a 128×128 stylized image split into an 8×8 grid of 16×16-pixel patches; click any patch to inspect its position, mean RGB, flatten arithmetic, and a sparkline of its projected embedding.
+- **CLIPEmbeddingSpace** — a 2D projection of a CLIP-style shared embedding space with image and text items forming content clusters; pick a text query and see its top-3 nearest neighbors, spanning both modalities.
 
 ### Runnable code
 
@@ -1261,7 +1338,10 @@ Input classifiers (toxicity, prompt injection), output classifiers, refusal trai
 
 ### Widgets
 
-- **JailbreakTaxonomy** — interactive tree of jailbreak categories with one canonical example per leaf. User clicks a leaf to see the attack pattern and the corresponding defense.
+Shipped as two widgets (spec called for one):
+
+- **JailbreakTaxonomy** — six attack patterns (roleplay, authority, suffix/GCG, encoding, multi-turn, multi-modal), each with a sanitized example, the exploited alignment property, an approximate success rate, and mitigations, color-coded by Wei (2023)'s two root causes.
+- **PromptInjectionClassifier** — a pattern-based scanner over preset retrieved-content samples (emails, web snippets, doc chunks, calendar invites), highlighting matches by category and honest about the limits of pattern matching against novel attacks.
 
 ### Runnable code
 
@@ -1307,7 +1387,10 @@ Probing classifiers, attention-head analysis, induction heads, circuits, superpo
 
 ### Widgets
 
-- **SAEFeatureExplorer** — show a small set of pretrained SAE features (text examples that activate each). User clicks a feature; see the top activating examples and what concept the feature seems to represent.
+Shipped as two widgets (spec called for one):
+
+- **LinearProbingVisualizer** — six concepts probed across 12 layers of a small transformer; each probe-accuracy curve shows where in the network the concept becomes decodable, tracing the surface-early / syntactic-early-middle / semantic-mid-late / task-specific-late pattern.
+- **SAEFeatureExplorer** — ten curated SAE features (Golden Gate Bridge, Python loops, deception, etc., inspired by Templeton 2024), each showing its top-5 activating inputs and a 2D feature-space map with family-based clustering.
 
 ### Runnable code
 
@@ -1354,12 +1437,18 @@ Capability benchmarks (MMLU, BIG-Bench, HumanEval, GSM8K, MATH, GPQA), agent ben
 
 ### Widgets
 
-- **BenchmarkHeatmap** — matrix of recent models × benchmarks with scores. User filters by benchmark category, sees how models compare. Highlights contamination warnings where known.
+Shipped as two widgets (spec called for one):
+
+- **BenchmarkHeatmap** — eight frontier models × ten benchmarks in a sortable color-coded grid; click a column header to re-rank, with saturation (SAT) badges flagging benchmarks that no longer discriminate.
+- **LLMJudgeBiasDemo** — five scenarios demonstrating documented LLM-as-judge bias modes (Zheng 2023: position, verbosity, self-enhancement, coverage), each shown under both answer orderings plus the swap-mitigated verdict.
 
 ### Runnable code
 
-- `llm_judge.py` — implement a pairwise LLM-as-judge using the Anthropic API; demonstrate position bias and how to mitigate (swap order, take both)
-- `custom_eval.py` — build and run a tiny custom eval set with pass/fail criteria
+Ships as `RunnableCode` exercises using a **mocked** judge/model, not a live Anthropic API call (the spec's `llm_judge.py` "using the Anthropic API" did not ship — see the Live-API runnable note in Chapter 21/27/28/30):
+
+- `mock_model` / benchmark-scoring exercise — run a small item set through a mocked model and compute pass@1 with a per-category breakdown
+- `mock_judge` / pairwise LLM-as-judge exercise — demonstrate position bias and the swap-and-average mitigation against a mocked judge function
+- a saturation/contamination-flagging exercise on a small synthetic benchmark table
 
 ### Pre-research file `research/ch26-evaluation/research.md` scope
 
@@ -1409,11 +1498,18 @@ Agent loop, ReAct (reasoning + acting), planning (top-down decomposition), refle
 
 ### Widgets
 
-- **AgentLoopTrace** — animated visualization of the loop: model generates → tool call → tool result → model generates. Step forward/backward through a recorded trace. Show working memory expanding with each iteration.
+Shipped as two widgets; renamed from the spec's single **AgentLoopTrace**:
+
+- **AgenticLoopVisualizer** — four ReAct scenarios (simple multi-step, computation with verification, research chain, graceful failure); step controls advance through think → act → observe phases with accumulated context and a mini loop diagram.
+- **AgentPatternCatalog** — five agent patterns (single-agent linear, single-agent iterative/ReAct, hierarchical, Reflexion, multi-agent) shown side by side with diagrams, use cases, pros/cons, and a maturity badge.
 
 ### Runnable code
 
-- `react_loop.py` — minimal ReAct loop with one simple tool (a Python REPL exposed as a tool), using the Anthropic API. User supplies key.
+Ships as `RunnableCode` blocks using a **mocked** LLM (`mock_llm`), not the spec'd live Anthropic API call — `react_loop.py` "using the Anthropic API, user supplies key" did not ship (see the Live-API runnable note in Chapter 21):
+
+- a minimal 50-line ReAct agent (mock LLM, mock tools, regex parsing, full loop with termination)
+- an agent with Reflexion-style memory (mocked pass/fail verifier)
+- pattern/anti-pattern exercises built on the same mocked-LLM scaffolding
 
 ### Pre-research file `research/ch27-agent-foundations/research.md` scope
 
@@ -1454,12 +1550,16 @@ Tool registry pattern, tool schemas (Pydantic / JSON Schema), message protocol d
 
 ### Widgets
 
-- **AgentStateMachineDiagram** — interactive state diagram of the harness: idle → planning → tool_call → tool_result → planning → ... → done. User clicks states; see transition conditions and the code that handles each.
+Shipped as **ToolSchemaBuilder** and **AgentTraceInspector**, superseding the spec's **AgentStateMachineDiagram**:
+
+- **ToolSchemaBuilder** — six curated Python tool functions, each a different schema pattern (simple, optional params, side-effect, bounded output, restricted eval, complex shape); shows the Python source alongside the OpenAI schema, the Anthropic schema, and a sample tool-call response.
+- **AgentTraceInspector** — four agent traces as flame-graph-style nested spans (clean success, transient-failure retries, hallucinated tool call, cost-blown runaway); click any span for timing, attributes, and status.
+
+**Why the state-machine diagram was superseded:** the shipped chapter doesn't narrate an idle → planning → tool_call → tool_result → done FSM — its prose organizes around six engineering concerns (tool design, implementation, schemas, error handling, observability, scaffolding), not loop states. The loop's states/phases (think → act → observe) are already covered interactively by Ch 27's **AgenticLoopVisualizer**. Building a redundant state-machine widget here would duplicate that coverage; ToolSchemaBuilder and AgentTraceInspector instead visualize the two concerns this chapter actually centers on (schemas and observability), so the spec is superseded rather than a gap.
 
 ### Runnable code
 
-- `agent_harness.py` — a clean, ~150-line agent harness with tool registry, retries, and tracing. Production-quality patterns the reader can adapt for their own work.
-- `tool_registry.py` — decorator-based tool registration with auto-generated JSON schemas from Python type hints
+Ships as `RunnableCode` exercises (tool registry with `execute()`, retry with exponential backoff, a structured tracing layer, and a complete agent harness assembling all of it), not the two standalone spec'd scripts — same content, delivered as progressively-built exercises rather than two flat files.
 
 ### Pre-research file `research/ch28-agent-from-scratch/research.md` scope
 
@@ -1501,12 +1601,19 @@ Orchestrator-workers, hierarchical agents, debate (Du 2023), swarm patterns, Aut
 
 ### Widgets
 
-- **MultiAgentTopologySelector** — flowchart that asks about the task and recommends single-agent, orchestrator-workers, or debate. Shows the topology graph for each.
+Shipped as two widgets; renamed from the spec's single **MultiAgentTopologySelector**:
+
+- **MultiAgentTopologyExplorer** — five architectures side by side (single-agent baseline, manager-worker, peer-to-peer, hierarchical, proposer-critic-judge), each with an SVG node-and-arrow diagram, use cases, pros/cons, an example task, and a maturity badge; single-agent listed first deliberately.
+- **InterAgentConversationViewer** — four multi-agent scenarios as step-by-step message flows (proposer-critic-judge, manager-worker, plan-execute-verify, and a degenerate 3-redundant-reviewers anti-pattern), advanced message-by-message with prev/next/play controls.
 
 ### Runnable code
 
-- `orchestrator_workers.py` — implement orchestrator-workers pattern: one planner agent decomposes a task, dispatches to N worker agents, aggregates results
-- `mcp_server_reference.py` — minimal MCP server example as static reference (MCP needs a runtime not feasible in browser)
+Ships as `RunnableCode` exercises using a **mocked** LLM (`mock_llm`, keyed off canned responses), not a live Anthropic/OpenAI API call (see the Live-API runnable note in Chapter 21):
+
+- a ~30-line manager-worker pattern (manager, researcher, calculator agents, mocked decomposition)
+- a proposer-critic-judge implementation, with the exercise itself noting "real implementation calls Claude or GPT"
+- an architecture-choice classifier exercise
+- MCP/A2A are covered as static reference material, not a runnable server (a runtime isn't feasible in-browser)
 
 ### Pre-research file `research/ch29-multi-agent/research.md` scope
 
@@ -1553,7 +1660,13 @@ SWE-bench / SWE-bench Verified, τ-bench, GAIA, WebArena, OSWorld, BrowseComp, U
 
 ### Runnable code
 
-- `custom_agent_eval.py` — build a small 10-task eval set with verifiable answers, run an agent against it, compute pass@1
+Ships as `RunnableCode` exercises against a **mocked** agent (`mock_agent`), not a live API call (see the Live-API runnable note in Chapter 21):
+
+- an evaluation-methodology design exercise
+- a custom agent eval: verifiable tasks run against a mocked agent, computing pass@1 (~75% in the mock)
+- pass^k computation from raw trial data
+- cost-quality Pareto frontier identification
+- a production-readiness audit exercise
 
 ### Pre-research file `research/ch30-agent-eval-and-frameworks/research.md` scope
 

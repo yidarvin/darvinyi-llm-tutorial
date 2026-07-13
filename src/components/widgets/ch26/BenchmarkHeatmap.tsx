@@ -168,8 +168,10 @@ export default function BenchmarkHeatmap() {
       {/* Caption */}
       <div className={styles.caption}>
         Try sorting by different columns. <strong>The ranking changes substantially</strong> depending
-        on what you measure. <strong>Saturated benchmarks</strong> (marked SAT) have whole rows clustered
-        near the top — they no longer distinguish frontier models. <strong>Agentic benchmarks</strong>{' '}
+        on what you measure. <strong>Saturated benchmarks</strong> (marked SAT) have a whole column clustered
+        near the top — they no longer distinguish frontier models. Only HellaSwag earns the badge in this
+        snapshot; MMLU, HumanEval, and MATH are trending the same way but don't yet clear it.{' '}
+        <strong>Agentic benchmarks</strong>{' '}
         (SWE-bench, GAIA, OSWorld) show the most spread — they're where models still discriminate, and
         where Phase 15's coverage matters most. <strong>This is the chapter's central claim made visceral</strong>:
         modern AI eval is a dashboard, not a number.

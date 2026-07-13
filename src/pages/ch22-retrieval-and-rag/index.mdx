@@ -12,7 +12,7 @@ A trained LLM's knowledge lives in its weights, call this **parametric memory**.
 
 This chapter walks the production RAG stack. **Sparse retrieval** (BM25, the classic) is still the strong baseline, especially on technical vocabulary. **Dense retrieval** (embeddings plus a vector store) handles semantic queries, "automobile" and "car" land in the same neighborhood of the embedding space. **Hybrid retrieval** combines both via Reciprocal Rank Fusion and consistently beats either alone in mature systems. **Chunking**, how to split documents before embedding, dominates retrieval quality more than the choice of embedding model, and most "RAG isn't working" debugging traces back to it. **Reranking** with a cross-encoder turns recall-optimized first-stage retrieval into precision-optimized final results. **RAG architectures** range from vanilla (single retrieval) to agentic (retrieval as a tool, the Chapter 21 bridge) to graph-based (multi-hop). **Production patterns**, caching, multi-tenant isolation, freshness, evaluation, turn the conceptual pipeline into a reliable system.
 
-**RAG is the single most-deployed LLM application pattern of 2024 – 2025.** Every enterprise AI assistant, every documentation chatbot, every customer support agent, every legal-research tool, they all use RAG for one or more use cases. By the end of this chapter you should know how to design, evaluate, and operate a production RAG system, and which failure modes to anticipate. Then Chapter 23 closes Phase 13 with multimodal, extending the capability stack beyond text.
+RAG is, by a wide margin, the most-deployed LLM application pattern of this era. Every enterprise AI assistant, every documentation chatbot, every customer support agent, every legal-research tool, they all use RAG for one or more use cases. By the end of this chapter you should know how to design, evaluate, and operate a production RAG system, and which failure modes to anticipate. Then Chapter 23 closes Part VII with multimodal, extending the capability stack beyond text.
 
 ## Why retrieval matters
 
@@ -33,10 +33,8 @@ The fundamental trade-off is the same one that shows up everywhere in systems en
 The empirical scale of production RAG in early $2025$ is consistent enough to be worth memorizing. **Internal docs corpora** run $100\text{K}$ to $10\text{M}$ documents for enterprise deployments. **Top-$K$ per query** lands at $3$ to $20$ documents after reranking. **Total retrieved context** is typically $5\text{K}$ to $50\text{K}$ tokens. **Latency target** is under $2$ seconds end-to-end (retrieval plus generation). **Quality**: a well-tuned RAG system reaches $80$ to $95\%$ answer accuracy on domain-specific QA, far above what the same model achieves without retrieval on the same questions.
 
 <Callout type="aside">
-**RAG is the single most-deployed LLM application pattern of 2024 – 2025.** Every enterprise AI assistant, documentation chatbot, customer support agent, and legal-research tool uses RAG. If you are building AI products, you are building (or about to build) a RAG system, the patterns in this chapter are not optional, they are the foundation that every production deployment rests on.
+RAG is the single most-deployed LLM application pattern of 2024 – 2025. Every enterprise AI assistant, documentation chatbot, customer support agent, and legal-research tool uses RAG. If you are building AI products, you are building (or about to build) a RAG system, the patterns in this chapter are not optional, they are the foundation that every production deployment rests on.
 </Callout>
-
-The next section opens the classic sparse-retrieval baseline that every modern technique is measured against, BM25.
 
 ## Sparse retrieval: BM25
 
@@ -62,7 +60,7 @@ Where BM25 fails is exactly where you would expect from its mechanics. **Synonym
 
 <RunnableCode client:visible>
 ```python
-from rank_bm25 import BM25Okapi
+import math
 
 # Tiny example corpus
 docs = [
@@ -73,16 +71,43 @@ docs = [
     "Deep learning is a subset of machine learning.",
 ]
 
-# Tokenize (simple whitespace + lowercase for the demo)
-tokenized = [doc.lower().split() for doc in docs]
-bm25 = BM25Okapi(tokenized)
+def tokenize(text):
+    return text.lower().replace(".", "").split()
+
+def bm25_scores(query, docs, k1=1.2, b=0.75):
+    """BM25 from scratch: explicit TF, IDF, length normalization, and TF saturation."""
+    tokenized_docs = [tokenize(d) for d in docs]
+    doc_lens = [len(d) for d in tokenized_docs]
+    avgdl = sum(doc_lens) / len(doc_lens)
+    N = len(docs)
+
+    # Document frequency: how many docs contain each term
+    df = {}
+    for toks in tokenized_docs:
+        for t in set(toks):
+            df[t] = df.get(t, 0) + 1
+
+    query_tokens = tokenize(query)
+    scores = []
+    for i, toks in enumerate(tokenized_docs):
+        tf_counts = {}
+        for t in toks:
+            tf_counts[t] = tf_counts.get(t, 0) + 1
+        score = 0.0
+        for q in query_tokens:
+            d = df.get(q, 0)
+            if d == 0:
+                continue
+            idf = math.log((N - d + 0.5) / (d + 0.5) + 1)
+            f = tf_counts.get(q, 0)
+            denom = f + k1 * (1 - b + b * (doc_lens[i] / avgdl))
+            score += idf * (f * (k1 + 1) / denom)
+        scores.append(score)
+    return scores
 
 # Query
 query = "machine learning"
-tokenized_query = query.lower().split()
-scores = bm25.get_scores(tokenized_query)
-
-# Rank
+scores = bm25_scores(query, docs)
 ranking = sorted(zip(scores, docs), key=lambda x: -x[0])
 print(f"Query: '{query}'\n")
 print(f"{'Score':>7} | Doc")
@@ -102,8 +127,6 @@ for score, doc in ranking:
 "Dense retrieval always beats BM25" is **false in many domains**. BM25 remains a strong baseline, and often the *winning* technique on domains with technical vocabulary (legal, medical, code) where exact-match on identifiers, citations, and jargon dominates. The modern production answer is not to pick one; it is to use **hybrid** retrieval (Section 4) so neither method has to carry the whole workload alone. Dense retrieval did not retire BM25; it joined it.
 </Callout>
 
-The next section introduces the semantic counterpart that handles every query BM25 misses, dense retrieval.
-
 ## Dense retrieval: embeddings and vector stores
 
 ### The setup
@@ -118,7 +141,7 @@ Why dense retrieval beats BM25 on semantic queries follows from the same mechani
 
 ### Embedding models
 
-The landscape is unhelpfully broad, so a few exemplars matter more than an exhaustive list. **Sentence-BERT** (Reimers $2019$) is the historical reference point, fine-tuned BERT, $768$-dim, the technique that made dense retrieval practical at scale. **OpenAI `text-embedding-3-small`** ($2024$) is the modern general-purpose default for managed deployments, cheap, $1536$-dim, strong across domains. **`all-MiniLM-L6-v2`** is tiny ($22$M params, $384$-dim), runs locally on a CPU, and is the right choice for prototypes. **E5-Mistral** (Wang $2023$) is the LLM-based frontier, very strong on benchmarks at the cost of inference latency. The right pick is the cheapest model that hits your recall threshold on a held-out evaluation set; "best on the leaderboard" is rarely the production answer once cost and latency are budgeted.
+The landscape is unhelpfully broad, so a few exemplars matter more than an exhaustive list. **DPR** (Karpukhin 2020, [arxiv.org/abs/2004.04906](https://arxiv.org/abs/2004.04906)) established the dual-encoder pattern for retrieval specifically: question and passage each get their own BERT tower, trained so the right passage's vector lands near the question's, and it was the paper that first showed dense retrieval beating BM25 on open-domain QA rather than merely matching it. **Sentence-BERT** (Reimers $2019$) is the historical reference point, fine-tuned BERT, $768$-dim, the technique that made dense retrieval practical at scale. **OpenAI `text-embedding-3-small`** ($2024$) is the modern general-purpose default for managed deployments, cheap, $1536$-dim, strong across domains. **`all-MiniLM-L6-v2`** is tiny ($22$M params, $384$-dim), runs locally on a CPU, and is the right choice for prototypes. **E5-Mistral** (Wang $2023$) is an early LLM-based embedding model, very strong on benchmarks at the cost of inference latency. The right pick is the cheapest model that hits your recall threshold on a held-out evaluation set; "best on the leaderboard" is rarely the production answer once cost and latency are budgeted.
 
 ### Vector stores and ANN indices
 
@@ -128,11 +151,7 @@ The index type is where the practical performance trade-offs live. **Flat** (bru
 
 <RunnableCode client:visible>
 ```python
-from sentence_transformers import SentenceTransformer
 import numpy as np
-
-# Load a small embedding model
-model = SentenceTransformer('all-MiniLM-L6-v2')   # 22M params, 384-dim
 
 docs = [
     "The cat sat on the mat.",
@@ -142,15 +161,26 @@ docs = [
     "Deep learning is a subset of machine learning.",
 ]
 
-# Pre-compute document embeddings
-doc_embeddings = model.encode(docs)
+# Precomputed document embeddings (stand-ins for a real sentence-embedding
+# model's output, e.g. all-MiniLM-L6-v2). The ML / deep-learning docs cluster
+# together and the animal docs cluster together, exactly as a real model would
+# place them: this demo runs entirely on precomputed vectors so it needs no
+# model download.
+doc_embeddings = np.array([
+    [0.10, 0.05, 0.90, 0.10],  # cat sat on the mat
+    [0.15, 0.10, 0.85, 0.20],  # cats are great pets
+    [0.20, 0.15, 0.80, 0.30],  # dogs are loyal companions
+    [0.85, 0.80, 0.10, 0.05],  # machine learning models
+    [0.90, 0.75, 0.15, 0.10],  # deep learning subset
+])
 
 def cosine_sim(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-# Semantic query: uses terms that appear in NO document literally
+# Semantic query: uses terms that appear in NO document literally.
+# Its precomputed embedding lands near the ML/deep-learning cluster.
 query = "AI training"
-query_embedding = model.encode([query])[0]
+query_embedding = np.array([0.88, 0.82, 0.05, 0.05])
 
 # Rank
 similarities = [cosine_sim(query_embedding, e) for e in doc_embeddings]
@@ -174,8 +204,6 @@ for sim, doc in ranking:
 "Bigger embeddings are always better" is **mostly false at production scale.** Larger embeddings (3072-dim vs 384-dim) increase storage roughly $8\times$ and search latency proportionally for marginal quality gains. The production sweet spot is $768$ – $1536$ dimensions depending on domain. **Profile both axes**: recall *and* infrastructure cost, on your own corpus before locking in a model; leaderboard rankings rarely survive contact with a real workload.
 </Callout>
 
-The next section combines BM25 and dense retrieval into the production default, hybrid retrieval.
-
 ## Hybrid retrieval
 
 ### Why combine
@@ -194,7 +222,7 @@ The reason RRF dominates the alternative, a weighted sum of normalized scores, $
 
 Hybrid retrieval wins most when the workload is diverse. **Mixed query types** in the same workload, half keyword, half semantic, get the biggest lift. **Mixed corpora** (technical docs alongside narrative content) benefit similarly. In mature production systems hybrid is no longer a tunable choice; it is the default, with BM25 and dense both running on every query and RRF combining their results.
 
-<WidgetFrame title="Retrieval comparator" caption="A 10-document corpus mixing technical and conceptual content. Four query types demonstrate the operational differences: keyword-heavy (BM25 wins), semantic (Dense wins), paraphrased (Dense wins decisively), mixed (Hybrid wins). Three columns side by side; correct docs are highlighted. Watch how Hybrid stays robust across all query types, never losing badly to either method. This is why hybrid retrieval is the production default in mature RAG systems.">
+<WidgetFrame title="Retrieval comparator" caption="A 10-document corpus mixing technical and conceptual content. Four query types demonstrate the operational differences: keyword-heavy (BM25 wins), semantic (Dense wins), paraphrased (Dense wins decisively), mixed (Hybrid ties the best method). Three columns side by side; correct docs are highlighted. Watch how Hybrid stays robust across all query types, never losing badly to either method. This is why hybrid retrieval is the production default in mature RAG systems.">
   <RetrievalComparator client:visible />
 </WidgetFrame>
 
@@ -240,8 +268,6 @@ for doc, score in combined:
 ```
 </RunnableCode>
 
-The next section covers the choice that dominates retrieval quality more than any embedding model, chunking.
-
 ## Chunking strategies
 
 ### Why chunking matters
@@ -261,10 +287,8 @@ Chunk size has a predictable trade-off curve. **Small chunks ($100$ – $300$ to
 </WidgetFrame>
 
 <Callout type="warning">
-"Just use cosine similarity; don't worry about chunking" is **false**. Chunking dominates retrieval quality. Most "RAG isn't working" debugging traces back to chunking choices, not embedding-model quality. **Spend more time on chunking than on choosing an embedding model**: a mediocre embedding model with good chunking will beat a great embedding model with bad chunking on almost every real corpus.
+"Just use cosine similarity; don't worry about chunking" is **false**. Chunking dominates retrieval quality. Most "RAG isn't working" debugging traces back to chunking choices, not embedding-model quality. Spend more time on chunking than on choosing an embedding model: a mediocre embedding model with good chunking will beat a great embedding model with bad chunking on almost every real corpus.
 </Callout>
-
-The next section covers the second-stage refinement that turns recall-optimized retrieval into precision-optimized final results, reranking.
 
 ## Reranking
 
@@ -278,15 +302,162 @@ The reason for the split is purely a latency-quality trade-off. **Cross-encoders
 
 A cross-encoder takes the query and the document concatenated as input, `[query] [SEP] [document]`, and emits a single relevance score. The architecture lets the model attend across the query and document jointly, which produces a strictly more accurate relevance signal than the dual-encoder dense-retrieval pattern (which embeds query and document separately and can only compare via cosine similarity). The cost is exactly the structural cost: every $(query, doc)$ pair requires a full forward pass; nothing can be cached across queries.
 
+The structural difference is concrete enough to build without a trained model: a bi-encoder's score is a function of two independently-computed vectors; a cross-encoder's score is a function of the *pair*, and can use information that exists only once both texts are read together, negation, ordering, exact phrasing.
+
+<RunnableCode client:visible>
+```python
+import numpy as np
+
+docs = [
+    "Python is a large nonvenomous snake found in Asia and Africa.",
+    "Python is a popular programming language known for readability.",
+    "The ball python is a popular pet snake species.",
+    "Python supports object-oriented and functional programming.",
+]
+query = "python that is not a snake"
+
+# Bi-encoder: query and docs are embedded INDEPENDENTLY, then compared by
+# cosine similarity. The query embedding is computed once, without ever
+# looking at a document, so it cannot use anything document-specific.
+doc_embeddings = {
+    0: np.array([0.95, 0.10]),  # [snake-ness, language-ness]
+    1: np.array([0.15, 0.95]),
+    2: np.array([0.90, 0.15]),
+    3: np.array([0.10, 0.90]),
+}
+# The query literally contains the word "snake" (inside a negated phrase),
+# so its independently-computed embedding still leans snake-ish: embedding
+# negation correctly is a known bi-encoder weak spot.
+query_embedding = np.array([0.65, 0.35])
+
+def cosine(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+bi_ranking = sorted(
+    ((i, cosine(query_embedding, e)) for i, e in doc_embeddings.items()),
+    key=lambda x: -x[1],
+)
+print("Bi-encoder ranking (query embedded once, before seeing any doc):")
+for i, s in bi_ranking:
+    print(f"  {s:.3f}  {docs[i]}")
+
+# Cross-encoder: reads query and doc TOGETHER, as one joint pass, exactly
+# like the real `[query] [SEP] [document]` input. A real cross-encoder learns
+# this from training data; this hand-written rule stands in for that learned
+# behavior, but the structural point holds either way: the score depends on
+# the pair, not on two vectors computed in isolation.
+def cross_encoder_score(query, doc):
+    negates_snake = "not a snake" in query.lower()
+    doc_is_about_snakes = "snake" in doc.lower() and "programming" not in doc.lower()
+    base = 1.0 if "python" in doc.lower() else 0.0
+    if negates_snake and doc_is_about_snakes:
+        return base - 0.8   # penalize: contradicts the query's negation
+    return base + 0.5       # reward: consistent with the query
+
+cross_ranking = sorted(
+    ((i, cross_encoder_score(query, d)) for i, d in enumerate(docs)),
+    key=lambda x: -x[1],
+)
+print("\nCross-encoder ranking (query and doc read jointly):")
+for i, s in cross_ranking:
+    print(f"  {s:.3f}  {docs[i]}")
+
+# Observations:
+# - The bi-encoder ranks both SNAKE docs first: the literal word "snake" in
+#   the query pulls its embedding toward the snake cluster, negation or not.
+# - The cross-encoder flips the ranking: it can read "not a snake" against
+#   each candidate document and penalize the docs that contradict it.
+# - This is exactly why reranking exists: catch what the first stage's
+#   independently-computed vectors structurally cannot.
+```
+</RunnableCode>
+
 The rerankers worth knowing are a small set. **`ms-marco-MiniLM-L-6-v2`** is small, fast, free, and runs locally, the right starting point. **`cross-encoder/ms-marco-electra-base`** is stronger and slower. **Cohere Rerank** is a managed API service and is consistently very strong on benchmarks. **Voyage AI Rerank** is another competitive managed option. The managed services are usually worth the latency budget once you are past the prototype stage.
 
 Reranking matters most when the ordering of the top-$K$ has economic weight. **Domains where exact relevance ordering matters**, legal, medical, code search, see large lifts because the wrong-but-related document is much worse than the right one. **Small top-$K$ passed to the LLM** (top-$3$) makes rank quality critical because the LLM cannot recover from a bad top-$3$ as gracefully as it can filter through a long top-$20$. **High recall, precision is the bottleneck** is the pattern: the relevant doc is in the pool but not at the top, and reranking moves it. Typical recall@10 lift from reranking on diverse corpora is $5$ to $15$ points.
 
 <Callout type="note">
-"Reranking is always worth it" depends on $K$ and the latency budget. **For top-$3$ with strict latency, reranking is essential.** For top-$20$ where the LLM filters through the retrieved context, reranking may be skippable. Cross-encoders add $50$ – $300$ms per query depending on candidate count and model size, **profile before adopting**, and benchmark recall@K with and without reranking on a representative query set.
+"Reranking is always worth it" depends on $K$ and the latency budget. For top-$3$ with strict latency, reranking is essential. For top-$20$ where the LLM filters through the retrieved context, reranking may be skippable. Cross-encoders add $50$ – $300$ms per query depending on candidate count and model size, **profile before adopting**, and benchmark recall@K with and without reranking on a representative query set.
 </Callout>
 
-The next section steps up to the architecture layer, how the retrieval pipeline composes with the LLM into the variants engineers actually choose between.
+### ColBERT: late interaction, a middle ground
+
+Bi-encoders and cross-encoders sit at opposite ends of a cost-quality trade-off: bi-encoders precompute one vector per document and compare with a single dot product (cheap, but the query and document never interact); cross-encoders read the query and document jointly (accurate, but require a full forward pass per candidate, so nothing can be precomputed). **ColBERT** (Khattab 2020, [arxiv.org/abs/2004.12832](https://arxiv.org/abs/2004.12832)) is late-interaction retrieval, a middle ground that keeps most of the precomputation while recovering some of the joint-interaction quality.
+
+Instead of one vector per document, ColBERT embeds *every token* of the document (and the query) separately, producing a small matrix rather than a single vector, all still precomputed and stored at indexing time, exactly like a bi-encoder. Relevance is scored with **MaxSim**: for each query token, find its most-similar document token, then sum those per-token maxima across the query. Because the comparison happens per-token rather than on one pooled vector, ColBERT catches fine-grained matches, a document that specifically discusses "convolution" rather than "deep learning" in general, that a single-vector embedding smooths away.
+
+The cost is storage: a single $1536$-dim document vector becomes a matrix of one vector per token, $10$–$50\times$ more index size for a typical passage. That trade-off makes ColBERT a specialist's tool: worth it when fine-grained retrieval precision matters enough to pay for the larger index, skippable when a bi-encoder plus cross-encoder reranker already clears the quality bar more cheaply.
+
+### MMR: diversifying the final top-K
+
+Reranking alone can still hand the LLM a top-K that is highly relevant *and* highly redundant, five near-duplicate chunks making the same point crowd out the one chunk that would have added new information. **Maximal Marginal Relevance** (MMR) fixes this by selecting the top-K greedily, trading off relevance against similarity to what has already been selected.
+
+<Equation label="22.mmr">
+$$\text{MMR}(d) = \lambda \cdot \text{sim}(q, d) - (1 - \lambda) \cdot \max_{d' \in S} \text{sim}(d, d')$$
+</Equation>
+
+where $S$ is the set of documents already selected, $\text{sim}(q, d)$ is the document's relevance to the query (from BM25, dense retrieval, or the reranker), and $\max_{d' \in S} \text{sim}(d, d')$ is the document's similarity to the most-similar document already chosen. **$\lambda$ close to $1$** recovers plain top-K by relevance, ignoring redundancy entirely. **$\lambda$ close to $0$** selects almost purely for diversity, at real cost to relevance. **$\lambda \approx 0.5$–$0.7$** is the typical production range, mostly relevance-driven, with enough of a redundancy penalty to keep near-duplicates from monopolizing the top-K.
+
+The algorithm is greedy: pick the single most relevant document first, then repeatedly pick whichever remaining document maximizes <EqRef id="22.mmr" />, which by construction pulls each new pick away from documents already chosen.
+
+<RunnableCode client:visible>
+```python
+import numpy as np
+
+docs = [
+    "Transformers use self-attention to weigh tokens against each other.",
+    "Self-attention lets transformers weigh every token against every other.",  # near-duplicate of doc 0
+    "Convolutional networks apply learned filters across spatial regions.",
+    "Recurrent networks process sequences one token at a time with a hidden state.",
+    "Diffusion models generate images by iteratively denoising random noise.",
+]
+
+relevance = np.array([0.95, 0.94, 0.80, 0.75, 0.60])  # sim(query, doc), precomputed
+
+# pairwise doc-doc similarity (precomputed; docs 0 and 1 are near-duplicates)
+sim_matrix = np.array([
+    [1.00, 0.98, 0.20, 0.15, 0.10],
+    [0.98, 1.00, 0.18, 0.14, 0.12],
+    [0.20, 0.18, 1.00, 0.30, 0.25],
+    [0.15, 0.14, 0.30, 1.00, 0.20],
+    [0.10, 0.12, 0.25, 0.20, 1.00],
+])
+
+def mmr(relevance, sim_matrix, k, lam=0.7):
+    selected, remaining = [], list(range(len(relevance)))
+    while remaining and len(selected) < k:
+        if not selected:
+            best = max(remaining, key=lambda i: relevance[i])
+        else:
+            def score(i):
+                redundancy = max(sim_matrix[i][j] for j in selected)
+                return lam * relevance[i] - (1 - lam) * redundancy
+            best = max(remaining, key=score)
+        selected.append(best)
+        remaining.remove(best)
+    return selected
+
+top_3_by_relevance = list(np.argsort(-relevance)[:3])
+mmr_top_3 = mmr(relevance, sim_matrix, k=3, lam=0.7)
+
+print("Top-3 by relevance alone:", top_3_by_relevance)
+for i in top_3_by_relevance:
+    print(f"  [{i}] {docs[i]}")
+
+print("\nTop-3 by MMR (lambda=0.7):", mmr_top_3)
+for i in mmr_top_3:
+    print(f"  [{i}] {docs[i]}")
+
+# Observations:
+# - Pure relevance picks docs 0, 1, 2: doc 1 is a near-duplicate of doc 0
+#   (sim=0.98) and adds almost nothing to what the LLM already has.
+# - MMR picks docs 0, 2, 3: after doc 0, it skips the redundant doc 1
+#   in favor of doc 2, which is less relevant but far more novel.
+# - Doc 1 isn't dropped, just deferred: it would still appear at k=4 or 5.
+```
+</RunnableCode>
+
+MMR sits downstream of reranking, not instead of it: rerank first for relevance, then diversify the top-K before handing it to the LLM. Skipping it costs nothing on corpora with little redundancy; on corpora with lots of near-duplicate content, restated FAQ answers, template policy variations, MMR is the difference between a top-K that says one thing five times and a top-K that actually covers the question.
 
 ## RAG architectures
 
@@ -302,13 +473,27 @@ When the query needs *multiple* retrievals, research tasks, comparisons across d
 
 A few variants are worth recognizing by name even if you do not deploy them today. **Self-RAG** (Asai $2023$) trains the model to emit special tokens deciding when retrieval is needed and to self-critique its outputs against retrieved context, more sophisticated than vanilla, less common in production. **HyDE** (Hypothetical Document Embeddings) generates a hypothetical answer first, embeds *that* for retrieval, and improves recall on short or vague queries, a useful trick when the query itself is too sparse to retrieve well. **Graph RAG** builds a knowledge graph from documents and retrieves subgraphs rather than chunks; **better for multi-hop reasoning** ("Who is the CEO of the company that made X?") but expensive to construct and operate, with limited production deployment as of $2025$. **RETRO** (Borgeaud $2022$) bakes retrieval into the model architecture, trained from scratch with cross-attention over retrieved chunks, distinct from inference-time RAG and a separate engineering category.
 
-The decision guide is short. **FAQ or docs search**: vanilla RAG. **Multi-step research**: agentic RAG. **Multi-hop questions across many entities**: graph RAG (still emerging). **High-quality production at scale**: vanilla RAG plus hybrid retrieval plus reranking plus careful chunking, the four patterns from sections $4$ – $6$ assembled into one stack.
+### RAG vs. long context
 
-<Callout type="aside">
-"Graph RAG is the future" is **unclear as of $2025$.** Graph RAG is interesting for genuine multi-hop reasoning but production deployments are rare, the graph-construction cost is high, and vanilla RAG with good reranking covers most use cases that get pitched as needing graph RAG. **Do not reach for graph RAG by default**, start with vanilla, instrument the failures, and add complexity only when you have evidence that a simpler stack cannot do the job.
+Frontier context windows grew large enough, into the hundreds of thousands of tokens and beyond as of the o1/Gemini-1.5-and-later generation, that a fair question is whether retrieval is even necessary. If the model can just read the whole corpus every time, why build a retrieval pipeline at all?
+
+The honest answer is that long context and RAG solve different problems, and the choice is economic more than qualitative. **Long context wins on quality** for small, static corpora: a single contract, a codebase, a handful of papers. Feed the whole thing in and the model reasons over the complete, uncompressed document, no chunking artifacts, no missed passages, no retrieval failures to debug. For a corpus that fits comfortably in a context window and does not change between queries, long context is simply less to build and less to break.
+
+**RAG wins on cost and control** everywhere else. A $10$M-document corpus does not fit in any context window, retrieval is not optional at that scale. Dynamic content, a support-ticket queue, a live product catalog, changes constantly; re-embedding one changed chunk is cheap, re-processing a multi-hundred-thousand-token context on every query is not. And feeding $200$K tokens of context on every request multiplies inference cost and latency compared to retrieving the $5$K tokens that actually matter, at scale that difference is the product's unit economics.
+
+Xu et al. 2024 ("Retrieval meets Long Context", [arxiv.org/abs/2310.03025](https://arxiv.org/abs/2310.03025)) made the sharpest empirical case for combining rather than choosing: retrieval augmentation with a *moderate* context window matched or beat brute-force long-context generation on several benchmarks at a fraction of the compute, and pairing retrieval with a larger context window (retrieve more candidates, rerank, then fill a bigger window with the reranked results) beat either extreme alone. The two techniques are less rivals than points on the same dial; production systems increasingly use both, retrieval to cut a huge corpus down to a relevant slice, a moderately long context to hold that slice without brutal chunking.
+
+<Callout type="insight">
+"Long context obsoletes RAG" is a **common misconception**, not a conclusion the evidence supports. Long context is expensive per query and does not scale past corpora larger than the window; RAG is cheaper, handles arbitrarily large and constantly-changing corpora, and stays auditable, you can point to exactly which documents fed which answer. The two compose: retrieve first to cut a large corpus down to size, then spend whatever context budget you have on the retrieved slice.
 </Callout>
 
-The next section covers what turns a working RAG prototype into a reliable production system, caching, freshness, isolation, security, and the eval discipline that makes "is it working?" answerable.
+The decision guide below assumes retrieval is worth doing at all; the prior question, retrieve or just paste everything into context, is almost always answered by corpus size and update frequency, not by "long context wins now."
+
+The decision guide is short. **FAQ or docs search**: vanilla RAG. **Multi-step research**: agentic RAG. **Multi-hop questions across many entities**: graph RAG (still emerging). **High-quality production at scale**: vanilla RAG plus hybrid retrieval plus reranking plus careful chunking, the patterns from sections $4$ – $6$ (hybrid, chunking, reranking) plus vanilla RAG assembled into one stack.
+
+<Callout type="aside">
+"Graph RAG is the future" is **unclear as of $2025$.** Graph RAG is interesting for genuine multi-hop reasoning but production deployments are rare, the graph-construction cost is high, and vanilla RAG with good reranking covers most use cases that get pitched as needing graph RAG. Do not reach for graph RAG by default, start with vanilla, instrument the failures, and add complexity only when you have evidence that a simpler stack cannot do the job.
+</Callout>
 
 ## Exercises
 
@@ -391,6 +576,54 @@ queries = [
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+The key pieces: precompute per-doc lengths and `avgdl`, a document-frequency count per term (each doc contributes at most once per term), then sum the per-term BM25 contribution for every query token.
+
+```python
+import math
+from collections import Counter
+
+def tokenize(text):
+    return text.lower().split()
+
+def bm25_scores(query, docs, k1=1.2, b=0.75):
+    tokenized_docs = [tokenize(d) for d in docs]
+    doc_lens = [len(d) for d in tokenized_docs]
+    avgdl = sum(doc_lens) / len(doc_lens)
+    N = len(docs)
+
+    df = Counter()
+    for d in tokenized_docs:
+        for term in set(d):
+            df[term] += 1
+
+    query_terms = tokenize(query)
+    scores = []
+    for d, dl in zip(tokenized_docs, doc_lens):
+        tf = Counter(d)
+        score = 0.0
+        for term in query_terms:
+            if df[term] == 0:
+                continue
+            idf = math.log((N - df[term] + 0.5) / (df[term] + 0.5) + 1)
+            f = tf[term]
+            score += idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * dl / avgdl))
+        scores.append(score)
+    return scores
+```
+
+Running it against the three test queries:
+
+- `"machine learning"` → doc 2 ("deep learning is a subset...") scores 1.92, doc 1 ("machine learning models...") scores 1.69, everything else 0.00.
+- `"cats"` → doc 3 ("cats are great pets") scores 1.34 (literal match); doc 0 ("the cat sat on the mat") scores 0.00, since BM25 does no stemming and "cat" ≠ "cats".
+- `"deep learning data"` → doc 2 scores 2.38, doc 1 scores 2.18.
+
+Skipping terms with `df[term] == 0` avoids a division by zero in the IDF log and correctly contributes nothing for out-of-vocabulary query terms.
+
+</details>
 
 ### Exercise 2 (medium): Vector store with cosine retrieval
 
@@ -479,6 +712,26 @@ queries = [
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Embed the query with the same mock `embed()`, compute cosine similarity against every stored vector, sort descending, and slice to `top_k`.
+
+```python
+def search(self, query, top_k=3):
+    q_vec = self.embed(query)
+    results = []
+    for doc_id, text, vector in self.docs:
+        sim = np.dot(q_vec, vector) / (np.linalg.norm(q_vec) * np.linalg.norm(vector))
+        results.append((sim, doc_id, text))
+    results.sort(key=lambda x: -x[0])
+    return results[:top_k]
+```
+
+With this store, `"machine learning"` ranks doc 2 first (sim=0.80, "deep learning is a subset of machine learning") then doc 1 (sim=0.33), both keyword-boosted on the "machine" and "learning" axes. `"cat affection"` ranks doc 3 first (sim=0.28, "cats are great pets that love affection"), boosted on the "cat" axis. The keyword bias in `embed()` is doing the heavy lifting, exactly like a real embedding model's learned associations would.
+
+</details>
+
 ### Exercise 3 (medium): Hybrid retrieval with RRF
 
 Combine BM25 and dense rankings via Reciprocal Rank Fusion. Verify that the combined ranking is robust across query types, never losing badly to either method.
@@ -552,6 +805,24 @@ dense_ranking = [
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Accumulate `1 / (k + rank)` per doc across every ranking that mentions it, then sort by total score descending.
+
+```python
+def reciprocal_rank_fusion(rankings, k=60):
+    scores = {}
+    for ranking in rankings:
+        for doc_id, rank in ranking:
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda x: -x[1])
+```
+
+On the two mock rankings this produces (doc\_id, score): `[(0, 0.0325), (1, 0.0323), (3, 0.0318), (4, 0.0159), (5, 0.0156), (2, 0.0154), (7, 0.0154)]`. Doc 0 (rank 1 in BM25, rank 2 in dense) edges out doc 1 (rank 3 in BM25, rank 1 in dense), since $1/61 + 1/62 > 1/63 + 1/61$. Doc 3, present in both lists at middling ranks, still beats docs 4/5/7 which appear in only one ranking each — RRF rewards appearing in multiple retrievers over any single high rank.
+
+</details>
+
 ### Exercise 4 (hard): Retrieval evaluation with recall@K
 
 Build a small evaluation harness. Given a labeled test set (query → list of relevant doc IDs), compute recall@K for a retrieval method. Compare BM25 vs dense vs hybrid; verify the chapter's central claim, that hybrid is robust across query types.
@@ -605,13 +876,15 @@ def evaluate(retriever_fn, test_set, k=5):
     pass
 
 
-# Mock retrievers for the demo
+# Mock retrievers for the demo. Doc IDs run 0-6; the "prices rising" query
+# draws on a wider candidate pool so BM25's top-5 can genuinely omit the
+# relevant docs, rather than being forced to include them by a too-small universe.
 def bm25_retriever(query):
     # Mocked: pretend BM25 returns these doc_ids in order for each query
     mock = {
         "machine learning": [2, 1, 4, 0, 3],
         "cat affection": [3, 0, 1, 2, 4],
-        "prices rising": [4, 1, 0, 2, 3],   # BM25 misses inflation docs (no overlap)
+        "prices rising": [0, 2, 3, 5, 6],   # BM25 misses inflation docs 1 and 4 (no lexical overlap)
     }
     return mock.get(query, [])
 
@@ -619,7 +892,7 @@ def dense_retriever(query):
     mock = {
         "machine learning": [1, 2, 4, 0, 3],
         "cat affection": [0, 3, 4, 1, 2],
-        "prices rising": [1, 4, 0, 3, 2],   # dense finds doc 1 (inflation paraphrase)
+        "prices rising": [1, 4, 0, 3, 2],   # dense finds docs 1 and 4 (inflation paraphrase)
     }
     return mock.get(query, [])
 
@@ -628,7 +901,7 @@ def hybrid_retriever(query):
     mock = {
         "machine learning": [2, 1, 4, 0, 3],
         "cat affection": [3, 0, 1, 4, 2],
-        "prices rising": [1, 4, 0, 3, 2],
+        "prices rising": [1, 4, 0, 3, 2],   # RRF pulls the dense-only hits back in
     }
     return mock.get(query, [])
 
@@ -654,6 +927,30 @@ test_set = [
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+`recall_at_k` intersects the top-K retrieved IDs with the relevant set; `evaluate` averages that across the test set.
+
+```python
+def recall_at_k(retrieved_ids, relevant_ids, k):
+    top_k = retrieved_ids[:k]
+    hits = len(set(top_k) & set(relevant_ids))
+    return hits / len(relevant_ids)
+
+
+def evaluate(retriever_fn, test_set, k=5):
+    recalls = []
+    for query, relevant_ids in test_set:
+        retrieved = retriever_fn(query)
+        recalls.append(recall_at_k(retrieved, relevant_ids, k))
+    return sum(recalls) / len(recalls)
+```
+
+Running this over the three mock retrievers gives BM25 = 66.67%, Dense = 100.00%, Hybrid = 100.00%. The per-query breakdown shows why: BM25 and dense both hit 100% recall on "machine learning" and "cat affection", but on "prices rising" BM25 drops to 0% (its mock ranking `[0, 2, 3, 5, 6]` has no lexical overlap with the inflation docs 1 and 4), while dense hits 100% (paraphrase generalization) and hybrid, built from BM25+dense via RRF, inherits dense's catch and also lands at 100%. That is the chapter's "hybrid is robust" claim made measurable.
+
+</details>
 
 ## Production patterns and evaluation
 
@@ -683,4 +980,4 @@ The common production failure modes are predictable once you know where to look.
 
 RAG is the most-deployed LLM pattern of $2024$ – $2025$, and it is about much more than embeddings. Production RAG combines BM25 and dense retrieval (hybrid via RRF), thoughtful chunking (often the biggest single quality lever), cross-encoder reranking when precision matters, the right architecture for the use case, and a disciplined evaluation loop. Engineers who design these systems need both the conceptual model and the production discipline this chapter has assembled.
 
-**Chapter 23 closes Phase 13: multimodal.** Extending the capability stack beyond text, vision-language models, audio, video, and the protocols that let LLMs operate across modalities. After Phase 13: **Phase 14** opens with safety, interpretability, and evaluation as full disciplines. **Phase 15** assembles the capability stack into complete agent architectures. The capability arc is two-thirds done; the model that knows what it can find is in place.
+**Chapter 23 closes Part VII: multimodal.** Extending the capability stack beyond text, vision-language models, audio, video, and the protocols that let LLMs operate across modalities. After Part VII: **Part VIII** opens with safety, interpretability, and evaluation as full disciplines. **Part IX** assembles the capability stack into complete agent architectures. The model that knows what it can find is in place.

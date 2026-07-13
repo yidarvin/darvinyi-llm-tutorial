@@ -12,8 +12,7 @@ export type FeatureFamily =
   | 'code'
   | 'reasoning'
   | 'safety'
-  | 'language'
-  | 'emotional';
+  | 'language';
 
 export interface ActivatingInput {
   text: string;
@@ -209,7 +208,6 @@ export const FAMILIES: Record<FeatureFamily, { label: string; color: string }> =
   reasoning: { label: 'reasoning',       color: 'var(--violet-400)' },
   safety:    { label: 'safety-relevant', color: 'var(--rose-400)' },
   language:  { label: 'language',        color: 'var(--emerald-400)' },
-  emotional: { label: 'emotional',       color: 'var(--amber-400)' },
 };
 
 export function dist(

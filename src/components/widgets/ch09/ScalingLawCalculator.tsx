@@ -4,6 +4,7 @@ import {
   type Strategy,
   allocateByRatio,
   chinchillaLoss,
+  computeOptimalAllocation,
   sampleLossCurve,
   formatLargeNumber,
   sliderToCompute,
@@ -24,6 +25,12 @@ export default function ScalingLawCalculator() {
   const strategyResults: StrategyResult[] = useMemo(
     () =>
       STRATEGIES.map(s => {
+        if (s.key === 'chinchilla') {
+          // The "optimal" marker sits at the true argmin of the plotted curve,
+          // which drifts with C, rather than a fixed ratio of 20.
+          const { N, D, r } = computeOptimalAllocation(C);
+          return { ...s, ratio: r, N, D, loss: chinchillaLoss(N, D) };
+        }
         const { N, D } = allocateByRatio(C, s.ratio);
         return { ...s, N, D, loss: chinchillaLoss(N, D) };
       }),
@@ -92,7 +99,7 @@ export default function ScalingLawCalculator() {
               </div>
               <div className={styles.cardRow}>
                 <span className={styles.cardLabel}>D/N</span>
-                <span className={styles.cardValue}>{s.ratio}</span>
+                <span className={styles.cardValue}>{s.ratio.toFixed(1)}</span>
               </div>
               <div className={styles.cardRow}>
                 <span className={styles.cardLabel}>N (params)</span>

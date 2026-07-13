@@ -184,7 +184,7 @@ export const STAGES: Stage[] = [
     id: 'softmax',
     title: 'Stage 4 — Softmax: attention weights',
     description:
-      'Row-wise softmax turns each row of scaled scores into a probability distribution. Each row sums to 1. The bright cells are positions one token attends to strongly. Notice how "cat" attends mostly to "the", "sat" to "cat", "on" to "sat" — local syntactic structure emerges.',
+      "Row-wise softmax turns each row of scaled scores into a probability distribution. Each row sums to 1. With these particular Q/K projections and no positional encoding yet, every row's brightest cell sits on the diagonal — each token attends most strongly to itself — and the rest of the row's weight is spread thinly and fairly evenly across the other positions.",
     highlight: ['scaled', 'weights'],
   },
   {

@@ -18,7 +18,7 @@ export const STAGES: PipelineStage[] = [
     inputs: ['Already trained via pre-training + SFT + preference optimization (+ optional RLVR)'],
     outputs: 'A capable model that can answer queries well — but is too big/expensive to deploy at scale.',
     details:
-      'The teacher is the entire output of Phase 11 chapters 13-15 (and optionally Ch 14 RLVR for reasoning). For DeepSeek-R1-Distill, the teacher is DeepSeek-R1 (a frontier reasoning model). For Phi, the teacher is GPT-4-class. The teacher is frozen — never updated during distillation. Its role is purely to generate training data for the student.',
+      'The teacher is the entire output of Chapters 13-15 (and optionally Ch 14 RLVR for reasoning). For DeepSeek-R1-Distill, the teacher is DeepSeek-R1 (a frontier reasoning model). For Phi, the teacher is GPT-4-class. The teacher is frozen — never updated during distillation. Its role is purely to generate training data for the student.',
     realWorld: 'R1-Distill teacher: DeepSeek-R1 (~700B+ MoE). Phi teacher: GPT-4-class. Orca teacher: GPT-4.',
   },
   {
@@ -81,6 +81,6 @@ export const STAGES: PipelineStage[] = [
     details:
       "The student inherits most of the teacher's capabilities at a fraction of the cost. For R1-Distill-Qwen-32B: matches o1-mini on math and coding despite being far smaller than R1. For Phi-3-mini (3.8B): approaches GPT-3.5 on many benchmarks. For DistilBERT: 97% of BERT's GLUE score at 40% the size. The deployment cost difference is typically 5-20× cheaper per request.",
     realWorld:
-      "R1-Distill-Qwen-32B: matches o1-mini on math/code; 32B params vs R1's 671B. Phi-3-mini: 3.8B, deploys on consumer hardware. Gemma 2 9B: matches Llama 2 70B on benchmarks at 8× smaller.",
+      "R1-Distill-Qwen-32B: matches o1-mini on math/code; 32B params vs R1's 671B. Phi-3-mini: 3.8B, deploys on consumer hardware. Gemma 2 9B: matches or exceeds Llama 2 7B/13B on benchmarks.",
   },
 ];

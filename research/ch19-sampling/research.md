@@ -1,6 +1,6 @@
 # Chapter 19 — Sampling: research
 
-> Curated source material for Chapter 19's build sessions. **The final chapter of Phase 12 (Inference).** Where Ch 17 reduced wasted computation and Ch 18 reduced bits per parameter, Ch 19 covers how decisions are made about which token to emit, given the logits. **Conceptually clean** compared to Ch 18: the algorithms are short; the engineering tradeoffs are clear; the operational reality (chat models default to temperature ~0.7 + top-p ~0.95) is well-understood. **The chapter that closes the inference-engineering arc** and bridges to Phase 13 capabilities. Single-topic chapter; uses the **4-file cadence**.
+> Curated source material for Chapter 19's build sessions. **The final chapter of Part VI (Inference).** Where Ch 17 reduced wasted computation and Ch 18 reduced bits per parameter, Ch 19 covers how decisions are made about which token to emit, given the logits. **Conceptually clean** compared to Ch 18: the algorithms are short; the engineering tradeoffs are clear; the operational reality (chat models default to temperature ~0.7 + top-p ~0.95) is well-understood. **The chapter that closes the inference-engineering arc** and bridges to Part VII capabilities. Single-topic chapter; uses the **4-file cadence**.
 
 ---
 
@@ -47,7 +47,7 @@
 5. Combining strategies (~500 words)
 6. Repetition penalties (~400 words)
 7. Beam search and constrained decoding (~600 words)
-8. Modern recipes and Phase 12 closeout (~400 words)
+8. Modern recipes and Part VI closeout (~400 words)
 
 Target: ~3800 words plus 2 widgets and 3 runnable code blocks.
 
@@ -680,8 +680,8 @@ Planned file layout:
 
 Eight outcomes. Exercises hit outcomes 2, 3, 4, 7.
 
-**Tonal framing**: clean and operational, slightly lighter than Ch 18. Sampling is the closing chapter of Phase 12 and conceptually accessible. **Concrete numbers**: temperature values, top-p values per use case, production defaults. **Honest tradeoffs**: greedy vs sampling for long-form; top-k vs top-p; constrained vs free generation.
+**Tonal framing**: clean and operational, slightly lighter than Ch 18. Sampling is the closing chapter of Part VI and conceptually accessible. **Concrete numbers**: temperature values, top-p values per use case, production defaults. **Honest tradeoffs**: greedy vs sampling for long-form; top-k vs top-p; constrained vs free generation.
 
-**Phase 12 closing**: Ch 19 closes the inference-engineering arc. Where Ch 17 reduced wasted computation and Ch 18 reduced bits per parameter, **Ch 19 governs how the decoder actually picks tokens**. After Ch 19, **Phase 12 is complete**; Phase 13 (capabilities: reasoning, tools, RAG, multimodal) opens.
+**Part VI closing**: Ch 19 closes the inference-engineering arc. Where Ch 17 reduced wasted computation and Ch 18 reduced bits per parameter, **Ch 19 governs how the decoder actually picks tokens**. After Ch 19, **Part VI is complete**; Part VII (capabilities: reasoning, tools, RAG, multimodal) opens.
 
-**Importance**: sampling is the most user-facing decision in inference — the "temperature dial" on every chat interface, the "JSON mode" on every agent. Engineers and product folks both need to understand it. **The chapter should feel like a satisfying close** — algorithms are simple; impact is huge; reader leaves Phase 12 with the full mental model for deploying LLMs.
+**Importance**: sampling is the most user-facing decision in inference — the "temperature dial" on every chat interface, the "JSON mode" on every agent. Engineers and product folks both need to understand it. **The chapter should feel like a satisfying close** — algorithms are simple; impact is huge; reader leaves Part VI with the full mental model for deploying LLMs.

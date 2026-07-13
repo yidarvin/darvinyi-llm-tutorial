@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch10-training-infra
-description: The systems engineering chapter that closes Phase 9. Where Chapter 9 covered the math of distributed training, this chapter covers the practical reality, GPU hardware, NVLink and InfiniBand interconnects, NCCL collectives, training frameworks (DeepSpeed, Megatron, PyTorch FSDP), custom GPU kernels (Triton, FlashAttention), activation checkpointing, mixed precision, and cost economics. The chapter is practical depth, readers can skip without losing the conceptual training story; engineers who will actually build these systems should not.
+description: The systems engineering chapter that closes Part III, Pre-training. Where Chapter 9 covered the math of distributed training, this chapter covers the practical reality, GPU hardware, NVLink and InfiniBand interconnects, NCCL collectives, training frameworks (DeepSpeed, Megatron, PyTorch FSDP), custom GPU kernels (Triton, FlashAttention), activation checkpointing, mixed precision, and cost economics. The chapter is practical depth, readers can skip without losing the conceptual training story; engineers who will actually build these systems should not.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
@@ -28,29 +28,31 @@ What this chapter covers is the practical stack, the hardware, the interconnects
 Chapter 10 is more specialized than the chapters before it. A reader focused on the conceptual story of LLMs, what they are, how they are trained, why they work, can skip it without losing anything load-bearing for later chapters. Chapter 11 (alternative architectures) and Chapter 13 (post-training) do not assume any Chapter 10 content. Read this chapter if you will actually run training systems, or if you want to be able to read the infrastructure sections of a frontier-model technical report and understand them.
 </Callout>
 
-The chapter opens with the hardware itself.
-
 ## The hardware: GPUs and what they offer
 
-### GPU spectrum (2024)
+### GPU spectrum (as of 2026-07-13)
 
-Frontier LLM training in 2024 runs on one of a small handful of accelerators. The list is short because the engineering investment per platform is enormous and few vendors can support it.
+Frontier LLM training runs on one of a small handful of accelerators. The list is short because the engineering investment per platform is enormous and few vendors can support it, and the roster turns over roughly annually, so treat the specific models and numbers below as a snapshot rather than a fixed inventory.
 
-The **NVIDIA H100** (Hopper architecture, $2022$–present) is the current workhorse. $80$ GB of HBM3 memory at $\sim 3$ TB/s bandwidth, around $989$ TFLOPS of BF16 matmul throughput on the tensor cores, $\sim 1979$ TFLOPS at FP8. NVLink 4.0 provides $900$ GB/s of GPU-to-GPU bandwidth within a node. Llama-3, GPT-4-class models, Mistral's larger runs, all use H100 clusters as their default substrate.
+The **NVIDIA H100** (Hopper architecture, $2022$–present) was the workhorse of the 2023–2024 training generation and remains one of the most widely deployed accelerators in production, even though it is no longer NVIDIA's current-generation part. $80$ GB of HBM3 memory at $\sim 3$ TB/s bandwidth, around $989$ TFLOPS of BF16 matmul throughput on the tensor cores, $\sim 1979$ TFLOPS at FP8. NVLink 4.0 provides $900$ GB/s of GPU-to-GPU bandwidth within a node. Llama-3, GPT-4-class models, Mistral's larger runs, all trained on H100 clusters as their default substrate, and a large fraction of the world's installed GPU base is still H100.
 
-The **NVIDIA A100** (Ampere, $2020$) is the previous-generation frontier. $40$ or $80$ GB of HBM2e, $\sim 2$ TB/s of memory bandwidth, $\sim 312$ TFLOPS BF16, NVLink 3.0 at $600$ GB/s. GPT-3, the original Chinchilla, and LLaMA 1 all trained on A100s. Plenty of production training in 2024 still runs on A100 clusters that were stood up before H100 became available.
+The **NVIDIA H200** ($2024$–present) is the same Hopper compute die with a memory upgrade: $141$ GB of HBM3e at $\sim 4.8$ TB/s, same FLOPs as the H100. The extra memory matters most for the workloads where $80$ GB is the binding constraint, long-context training and large-batch or long-context inference, and clusters that already have H100 nodes can often drop in H200s without touching the rest of the stack.
 
-The **NVIDIA GH200** (Grace Hopper Superchip, $2023$–present) tightly couples an H100-class GPU with a Grace CPU and gives each GPU $96$ or $144$ GB of HBM3 plus a unified memory model. Newer frontier clusters increasingly use GH200 for the larger per-GPU memory and the simpler CPU-GPU programming model.
+The **NVIDIA B200** (Blackwell architecture, $2024$–present) is NVIDIA's current-generation training and inference GPU as of this writing. A dual-die package with roughly $180$–$192$ GB of HBM3e depending on SKU (DGX B200 ships $180$ GB per GPU; HGX B200 configurations ship $192$ GB) at $\sim 8$ TB/s of bandwidth, native FP4 tensor-core support delivering on the order of $9$ PFLOPS of dense FP4 per GPU ($\sim 18$ PFLOPS with structured sparsity), and NVLink 5.0 at $1.8$ TB/s of per-GPU bidirectional bandwidth, double the H100's NVLink 4.0. The **GB200** superchip pairs two B200 GPUs with a Grace CPU, the same coupling pattern as GH200 one generation back; the **GB200 NVL72** rack links $72$ B200 GPUs and $36$ Grace CPUs into a single NVLink domain. NVIDIA followed in 2025 with **Blackwell Ultra (B300/GB300)**, a $288$ GB HBM3e refresh with higher FP4 throughput and a $1400$ W TDP that requires liquid cooling. Given the pace of releases, this is a moving target: NVIDIA announced its next platform, **Vera Rubin** (Rubin GPU, $288$ GB of HBM4), at GTC 2026, with partner availability slated for the second half of $2026$, so B200/GB300 may already be one generation behind the frontier by the time you read this.
 
-The **AMD MI300X** (CDNA 3, $2023$–present) is the most credible alternative to NVIDIA at frontier scale. $192$ GB of HBM3, about $2.4\times$ what an H100 offers, at $5.3$ TB/s, and roughly $1.3$ PFLOPS of BF16. AMD's software stack (ROCm) has historically lagged CUDA, but adoption is growing rapidly, partly because the larger memory makes it easier to fit big models with less aggressive sharding.
+The **NVIDIA A100** (Ampere, $2020$) is now two generations behind the frontier but still runs a meaningful share of production training. $40$ or $80$ GB of HBM2e, $\sim 2$ TB/s of memory bandwidth, $\sim 312$ TFLOPS BF16, NVLink 3.0 at $600$ GB/s. GPT-3, the original Chinchilla, and LLaMA 1 all trained on A100s, and plenty of production training still runs on A100 clusters that were stood up before H100 became available.
+
+The **NVIDIA GH200** (Grace Hopper Superchip, $2023$–present) tightly couples an H100-class GPU with a Grace CPU and gives each GPU $96$ or $144$ GB of HBM3 plus a unified memory model. It was the bridge design between plain H100 nodes and the Grace-coupled GB200 generation described above.
+
+The **AMD MI300X** (CDNA 3, $2023$) was AMD's first credible frontier-scale alternative to NVIDIA. $192$ GB of HBM3, about $2.4\times$ what an H100 offers, at $5.3$ TB/s, and roughly $1.3$ PFLOPS of BF16. AMD followed with the **MI325X** (CDNA 3, late $2024$), a memory-upgraded variant at $256$ GB of HBM3e and $6$ TB/s, and then the **MI355X** (CDNA 4, general availability October $2025$), which reached $288$ GB of HBM3e at $8$ TB/s and added native FP4/FP6 support, putting it roughly in the same generation as Blackwell. AMD's software stack (ROCm) has historically lagged CUDA, but adoption is growing, partly because the larger memory per GPU makes it easier to fit big models with less aggressive sharding.
 
 ### Memory hierarchy
 
 A GPU is not a flat memory device. Every kernel author has to think about a hierarchy that spans roughly five orders of magnitude in bandwidth.
 
 - **Registers**, thousands of bytes per thread, single-cycle access, the fastest tier.
-- **Shared memory / L1 cache**, $\sim 128$ KB per streaming multiprocessor (SM), addressable from any thread in a block.
-- **L2 cache**, $\sim 40$ MB total on an H100, shared across all SMs.
+- **Shared memory / L1 cache**, $\sim 228$ KB of configurable shared memory per streaming multiprocessor (SM) on an H100 (up from $\sim 128$ KB in older architectures), addressable from any thread in a block.
+- **L2 cache**, $\sim 50$ MB total on an H100, shared across all SMs.
 - **HBM (high-bandwidth memory)**, $80$ GB on an H100, $\sim 3$ TB/s aggregate, the GPU's main RAM.
 - **Host memory (CPU RAM)**, hundreds of GB but cross-PCIe, an order of magnitude slower than HBM for GPU access.
 
@@ -58,10 +60,10 @@ The performance lesson is that keeping working data in the fastest tier that fit
 
 ### Cluster scale
 
-The unit of a modern training cluster is the **node**, typically $8$ GPUs connected by NVLink through an NVSwitch, plus high-bandwidth network NICs (one or two InfiniBand HCAs per GPU). $128$ nodes is a $1024$-GPU cluster, sufficient for most $7$B–$30$B training runs. $1024$ nodes is an $8192$-GPU cluster; that is the working scale of major lab training in $2024$. GPT-4-class frontier models reportedly train on $10{,}000$ to $25{,}000$ GPUs.
+The unit of a modern training cluster is the **node**, typically $8$ GPUs connected by NVLink through an NVSwitch, plus high-bandwidth network NICs (one or two InfiniBand HCAs per GPU). $128$ nodes is a $1024$-GPU cluster, sufficient for most $7$B–$30$B training runs. $1024$ nodes is an $8192$-GPU cluster; that was the working scale of major lab training circa $2024$. GPT-4-class frontier models reportedly trained on $10{,}000$ to $25{,}000$ GPUs. The frontier keeps moving: as of 2026-07-13, individual clusters have scaled well past that, xAI's Colossus site has been reported at roughly $555{,}000$ GPUs across its expansions, and Microsoft's first Blackwell campus for OpenAI's Stargate effort is reported at $450{,}000$ GPUs, so treat any specific cluster-size figure as a snapshot of a number that is still climbing.
 
 <Callout type="warning">
-"Bigger GPU is always faster" is the easy assumption and is sometimes wrong. A single H100 might *underperform* against eight well-connected A100s for memory-bandwidth-bound workloads, the H100 has more FLOPS, but its memory bandwidth advantage per FLOP is smaller, and many real training kernels are bandwidth-limited. Total cluster throughput is a function of memory bandwidth, interconnect speed, and software efficiency, not just headline FLOPS. The right comparison metric is *effective FLOPs delivered to the model*, which Section 7 makes concrete via MFU.
+"Bigger GPU is always faster" is the easy assumption and is sometimes wrong. A single H100 might *underperform* against eight well-connected A100s for memory-bandwidth-bound workloads, the H100 has more FLOPS, but its memory bandwidth advantage per FLOP is smaller, and many real training kernels are bandwidth-limited. Total cluster throughput is a function of memory bandwidth, interconnect speed, and software efficiency, not just headline FLOPS. The right comparison metric is *effective FLOPs delivered to the model*, which Section 8 makes concrete via MFU.
 </Callout>
 
 What turns those individual GPUs into a working cluster is the network.
@@ -70,13 +72,13 @@ What turns those individual GPUs into a working cluster is the network.
 
 ### NVLink within a node
 
-**NVLink** is NVIDIA's GPU-to-GPU interconnect for within-node communication. The generations matter: NVLink 3.0 on A100 delivers $600$ GB/s of bidirectional bandwidth per GPU; NVLink 4.0 on H100 delivers $900$ GB/s. These are *per-GPU* numbers, each H100 can simultaneously send and receive at near-NVLink-peak.
+**NVLink** is NVIDIA's GPU-to-GPU interconnect for within-node communication. The generations matter: NVLink 3.0 on A100 delivers $600$ GB/s of bidirectional bandwidth per GPU; NVLink 4.0 on H100 delivers $900$ GB/s; NVLink 5.0 on B200/GB200 delivers $1.8$ TB/s. These are *per-GPU* numbers, each GPU can simultaneously send and receive at near-NVLink-peak.
 
 The piece that makes a multi-GPU node work end-to-end is **NVSwitch**, a chip that provides full-mesh NVLink connectivity. With NVSwitch, every GPU in an 8-GPU node can talk to every other GPU at full NVLink bandwidth, no contention, no hop penalties. Without NVSwitch, GPUs are wired in a fixed topology (typically a hybrid mesh-and-cube) and some pairs are farther apart than others. Modern training nodes all use NVSwitch; the topology question disappears within a node.
 
 ### InfiniBand across nodes
 
-Once a workload crosses the node boundary, GPU-to-GPU communication leaves NVLink and goes over the network. The dominant fabric is **InfiniBand**: a low-latency, high-bandwidth switched network with per-port bandwidths in the $25$ to $50$ GB/s range for current generations (HDR, NDR). A less common alternative is **RoCE** (RDMA over Converged Ethernet), which gives similar bandwidths over Ethernet hardware.
+Once a workload crosses the node boundary, GPU-to-GPU communication leaves NVLink and goes over the network. The dominant fabric is **InfiniBand**: a low-latency, high-bandwidth switched network. Older HDR/NDR generations run at $25$ to $50$ GB/s per port; the current XDR generation (NVIDIA Quantum-X800, paired with ConnectX-8 NICs, rolling out through 2025–2026 alongside Blackwell clusters) reaches $800$ Gb/s, i.e. $\sim 100$ GB/s, per port. A less common alternative is **RoCE** (RDMA over Converged Ethernet), which gives similar bandwidths over Ethernet hardware.
 
 The critical feature for training is **GPU-direct RDMA**: data moves directly from one GPU's HBM, into the NIC, across the fiber, into the destination NIC, and into the destination GPU's HBM, without ever staging through CPU memory or hitting a system-call boundary. This is the path NCCL uses when running collectives across nodes; everything else would be much too slow.
 
@@ -86,13 +88,11 @@ The bandwidth ratio between NVLink and InfiniBand is the single most consequenti
 
 This is exactly why Chapter 9 noted that **tensor-parallel rank is typically capped at $8$**: TP requires an all-reduce per layer per forward and per backward pass, on activation-sized tensors. That volume is only tolerable at NVLink bandwidth. **Pipeline-parallel rank**, which communicates only at stage boundaries, can comfortably span many nodes over InfiniBand. **Data-parallel rank** is even more forgiving, DP communicates once per step, and the all-reduce can be tuned to fit available cross-node bandwidth.
 
-The practical rule that falls out: *TP within a node, PP across nodes, DP wherever capacity exists*. The Megatron-Turing $530$B configuration of TP$=8$, PP$=35$, DP$=64$ is not arbitrary, each factor is placed on the network layer that can actually sustain its communication.
+The practical rule that falls out: *TP within a node, PP across nodes, DP wherever capacity exists*. The Megatron-Turing $530$B configuration of TP$=8$, PP$=35$, DP$=8$ is not arbitrary, each factor is placed on the network layer that can actually sustain its communication.
 
 <Callout type="warning">
 "Multi-node is always slower than single-node" is technically correct per-GPU, InfiniBand really is $20$ to $40\times$ slower than NVLink. But for very large models, a single node simply cannot hold the parameters at any precision. Multi-node training is not optional at frontier scale; it is the only path that runs at all. The systems-engineering art is *hiding* the inter-node communication behind compute, overlapping the gradient all-reduce with the next forward pass, prefetching FSDP parameters one layer ahead of the kernel that will consume them, scheduling so that the slow network is never on the critical path.
 </Callout>
-
-The next layer up is the software that actually runs the collectives over those interconnects.
 
 ## NCCL: collectives on GPUs
 
@@ -181,6 +181,12 @@ DeepSpeed is the right pick when memory pressure is severe, when training a mode
 
 Megatron is the right pick for any model in the $30$B-and-up range that needs 3D parallelism. It is usually combined with another library (`Megatron-DeepSpeed`, `Megatron-Core` integrated with PyTorch FSDP) to add a ZeRO-style sharding axis on top of TP and PP. The Megatron-Turing $530$B model, the BLOOM 176B run, and most frontier internal stacks use Megatron-derived 3D parallelism.
 
+### NeMo and Lightning
+
+**NVIDIA NeMo** is not a fifth parallelism strategy competing with the three above; it is an opinionated wrapper around Megatron-Core, the same TP/PP engine underlying Megatron-LM, packaged with production-tested model recipes, data loaders, and launch configs for training and fine-tuning LLMs on NVIDIA hardware. Where raw Megatron-LM asks a team to hand-write its own 3D-parallelism configuration, NeMo trades some of that flexibility for a curated set of known-good configs, at the cost of being more tightly coupled to NVIDIA's release cadence than Megatron-LM or FSDP alone.
+
+**PyTorch Lightning** solves a different problem, it does not implement a new sharding strategy at all. Lightning is a training-loop framework that wraps whatever backend a team chooses, DDP, FSDP, DeepSpeed, behind a single `Trainer` API, so switching strategies is a config change rather than a training-loop rewrite. Lightning's FSDP integration is a thinner, more ergonomic layer over the same PyTorch FSDP described above, popular with teams that want FSDP's memory sharding without hand-rolling the wrapping and checkpointing boilerplate that raw `FullyShardedDataParallel` requires.
+
 ### When to use what
 
 The decision flow is roughly:
@@ -194,7 +200,7 @@ The decision flow is roughly:
   <TrainingStackPicker client:visible />
 </WidgetFrame>
 
-These frameworks orchestrate the training loop, but for the most performance-critical operations they often invoke custom GPU kernels rather than relying on PyTorch's defaults. Section 6 explains why and how.
+These frameworks orchestrate the training loop, but for the most performance-critical operations they often invoke custom GPU kernels rather than relying on PyTorch's defaults, hand-written or compiler-generated kernels like the ones Triton and FlashAttention produce.
 
 ## Custom kernels: Triton and FlashAttention
 
@@ -210,7 +216,7 @@ PyTorch's default kernels, the ones generated automatically when an `nn.Module` 
 
 ### Triton
 
-The traditional path to a custom GPU kernel is CUDA C++, verbose, low-level, and requiring significant GPU-architecture expertise to get right. **Triton**, originally developed at OpenAI, is the practical alternative: a Python-embedded language for writing GPU kernels at a higher level than CUDA, with a JIT compiler that produces competitive PTX.
+The traditional path to a custom GPU kernel is CUDA C++, verbose, low-level, and requiring significant GPU-architecture expertise to get right. **Triton**, originally developed as an academic project (Tillet et al. 2019) and later adopted and popularized by OpenAI, is the practical alternative: a Python-embedded language for writing GPU kernels at a higher level than CUDA, with a JIT compiler that produces competitive PTX.
 
 The Triton model is straightforward. A function decorated with `@triton.jit` is compiled to a GPU kernel. The kernel processes work in *tiles*, indexed by program IDs (`tl.program_id`). Inside the kernel, the programmer issues explicit memory loads (`tl.load`) and stores (`tl.store`), with masks for boundary handling. Most of CUDA's complexity, warp scheduling, shared-memory layout, register pressure, is abstracted away or handled by the compiler.
 
@@ -220,11 +226,11 @@ The result is that a Triton implementation of a non-trivial kernel is roughly an
 
 The canonical success story of custom-kernel work in deep learning is **FlashAttention** (Dao et al. 2022, [arxiv.org/abs/2205.14135](https://arxiv.org/abs/2205.14135)).
 
-Standard attention computes $S = QK^\top \in \mathbb{R}^{N \times N}$ in HBM, runs a softmax on it ($S \to P$, also in HBM), and then computes $O = PV$. The total HBM I/O is $O(N^2 d + Nd)$, dominated by the $N \times N$ attention matrix, which has to be written, read for the softmax, and read again for the matmul against $V$. The memory footprint is $O(N^2)$. For $N = 32{,}000$, the attention matrix alone is over $4$ GB in FP16.
+Standard attention computes $S = QK^\top \in \mathbb{R}^{N \times N}$ in HBM, runs a softmax on it ($S \to P$, also in HBM), and then computes $O = PV$. The total HBM I/O is $O(N^2 + Nd)$, dominated by the $N \times N$ attention matrix, which has to be written, read for the softmax, and read again for the matmul against $V$. The memory footprint is $O(N^2)$. For $N = 32{,}000$, the attention matrix alone is over $2$ GB in FP16.
 
 FlashAttention processes attention in **tiles**. Each query block is loaded into SRAM. The corresponding key and value tiles are streamed through SRAM; the partial $S$, the online-softmax statistics, and the partial output $O$ are all kept on-chip. The full $N \times N$ attention matrix is *never* written to HBM. The total HBM I/O drops to $O(N \cdot d \cdot N / M)$ where $M$ is SRAM size, much smaller for large $N$. The memory footprint drops from $O(N^2)$ to $O(N d)$.
 
-The result is $2$ to $4\times$ speedup at standard context lengths ($2$K to $8$K) and $10\times$ or more at long contexts ($32$K to $128$K). Crucially, the output is *identical* to standard attention, no approximation, same math, just a different implementation. **FlashAttention-2** (Dao 2023, [arxiv.org/abs/2307.08691](https://arxiv.org/abs/2307.08691)) refined the work-partitioning across GPU threads and is the current default in PyTorch's `scaled_dot_product_attention` when running on supported hardware.
+The result is $2$ to $4\times$ speedup at standard context lengths ($2$K to $8$K) and $10\times$ or more at long contexts ($32$K to $128$K). Crucially, the output is *identical* to standard attention, no approximation, same math, just a different implementation. **FlashAttention-2** (Dao 2023, [arxiv.org/abs/2307.08691](https://arxiv.org/abs/2307.08691)) refined the work-partitioning across GPU threads and is the current default in PyTorch's `scaled_dot_product_attention` when running on supported hardware. This section covers the kernel-engineering side, tiling, SRAM, HBM I/O; Chapter 17 revisits FlashAttention from the inference-serving angle, how it interacts with the KV cache and continuous batching once the model is actually being served.
 
 <RunnableCode
   client:visible
@@ -259,9 +265,10 @@ print("  1. @triton.jit decorator marks the function as a GPU kernel.")
 print("  2. Work is tiled across program IDs; each program processes BLOCK_SIZE elements.")
 print("  3. Memory accesses are explicit (tl.load / tl.store) with boundary masks.")
 print()
-print("FlashAttention uses the same Triton machinery, but with much more")
-print("interesting compute inside each program: an online softmax over key/value")
-print("tiles streamed through SRAM, accumulated into the output tile.")
+print("FlashAttention uses the same tiling / online-softmax / SRAM strategy")
+print("shown above, streaming key/value tiles through SRAM and accumulating")
+print("into the output tile. (The reference FlashAttention implementation is")
+print("hand-written CUDA/CUTLASS; a Triton port exists but is not the reference.)")
 print()
 print("HBM I/O comparison:")
 print("  Standard attention:  O(N^2)   --> long contexts impractical.")
@@ -280,17 +287,37 @@ print("Same math. Same output. ~2-10x faster, depending on sequence length.")
 **FlashAttention-2** is the current default in most modern frameworks. PyTorch's `torch.nn.functional.scaled_dot_product_attention()` automatically dispatches to it when running on H100 or newer hardware with appropriate input shapes. For most teams, the path to "use FlashAttention" is simply "use the default PyTorch attention call on a recent GPU", no extra dependency required.
 </Callout>
 
-With hardware, interconnects, frameworks, and kernels covered, what is left is the set of techniques that turn a *runnable* training loop into an *efficient* one.
+Hand-writing a kernel is one route to fused, hardware-aware execution, the one a human takes when they have noticed a specific opportunity like FlashAttention's. The other route is to let a compiler find fusion opportunities automatically, across a much wider range of code than any one hand-written kernel covers.
+
+## Compiler stacks: torch.compile and JAX/XLA
+
+### torch.compile
+
+**`torch.compile`** (PyTorch 2.0, 2023) takes a different path from Triton and FlashAttention. Instead of a human noticing a fusion opportunity and hand-writing a kernel for it, `torch.compile` traces a model's ordinary Python and generates fused kernels automatically. Two subsystems do the work. **TorchDynamo** hooks into the CPython frame evaluation API and traces the operations a model actually executes into an FX graph, falling back to normal eager execution wherever it hits code it cannot safely trace, a *graph break*. **TorchInductor** takes that graph and lowers it to fused, hardware-specific kernels, generating Triton kernels for GPU targets and C++ for CPU targets. A meaningful share of the "someone should write a custom kernel for this" work described above is now something `torch.compile` does automatically for common patterns, no `@triton.jit` required.
+
+<Callout type="warning">
+"`torch.compile` always makes training faster" is the tempting assumption and is often wrong. Compilation pays off when shapes are stable across steps, fixed sequence length, fixed batch size, and the model uses standard ops in straightforward control flow; TorchInductor then compiles once and reuses the same fused kernels for the rest of the run. It struggles when shapes vary step to step (variable-length sequences, dynamic batching), which forces expensive recompilation, or when the model has unusual control flow, data-dependent branching, Python loops over tensor values, which triggers frequent graph breaks and falls back to slow eager execution. Compiling the wrong model can make a run *slower* than not compiling at all once that overhead is counted, which is why teams profile before committing to it in a production training script.
+</Callout>
+
+### JAX, XLA, and Google's stack
+
+Everything in this chapter so far is the PyTorch ecosystem. Google's training stack is built on a different foundation. **JAX** is a NumPy-like array library with automatic differentiation, composed with **XLA** (Accelerated Linear Algebra), a compiler that lowers JAX's traced computation to fused kernels for TPUs and GPUs alike. Where PyTorch executes eagerly by default and compiles opt-in via `torch.compile`, JAX is compile-first: a function wrapped in `jax.jit` is traced once, and the *entire* computation, not individual ops, is handed to XLA, which fuses and schedules it as a single optimized program.
+
+JAX's parallelism story runs through **GSPMD** (General and Scalable Parallelism for ML Dataflow Graphs), XLA's automatic partitioner. A user annotates how tensors should be sharded across a device mesh, and GSPMD's compiler pass derives the collective operations, all-gathers, reduce-scatters, all-to-alls, needed to execute the sharded computation, a role analogous to what Megatron-LM's hand-written TP/PP code does explicitly on the PyTorch side. **T5X** and its successor **MaxText** are Google's reference training codebases built on JAX, XLA, and GSPMD, the rough equivalent of Megatron-LM or NeMo for teams working in the JAX ecosystem; Gemini and PaLM are both reported to train on TPU pods through this stack.
+
+For a reader coming from the PyTorch side, the practical takeaway is not "learn JAX." It is recognizing that a technical report mentioning TPU pods, `pjit`, or GSPMD sharding annotations is describing the same 3D-parallelism ideas Chapter 9 introduced, expressed through a compiler-first framework rather than PyTorch's eager-plus-library approach.
+
+Compilers and hand-written kernels both exist to make a training step run efficiently on the hardware it is given. The remaining practical techniques work at a different level: trading compute for memory, and choosing a numeric precision.
 
 ## Practical concerns: checkpointing, mixed precision, activations
 
 ### Activation checkpointing
 
-The forward pass of a transformer produces intermediate **activations** at every layer, the attention output, the post-LayerNorm vectors, the FFN intermediate, and so on. Every one of those activations has to be available during the backward pass to compute gradients. For a $70$B-class model with $80$ layers, $8192$ hidden dimension, sequence length $2048$, and a micro-batch of $4$, the per-micro-batch activations sum to several hundred GB.
+The forward pass of a transformer produces intermediate **activations** at every layer, the attention output, the post-LayerNorm vectors, the FFN intermediate, and so on. Every one of those activations has to be available during the backward pass to compute gradients. For a $70$B-class model with $80$ layers, $8192$ hidden dimension, sequence length $2048$, and a micro-batch of $4$, the per-micro-batch activations sum to over $100$ GB.
 
 **Activation checkpointing** breaks this memory cost by not storing all activations. The training pipeline checkpoints only the activations at certain layer boundaries; during the backward pass, the intermediate activations between checkpoints are *recomputed* from the nearest checkpoint by re-running a slice of the forward pass.
 
-The classic trade is $\sim 30\%$ extra forward-pass compute for $\sim 6\times$ memory reduction. For any model large enough that activation memory is the binding constraint, which is essentially every model above $\sim 10$B, that is a trade you take every time. **Selective activation checkpointing** (Korthikanti et al. 2022, [arxiv.org/abs/2205.05198](https://arxiv.org/abs/2205.05198)) refines this further: rather than checkpoint everything, recompute only the most memory-intensive activations (the QKV projections and the FFN intermediate), which delivers similar memory savings at $\sim 10\%$ extra compute.
+The classic trade is $\sim 30\%$ extra forward-pass compute for $\sim 10\times$ memory reduction. For any model large enough that activation memory is the binding constraint, which is essentially every model above $\sim 10$B, that is a trade you take every time. **Selective activation checkpointing** (Korthikanti et al. 2022, [arxiv.org/abs/2205.05198](https://arxiv.org/abs/2205.05198)) refines this further: rather than checkpoint everything, recompute only the most memory-intensive activations (the QKV projections and the FFN intermediate), which delivers roughly half the memory reduction of full checkpointing ($\sim 5\times$) at a much smaller $\sim 10\%$ extra compute cost.
 
 ### Mixed precision
 
@@ -300,7 +327,7 @@ Three numeric formats matter for current training.
 
 **BF16** (bfloat16), $16$-bit with $8$ exponent bits and $7$ mantissa bits. Same dynamic range as FP32, half the storage, twice the matmul throughput on tensor cores. BF16 is the *current default for forward and backward pass*. The migration from FP16 to BF16 around $2020$–$2022$ was driven by FP16's underflow issues at large scale, gradient magnitudes can fall below FP16's representable range, and loss scaling is required to keep training stable. BF16's wider exponent range eliminates the underflow problem entirely; the standard recipe is now `FP32 master + BF16 compute`.
 
-**FP8**, $8$-bit floats, in two formats (E4M3 for forward, E5M2 for backward). Hopper-generation GPUs (H100 and later) support FP8 in hardware. The throughput gain is roughly $2\times$ over BF16, at the cost of more careful loss-scaling and per-tensor scale management. FP8 is in production at the frontier, Llama-3's training used FP8 for some of its matmuls, but the bookkeeping required to make it numerically stable is non-trivial.
+**FP8**, $8$-bit floats, in two formats (E4M3 for forward, E5M2 for backward). Hopper-generation GPUs (H100 and later) support FP8 in hardware. The throughput gain is roughly $2\times$ over BF16, at the cost of more careful loss-scaling and per-tensor scale management. FP8 is in production at the frontier, DeepSeek-V3 ($2024$) trained the majority of its matmuls in FP8, while Llama-3 used BF16 throughout pretraining and reserved FP8 for post-training inference quantization of the $405$B model, but the bookkeeping required to make FP8 numerically stable during training is non-trivial.
 
 ### Step timing and overlap
 
@@ -361,18 +388,42 @@ print(f"Selective checkpointing is the current default for production training."
 />
 
 <Callout type="warning">
-"Activation checkpointing trades compute for memory" is the textbook framing and is only half right. The naive version trades $\sim 30\%$ extra forward-pass compute for $\sim 6\times$ memory savings. **Selective** activation checkpointing (Korthikanti et al. 2022) trades $\sim 10\%$ extra compute for similar memory, and the extra compute is often *hidden*, because the backward pass was memory-bandwidth-bound anyway and the recompute uses idle compute capacity. At production scale, activation checkpointing is sometimes nearly free.
+"Activation checkpointing trades compute for memory" is the textbook framing and is only half right. The naive version trades $\sim 30\%$ extra forward-pass compute for $\sim 10\times$ memory savings. **Selective** activation checkpointing (Korthikanti et al. 2022) gives up about half of that memory reduction ($\sim 5\times$) but needs only $\sim 10\%$ extra compute, and the extra compute is often *hidden*, because the backward pass was memory-bandwidth-bound anyway and the recompute uses idle compute capacity. At production scale, activation checkpointing is sometimes nearly free.
 </Callout>
 
-All of the engineering in this chapter exists to maximize the useful compute delivered per dollar of cluster spend. Section 8 makes the dollar number concrete.
+All of that engineering optimizes a training run that is actually running. At frontier scale, keeping it running at all is its own discipline.
+
+## Observability and fault tolerance at scale
+
+### Watching the run: W&B and TensorBoard
+
+A frontier training run can last weeks to months; nobody watches it by staring at a terminal. **Weights & Biases (W&B)** and **TensorBoard** are the two dominant tools for training observability. Both log scalar time series, loss, gradient norm, learning rate, MFU, tokens/sec, and render them as a live dashboard an engineer checks periodically rather than continuously. W&B additionally tracks run configuration, hyperparameters, and per-GPU hardware utilization, and supports comparing many runs side by side, which matters when a lab is running several ablations against the same frontier candidate at once.
+
+The signal that catches problems early is rarely the training loss curve alone. A **loss spike**, a sudden jump that does not recover on its own, is the most common early warning that something has gone wrong, a corrupted data shard, a numerical instability in mixed-precision training, or a hardware fault silently corrupting a gradient. **Gradient norm** tracking often catches instability before it reaches the loss: a norm that grows unboundedly over several steps usually precedes a visible divergence. Per-GPU MFU dashboards catch a different failure mode entirely, a single straggler node running at half speed quietly drags down the whole cluster's aggregate throughput well before the effect is visible in the loss curve.
+
+<Callout type="aside">
+Do not conflate this chapter's two uses of "checkpoint." Activation checkpointing, covered above, trades forward-pass compute for activation memory within a single training step; it is a memory optimization invisible outside that step. The distributed checkpointing described next is unrelated: periodically saving the entire training state, model weights, optimizer state, data-loader position, to durable storage so training can resume after a failure. Both are called "checkpointing" for historical reasons; they solve unrelated problems.
+</Callout>
+
+### Fault recovery: distributed checkpoints and elastic restart
+
+At the scale of a $1024$-plus GPU cluster running for weeks, hardware failure is not an edge case, it is a certainty. A bad GPU, a flaky NIC, or a power event will eventually take down some fraction of the fleet, and the run has to survive it without losing weeks of progress.
+
+The standard defense is periodic **distributed checkpointing**: at a fixed interval, often every $30$ minutes to a few hours depending on cluster size and observed failure rate, every rank writes its shard of the model weights, optimizer state, and data-loader position to durable storage, coordinated so all ranks checkpoint a consistent view of the same training step. When a node fails, an orchestrator (Slurm or Kubernetes, typically) detects the failure and relaunches the job, and every rank reloads its shard from the most recent checkpoint, resuming from that step rather than from scratch.
+
+The checkpoint interval is itself a trade-off. Checkpointing too rarely means a failure loses more compute, hours of progress vanish if the last checkpoint is stale. Checkpointing too often wastes compute on I/O: writing a $70$B-parameter model's full state, weights, gradients, optimizer moments, is itself a write of several hundred gigabytes repeated across every rank, competing with training for compute and network bandwidth while it happens. Production runs tune the interval against the cluster's observed failure rate; at $8192$-plus GPUs, a hardware fault every few hours is typical, which pushes checkpoint intervals toward the more frequent end.
+
+**Elastic training** goes further: rather than stopping the entire job when a GPU fails, the framework detects the failure, drops the affected rank, and continues on the reduced GPU count, or waits for a replacement node to rejoin, without a full restart. PyTorch's `torchelastic` and Megatron's built-in fault-tolerance support are examples. This matters more as cluster size grows, since the expected time between failures shrinks roughly in proportion to GPU count.
+
+None of this is optional at frontier scale. A training run with no fault tolerance is a run that, sooner or later, loses everything to a single failed GPU. The cost of the checkpointing infrastructure is trivial next to the cost of restarting a $\$50$M run from step zero, which is exactly the arithmetic Section 10 makes concrete.
 
 ## Cost economics: and what's next
 
 ### The cost of frontier training
 
-GPU-hour pricing in $2024$ runs roughly $\$2$ to $\$5$/hr for A100s and $\$3$ to $\$8$/hr for H100s on the cloud spot market, with lower effective rates ($\sim 30$–$50\%$ less) for owned clusters or long-term contracts. Multiply by the GPU-hours that a frontier training run consumes and the totals get large fast.
+GPU-hour pricing moves fast and varies enormously by provider; as of 2026-07-13, on-demand rates across cloud providers run roughly $\$1$ to $\$3$/hr for A100s, $\$2$ to $\$7$/hr for H100s, and $\$5$ to $\$7$/hr for current-generation B200s (neocloud spot pricing is often $30$–$60\%$ below these on-demand figures, and hyperscalers like AWS and Azure typically price several times above specialized GPU-cloud providers for the same hardware). These are directional numbers from a market that resets every few months, not a citable price list, treat any single figure quoted here as stale by the time you read it and check current listings before budgeting a real run. Multiply by the GPU-hours that a frontier training run consumes and the totals get large fast.
 
-Public and rumored estimates: **LLaMA-2 70B** consumed roughly $1.7$M GPU-hours, around $\$8$M of compute at $\$5$/hr. **GPT-4** is rumored to have used $\sim 30$M GPU-hours and over $\$100$M in compute. **Llama-3 405B** is estimated at $\sim 16$M GPU-hours, around $\$50$M–$\$80$M. As models scale toward the next compute level ($10^{25}$ to $10^{26}$ FLOPs of training), individual runs approach $\$1$B in compute alone, a cost regime where infrastructure efficiency dominates everything else in the training budget.
+Public and rumored estimates: **LLaMA-2 70B** consumed roughly $1.7$M GPU-hours, around $\$8$M of compute at $\$5$/hr. **GPT-4** is rumored to have used $\sim 30$M GPU-hours and over $\$100$M in compute. **Llama-3 405B** used about $31$M H100 GPU-hours for pretraining, around $\$100$M–$\$150$M. As models scale toward the next compute level ($10^{25}$ to $10^{26}$ FLOPs of training), individual runs approach $\$1$B in compute alone, a cost regime where infrastructure efficiency dominates everything else in the training budget.
 
 The pragmatic implication is that **MFU matters more than $\$/$GPU-hour**. A cluster running at $30\%$ MFU on $\$5$/hr GPUs delivers fewer useful FLOPs per dollar than the same cluster running at $50\%$ MFU on $\$8$/hr GPUs. The arithmetic of a $\$50$M training run says that improving MFU from $25\%$ to $50\%$ is worth $\$25$M, far more than the salaries of the engineers who would do that work. This is why every major lab now has a dedicated training-infrastructure team whose explicit job is MFU optimization.
 
@@ -389,11 +440,12 @@ The pragmatic implication is that **MFU matters more than $\$/$GPU-hour**. A clu
     theoretical = num_gpus * peak_flops_per_gpu
     return achieved / theoretical
 
-# Llama-3 8B on 128 H100s, achieving ~500K tokens/sec.
+# An 8B model on 128 H100s, achieving ~600K tokens/sec (an illustrative,
+# on-the-low-end-of-un-tuned run -- see the reference bands below).
 H100_PEAK_BF16 = 989e12  # FLOPs/sec, BF16 tensor cores, sparsity off
 
 result = mfu(
-    tokens_per_sec=500_000,
+    tokens_per_sec=600_000,
     model_params=8e9,
     num_gpus=128,
     peak_flops_per_gpu=H100_PEAK_BF16,
@@ -419,7 +471,7 @@ Four exercises that build on the chapter's machinery. Each is a self-contained p
 
 ### Exercise 1 (easy): NVLink vs InfiniBand bandwidth math
 
-Compute the time for a single gradient all-reduce on a $7$B-parameter model across two scenarios: $8$ GPUs on one node (NVLink) vs $8$ GPUs across two nodes (InfiniBand). Verify the $\sim 20\times$ speed difference.
+Compute the time for a single gradient all-reduce on a $7$B-parameter model across two scenarios: $8$ GPUs on one node (NVLink) vs $8$ GPUs across two nodes (InfiniBand). Verify the $\sim 36\times$ speed difference.
 
 <details>
 <summary>Hint</summary>
@@ -467,6 +519,33 @@ NUM_GPUS = 8
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+The TODO is a one-line division: time = bytes-per-GPU / bandwidth-in-bytes-per-second.
+
+```python
+def all_reduce_time(data_size_bytes, num_gpus, bandwidth_gbps):
+    per_gpu_bytes = 2 * (num_gpus - 1) / num_gpus * data_size_bytes
+    bandwidth_bytes_s = bandwidth_gbps * 1e9
+    return per_gpu_bytes / bandwidth_bytes_s
+
+GRAD_SIZE = 2 * 7e9   # BF16 = 2 bytes/param
+NUM_GPUS = 8
+
+nvlink_time = all_reduce_time(GRAD_SIZE, NUM_GPUS, 900)
+print(f"NVLink (~900 GB/s):     {nvlink_time*1000:>7.2f} ms")
+
+ib_time = all_reduce_time(GRAD_SIZE, NUM_GPUS, 25)
+print(f"InfiniBand (~25 GB/s):  {ib_time*1000:>7.2f} ms")
+
+print(f"\nSpeed gap: {ib_time / nvlink_time:.0f}x slower across nodes")
+```
+
+Output: NVLink 27.22 ms, InfiniBand 980.00 ms, a 36x gap, confirming why tensor parallelism stays within a node.
+
+</details>
+
 ### Exercise 2 (medium): FlashAttention I/O complexity
 
 Compute the HBM I/O for standard attention vs FlashAttention at increasing sequence lengths. Verify that the gap grows asymptotically.
@@ -475,7 +554,7 @@ Compute the HBM I/O for standard attention vs FlashAttention at increasing seque
 <summary>Hint</summary>
 
 **Standard attention** writes the full $N \times N$ attention matrix to HBM:
-$\text{HBM I/O} \approx O(N^2 \cdot d)$ bytes.
+$\text{HBM I/O} \approx O(N^2 + N \cdot d)$ bytes, dominated by the $N^2$ term.
 
 **FlashAttention** tiles attention to fit in SRAM (size $M$):
 $\text{HBM I/O} \approx O(N \cdot d \cdot \lceil N / M \rceil)$ bytes.
@@ -524,11 +603,42 @@ for N in [512, 2048, 8192, 32768, 131072]:
     # speedup = std / flash
     # print(f"{N:>8} {std/1e6:>12.1f} MB {flash/1e6:>12.1f} MB {speedup:>10.1f}x")
 
-# Expected: at N=512, speedup ~1-2x; at N=131072, speedup ~50x+
+# Expected: at N=512, speedup ~9x (avoiding the N^2 matrix already helps); at N=131072, speedup ~1500x+
 # The asymptotic gap is why long-context LLMs became practical with FlashAttention.
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+FlashAttention's I/O is the number of SRAM passes (`max(1, N / sram_size)`) times one read/write of Q, K, V, O — never the full N x N matrix.
+
+```python
+def flashattention_hbm_io(N, d, sram_size=100_000, dtype_bytes=2):
+    tiles = max(1, N / sram_size)
+    return 4 * N * d * dtype_bytes * tiles
+
+for N in [512, 2048, 8192, 32768, 131072]:
+    std = standard_attention_hbm_io(N, 64)
+    flash = flashattention_hbm_io(N, 64)
+    speedup = std / flash
+    print(f"{N:>8} {std/1e6:>12.1f} MB {flash/1e6:>12.1f} MB {speedup:>10.1f}x")
+```
+
+Output:
+
+```
+     512          2.4 MB          0.3 MB        9.0x
+    2048         34.6 MB          1.0 MB       33.0x
+    8192        541.1 MB          4.2 MB      129.0x
+   32768       8606.7 MB         16.8 MB      513.0x
+  131072     137506.1 MB         88.0 MB     1563.3x
+```
+
+Even at N=512 (below the SRAM threshold), FlashAttention wins by ~9x just from never materializing the N x N matrix; once N exceeds `sram_size` the gap keeps widening.
+
+</details>
 
 ### Exercise 3 (medium): Activation memory with checkpointing
 
@@ -540,9 +650,9 @@ Compute activation memory for a $70$B-parameter transformer ($80$ layers, $d_\te
 Per-layer activations include attention QKV ($3 \times B \times N \times d$), attention output ($B \times N \times d$), FFN intermediate ($B \times N \times 4d$), and various LayerNorm outputs. Total per layer $\approx 10 \times B \times N \times d \times \text{bytes}$.
 
 Without checkpointing: total $= \text{num\_layers} \times \text{per\_layer}$.
-With selective checkpointing: keep only input to each layer $\rightarrow$ total $\approx \text{num\_layers} \times B \times N \times d \times \text{bytes}$ ($10\times$ reduction).
+With checkpointing: keep only the input to each layer, recompute the rest in backward $\rightarrow$ total $\approx \text{num\_layers} \times B \times N \times d \times \text{bytes}$ ($10\times$ reduction).
 
-Compare against H100's $80$ GB; account for state memory ($\sim 140$ GB for $70$B model under FSDP on $8$ GPUs $= 17.5$ GB/GPU, leaving $\sim 60$ GB for activations).
+Compare against H100's $80$ GB; account for state memory. At $18$ bytes/param (Section 5's optimizer-state figure), a $70$B model needs $70 \times 10^9 \times 18 \approx 1260$ GB of optimizer + master-weight state in total, that alone would not fit on $8$ GPUs. Sharded via FSDP across $32$ GPUs, it is $\approx 39$ GB/GPU, leaving $\approx 41$ GB for activations.
 
 </details>
 
@@ -553,19 +663,20 @@ Compare against H100's $80$ GB; account for state memory ($\sim 140$ GB for $70$
     Activation memory per GPU.
 
     Per-layer activations (no checkpointing) approx 10 * B * N * d * bytes
-    With selective checkpointing: ~1 * B * N * d * bytes (10x reduction)
+    With checkpointing: ~1 * B * N * d * bytes (10x reduction)
     """
     # TODO: implement
     pass
 
-# Test: 70B model on 8 H100s (FSDP), various sequence lengths
+# Test: 70B model on 32 H100s (FSDP), various sequence lengths
 NUM_LAYERS = 80
 D_MODEL = 8192
 BATCH_SIZE = 4   # per GPU
 H100_MEM_GB = 80
+NUM_GPUS = 32    # FSDP shard count
 
-# State memory per GPU (FSDP across 8 GPUs): 70B * 18 bytes / 8 = 157 GB total / 8 ~= 19 GB/GPU
-STATE_GB = (70e9 * 18) / 8 / 1e9
+# State memory per GPU (FSDP across NUM_GPUS): 70B * 18 bytes/param = 1260 GB total, sharded
+STATE_GB = (70e9 * 18) / NUM_GPUS / 1e9
 
 print(f"State memory per GPU: {STATE_GB:.1f} GB")
 print(f"Available for activations: {H100_MEM_GB - STATE_GB:.1f} GB\\n")
@@ -581,10 +692,49 @@ for seq_len in [512, 1024, 2048, 4096, 8192, 16384]:
     # print(f"{seq_len:>8} {mem_no:>9.1f} GB {mem_yes:>10.1f} GB {fits_no:>6} / {fits_yes:>6}")
     pass
 
-# Conclusion: checkpointing extends the practical sequence length 10x.
+# Conclusion: checkpointing extends the practical sequence length several-fold
+# (from a few hundred tokens of headroom to several thousand, in this config).
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Without checkpointing, each layer keeps ~10 activation tensors; with checkpointing, only the layer input survives (a 10x per-layer reduction), and the rest is recomputed in the backward pass.
+
+```python
+def activation_memory(num_layers, batch_size, seq_len, d_model, with_checkpointing, dtype_bytes=2):
+    if with_checkpointing:
+        return num_layers * batch_size * seq_len * d_model * dtype_bytes
+    per_layer = 10 * batch_size * seq_len * d_model * dtype_bytes
+    return num_layers * per_layer
+
+NUM_LAYERS, D_MODEL, BATCH_SIZE, H100_MEM_GB, NUM_GPUS = 80, 8192, 4, 80, 32
+STATE_GB = (70e9 * 18) / NUM_GPUS / 1e9  # 39.4 GB/GPU
+
+for seq_len in [512, 1024, 2048, 4096, 8192, 16384]:
+    mem_no = activation_memory(NUM_LAYERS, BATCH_SIZE, seq_len, D_MODEL, False) / 1e9
+    mem_yes = activation_memory(NUM_LAYERS, BATCH_SIZE, seq_len, D_MODEL, True) / 1e9
+    available_gb = H100_MEM_GB - STATE_GB
+    print(seq_len, mem_no, mem_yes, mem_no < available_gb, mem_yes < available_gb)
+```
+
+Output (state memory 39.4 GB/GPU, 40.6 GB available for activations):
+
+```
+ seq_len   no checkpt   with checkpt    fits no/yes
+     512      26.8 GB        2.7 GB    yes /    yes
+    1024      53.7 GB        5.4 GB     no /    yes
+    2048     107.4 GB       10.7 GB     no /    yes
+    4096     214.7 GB       21.5 GB     no /    yes
+    8192     429.5 GB       42.9 GB     no /     no
+   16384     859.0 GB       85.9 GB     no /     no
+```
+
+Without checkpointing, the run tops out below 1024 tokens; with checkpointing it survives up to 4096 tokens on the same 32-GPU FSDP shard, an 8x extension of usable context.
+
+</details>
 
 ### Exercise 4 (hard): MFU calculation + cost projection
 
@@ -650,6 +800,47 @@ for mfu in [0.30, 0.40, 0.50]:
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Both functions are direct translations of the formulas in the docstrings: total FLOPs is `6*N*D`, achievable throughput scales with MFU, and `mfu_from_throughput` just inverts that relationship.
+
+```python
+def estimate_training_run(model_params, tokens, num_gpus, peak_flops_per_gpu, mfu, hourly_cost_per_gpu):
+    total_flops = 6 * model_params * tokens
+    achievable_flops_per_sec = num_gpus * peak_flops_per_gpu * mfu
+    time_hours = total_flops / achievable_flops_per_sec / 3600
+    cost = time_hours * num_gpus * hourly_cost_per_gpu
+    return {"hours": time_hours, "cost": cost}
+
+def mfu_from_throughput(tokens_per_sec, model_params, num_gpus, peak_flops_per_gpu):
+    achieved_flops_per_sec = tokens_per_sec * 6 * model_params
+    theoretical_flops_per_sec = num_gpus * peak_flops_per_gpu
+    return achieved_flops_per_sec / theoretical_flops_per_sec
+
+MODEL_PARAMS, TOKENS, NUM_GPUS, PEAK_FLOPS_H100 = 70e9, 1.4e12, 1024, 989e12
+
+for mfu in [0.30, 0.40, 0.50]:
+    result = estimate_training_run(MODEL_PARAMS, TOKENS, NUM_GPUS, PEAK_FLOPS_H100, mfu, hourly_cost_per_gpu=5.0)
+    print(f"MFU={mfu*100:.0f}%: {result['hours']/24:.1f} days, cost ${result['cost']/1e6:.1f}M")
+
+observed_mfu = mfu_from_throughput(1.0e6, MODEL_PARAMS, NUM_GPUS, PEAK_FLOPS_H100)
+print(f"Observed MFU from 1M tokens/sec: {observed_mfu*100:.1f}%")
+```
+
+Output:
+
+```
+MFU=30%: 22.4 days, cost $2.8M
+MFU=40%: 16.8 days, cost $2.1M
+MFU=50%: 13.4 days, cost $1.7M
+Observed MFU from 1M tokens/sec: 41.5%
+```
+
+1M tokens/sec on 1024 H100s backs out to 41.5% MFU, squarely in the 40-50% well-tuned band.
+
+</details>
 
 Ten chapters in, the entire training-side story is on the page. Architecture (Chapters 1 through 6), data pipeline (Chapter 7), training loop (Chapter 8), scaling math and parallelism strategies (Chapter 9), and the practical infrastructure that runs those strategies on real clusters (Chapter 10). With these, the system diagrams of any frontier training run, Llama-3, GPT-4-class, Gemini, are readable at every level: the architecture, the data mix, the loss and the optimizer, the parallelism layout, the GPU hardware, the interconnect, the framework, the kernels, the cost.
 

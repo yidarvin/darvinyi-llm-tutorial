@@ -1,6 +1,6 @@
 # Chapter 13 — Supervised Fine-Tuning (SFT): research
 
-> Curated source material for Chapter 13's build sessions. **The first chapter of Phase 11 (Post-training)** — the largest remaining arc of the tutorial. Phase 11 covers what to do with a pre-trained model to make it useful: SFT (Ch 13), preference optimization (Ch 14), parameter-efficient methods (Ch 15), and distillation (Ch 16). **SFT is the cheap-and-cheerful foundation** of every modern post-training pipeline: take a base LM, fine-tune on instruction-response pairs with response-only loss masking, and you have a usable chatbot. The recipe is mechanically simple but the *practice* — chat templates, data quality, format brittleness, capability tax — is where teams spend their time. Single-topic chapter; uses the **4-file cadence**.
+> Curated source material for Chapter 13's build sessions. **The first chapter of Part V (Post-training)** — the largest remaining arc of the tutorial. Part V covers what to do with a pre-trained model to make it useful: SFT (Ch 13), preference optimization (Ch 14), parameter-efficient methods (Ch 15), and distillation (Ch 16). **SFT is the cheap-and-cheerful foundation** of every modern post-training pipeline: take a base LM, fine-tune on instruction-response pairs with response-only loss masking, and you have a usable chatbot. The recipe is mechanically simple but the *practice* — chat templates, data quality, format brittleness, capability tax — is where teams spend their time. Single-topic chapter; uses the **4-file cadence**.
 
 ---
 
@@ -8,7 +8,7 @@
 
 **Chapter title:** Supervised Fine-Tuning (SFT)
 
-**Premise:** Phase 9-10 covered how to train a base language model. That model can complete text but doesn't follow instructions, doesn't know it's a chatbot, doesn't refuse harmful requests. SFT is the first step in turning it into something useful: fine-tune on a curated dataset of (instruction, response) pairs using **next-token prediction with the loss computed only on response tokens**. This teaches the model the format of "answer this question," "follow this instruction," "have this conversation." Most modern chat models start with SFT before any RLHF/DPO. **The recipe is simple; the data and format choices are where craft happens.**
+**Premise:** Parts III–IV (Chapters 7–12) covered how to train a base language model. That model can complete text but doesn't follow instructions, doesn't know it's a chatbot, doesn't refuse harmful requests. SFT is the first step in turning it into something useful: fine-tune on a curated dataset of (instruction, response) pairs using **next-token prediction with the loss computed only on response tokens**. This teaches the model the format of "answer this question," "follow this instruction," "have this conversation." Most modern chat models start with SFT before any RLHF/DPO. **The recipe is simple; the data and format choices are where craft happens.**
 
 **Out of scope (other chapters):**
 - Pre-training (Ch 7-10)
@@ -604,7 +604,7 @@ Planned file layout:
 
 Eight outcomes. Exercises hit outcomes 2 (loss masking), 3 (templates), 5 (dataset structure).
 
-**This chapter opens Phase 11 — post-training.** Ch 13 (SFT) is the foundation. Ch 14 (preference optimization) builds on it. Ch 15 (PEFT) and Ch 16 (distillation) refine it. **Phase 11 is more sequential** than Phase 10 — chapters build on each other.
+**This chapter opens Part V — post-training.** Ch 13 (SFT) is the foundation. Ch 14 (preference optimization) builds on it. Ch 15 (PEFT) and Ch 16 (distillation) refine it. **Part V is more sequential** than Part IV — chapters build on each other.
 
 **Tonal framing**: SFT is *not glamorous*. It's the cheap-and-cheerful start of post-training. Most of the work is in data curation, not algorithm design. Be honest about this — the chapter should feel practical and grounded, not breathless.
 

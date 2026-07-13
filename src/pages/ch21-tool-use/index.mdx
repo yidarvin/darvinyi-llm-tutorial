@@ -18,7 +18,7 @@ Every production LLM agent runs on this stack, customer support bots, autonomous
 
 ### The bridge from Chapter 20
 
-Chapter 20 §4 introduced the **ReAct** pattern: the model emits a `Thought`, then an `Action`, receives an `Observation`, and continues with the next `Thought`. The loop runs until the model emits a final answer. That pattern is twelve years younger than the rest of the chapter's material and has held up unusually well, every modern agent system runs some form of Thought → Action → Observation underneath, regardless of which model or framework is in use.
+Chapter 20 §4 introduced the **ReAct** pattern: the model emits a `Thought`, then an `Action`, receives an `Observation`, and continues with the next `Thought`. The loop runs until the model emits a final answer. That pattern is the oldest idea in this chapter, yet it has held up unusually well: every modern agent system still runs some form of Thought → Action → Observation underneath, regardless of which model or framework is in use, even as the API surface around it has churned repeatedly.
 
 What has changed is everything *under* the pattern. **In 2022 (the ReAct era)**, actions were emitted as natural-language strings, `Action: search("population of France")`, and the surrounding system parsed them with regex or heuristics. Brittle on a good day, broken on a bad one. **In modern production (2024 – 2025)**, actions are emitted as **structured JSON** matching a declared schema; the system parses with a JSON parser; **constrained decoding** (Chapter 19 §8) guarantees that the call is well-formed token by token. The structural reliability is no longer a tuning concern; it is a property of the decoder.
 
@@ -26,13 +26,21 @@ What has changed is everything *under* the pattern. **In 2022 (the ReAct era)**,
 
 The conceptual loop, think → act → observe → repeat, is identical. The grounding effect is identical: observations are real, not fabricated, so the model's reasoning is anchored in actual tool outputs rather than its own priors. The model's autonomy in choosing *when* and *which* tool to invoke is identical. **What is new** is production-grade infrastructure: schemas, validators, dispatchers, retry logic, monitoring, idempotency guards, audit logs, and the interoperability protocols this chapter closes with.
 
-The empirical scale tells the same story. **Toolformer** (Schick 2023) demonstrated self-supervised tool-use training across a few dozen tools at roughly $70\%$ success. **GPT-4 with function calling** (June 2023) reached $\sim 85$ – $95\%$ on standard tool benchmarks, with user-supplied tools rather than a fixed catalog. **The modern frontier** in 2025 routinely runs agentic loops across hundreds of tools and dozens of steps, hitting $\sim 70$ – $85\%$ on complex multi-step tasks (TaskBench, ToolBench), lower than single-call benchmarks because the loop has more chances to fail.
+The empirical scale tells the same story. **Toolformer** (Schick 2023) demonstrated self-supervised tool-use training across a small fixed set of five tools, a calculator, a question-answering system, a search engine, a translation system, and a calendar, improving downstream task accuracy without degrading the model's core language ability. **GPT-4 with function calling** (June 2023) reached $\sim 85$ – $95\%$ on standard tool benchmarks, with user-supplied tools rather than a fixed catalog. **The modern frontier** in 2025 routinely runs agentic loops across hundreds of tools and dozens of steps, hitting $\sim 70$ – $85\%$ on complex multi-step tasks (TaskBench, ToolBench), lower than single-call benchmarks because the loop has more chances to fail. The benchmark built specifically for this multi-turn regime is **τ-bench** (Yao et al. 2024, [arxiv.org/abs/2406.12045](https://arxiv.org/abs/2406.12045)), which drops an agent into a simulated customer-service environment with a scripted user simulator and a policy the agent must follow, then scores whether the *end state* is policy-compliant rather than whether any individual call was well-formed. Single-call tool selection has its own standard, the **Berkeley Function-Calling Leaderboard** (gorilla.cs.berkeley.edu/leaderboard.html). Chapter 30 returns to tool-use evaluation directly.
+
+### Training tool use
+
+Tool-calling accuracy is not a property of clever prompting; it is trained in with the same SFT machinery Chapter 13 covered. A base model handed a tool schema for the first time in its life produces malformed calls, ignores tools it should use, and invents tools it should not, no matter how well the schema is written. Reliable tool use requires the model to have already seen many examples of exactly this shape: a conversation, a set of schemas, a well-formed call, an observation, and a continuation that uses the observation correctly.
+
+The training data for this is built, not collected. **Synthetic generation** produces the raw supply of traces: a model, often a stronger one, or the base model itself in a self-supervised loop, is sampled against tool schemas to produce candidate call-observation-continuation sequences. Toolformer's (Schick 2023) mechanism is a clean example: insert a candidate API call into existing text, run it, and keep the insertion only if it lowers the perplexity of the text that follows. **Filtering** is where the real work happens: a candidate trace is kept only if the call is well-formed *and* the tool actually helped, the calculator call lowered the perplexity of the correct continuation, the retrieved document contained the fact the answer needed. Traces where the tool was unnecessary, wrong, or actively hurt the final answer get discarded, not "corrected," bad traces teach the wrong lesson no matter how they are patched. **SFT** then trains on the filtered set exactly as Chapter 13 describes: response-only loss masking over (context, response) pairs, except here the "response" alternates between a structured tool call and a text continuation conditioned on the tool's observation. The model is not reasoning its way into tool use fresh at every inference call; it has seen thousands of instances of "when the context looks like this, the right move is a call, not text."
+
+<Callout type="insight">
+"Tool use is prompt engineering, describe the tools well enough and the model will call them correctly" undersells what is actually happening. **Modern models are trained on tool-use traces**, not merely prompted with schemas at inference time. A good schema helps a trained model pick correctly; it cannot substitute for training data the model has never seen anything resembling. This is why a base model and an SFT'd tool-use model perform very differently given an identical schema and an identical prompt, the schema is not where the capability comes from.
+</Callout>
 
 <Callout type="aside">
 Tool use is the single most economically consequential LLM capability of 2023 – 2025. **Every production agent runs on it**: customer support, coding agents, browser automation, IDE integrations, computer use, retrieval pipelines. The patterns in this chapter are not optional knowledge for engineers building AI systems; they are the foundation. The API surface has churned dozens of times since Yao 2022 introduced ReAct, but the loop structure has not, and the modern infrastructure stack, schemas, constrained decoding, MCP, is what makes the pattern reliable enough to bet a product on.
 </Callout>
-
-The next section covers the interface convention that the whole production stack is built on, function calling.
 
 ## Function calling APIs
 
@@ -115,7 +123,54 @@ print("\n(The model would now produce a final text response using the weather da
 "Function-calling APIs are model-specific and not portable" was true historically and is **converging now**. OpenAI, Anthropic, and Google all use JSON-Schema-based tool calling with small API differences, a tool defined for one provider can be mechanically translated for the others. **MCP** (section 7) standardizes the tool-server side. **Cross-provider tool definitions are practical today**: write the schema once, expose it through whichever client your stack uses. The portability gap is narrower than the framework ecosystem implies.
 </Callout>
 
-The next section opens the schema itself, what a good tool description looks like and where the model's selection logic gets its signal.
+### The OpenAI shape
+
+The example above is Anthropic's wire format. OpenAI encodes the same round trip differently in two places. **The call** rides inside the assistant message's `tool_calls` array, and the arguments are a JSON-encoded *string*, not a parsed object, the caller has to `json.loads` it before use. **The result** is not a content block nested inside a user message; it is its own message with `role: "tool"`, addressed back to the call it answers via `tool_call_id`.
+
+<RunnableCode client:visible>
+```python
+# OpenAI-style tool call structure for the same get_weather round trip.
+
+def get_weather(location, unit="fahrenheit"):
+    return f"72°{'F' if unit == 'fahrenheit' else 'C'}, sunny"
+
+# What the model emits: the call lives in tool_calls, arguments as a JSON string.
+mock_model_response = {
+    "role": "assistant",
+    "content": None,
+    "tool_calls": [
+        {
+            "id": "call_abc",
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "arguments": '{"location": "San Francisco", "unit": "fahrenheit"}',
+            },
+        }
+    ],
+}
+
+# System parses the JSON-string arguments, then executes.
+import json
+call = mock_model_response["tool_calls"][0]
+fn_name = call["function"]["name"]
+fn_args = json.loads(call["function"]["arguments"])   # string -> dict
+print(f"Model wants to call: {fn_name}({fn_args})")
+
+result = get_weather(**fn_args)
+print(f"Tool result: {result}")
+
+# The result becomes its own "tool" message, addressed by tool_call_id.
+tool_message = {
+    "role": "tool",
+    "tool_call_id": call["id"],
+    "content": result,
+}
+print(f"\nSent back to model: {tool_message}")
+```
+</RunnableCode>
+
+The field names and nesting differ; the principle underneath does not, a structured call goes out, a structured result comes back, and the model conditions on the result. Code written against one shape ports to the other by relabeling fields, not by rethinking the pattern.
 
 ## Tool schemas
 
@@ -158,13 +213,11 @@ The production sweet spot for tool descriptions is **50 to 200 characters**, plu
 "Constrained decoding makes tool calls reliable" is **true with an important nuance**. **Structural validity**: the JSON parses, the schema matches, the enums are respected, *is* guaranteed by FSM masking from Chapter 19. **Semantic correctness** is not. The model can still pass `get_weather(location="Atlantis")` because "Atlantis" is a syntactically valid string; the schema cannot encode the constraint that the location must be a real place. **Tool implementations need to validate inputs even after the schema check**: surface clear error messages on failure, and let the agent loop's error-recovery path do its job. Structural reliability raises the floor; semantic robustness still requires engineering.
 </Callout>
 
-The next section covers what happens when tool calls chain, the agent loop that turns single calls into multi-step problem solving.
-
 ## The agent loop
 
 ### Single tool call
 
-The simplest production pattern is one tool call per query. The user asks a question requiring one piece of external information; the model emits a tool call; the system executes; the result is returned; the model produces its final answer. This is enough for most weather, calculator, and database-lookup scenarios, about half of real production tool use is exactly this shape. The remaining half needs the loop.
+The simplest production pattern is one tool call per query. The user asks a question requiring one piece of external information; the model emits a tool call; the system executes; the result is returned; the model produces its final answer. This is enough for most weather, calculator, and database-lookup scenarios, a large fraction of real production tool use is exactly this shape. The rest needs the loop.
 
 ### Multi-step loop
 
@@ -259,8 +312,6 @@ agent_loop("What's the weather in San Francisco in Celsius?")
 ```
 </RunnableCode>
 
-The next section covers what happens when the model has many tools to choose from, the selection problem that breaks production agents at scale.
-
 ## Multi-tool routing
 
 ### The selection problem
@@ -276,8 +327,6 @@ The failure modes are predictable. **Overlapping descriptions**, `search_documen
 <Callout type="aside">
 "More tools is always better" is **false beyond about 50 tools**. Description bloat consumes context window; similar tools confuse the model; selection accuracy degrades. **The production rule of thumb**: if you have more than $50$ tools, you need either hierarchical routing or embedding-based tool retrieval. **Pre-filter aggressively**, give the model the smallest tool set that still includes what is needed for the query at hand. A catalog of $500$ tools served through embedding retrieval down to $10$ per call behaves better than the same $500$ tools dumped into context wholesale.
 </Callout>
-
-The next section covers what comes back from the tool, observations, errors, and the loop-level resilience that turns a fragile pipeline into a robust system.
 
 ## Observation handling and error recovery
 
@@ -304,8 +353,6 @@ The structural pattern is the same in every case: an error becomes an observatio
 **Idempotency matters.** Some tools have side effects, sending email, creating tickets, charging cards, deploying infrastructure. **Retries can cause duplicates** if the tool is not designed to deduplicate. Production patterns: include **idempotency keys** in tool calls so the underlying service can recognize a repeat; require **confirmation steps** before high-stakes actions ("are you sure you want to send this email?"); keep **audit logs** of every tool call for review. The agent loop should never silently retry a side-effect-causing tool, and the schema for such tools should make the side-effect explicit so the model surfaces a confirmation prompt instead of barrelling through.
 </Callout>
 
-The next section steps up one level, from the API conventions to the protocol that connects tool servers to LLM clients across the ecosystem.
-
 ## MCP and modern protocols
 
 ### The interoperability problem
@@ -323,8 +370,6 @@ Adoption in early $2025$ is broad enough that engineers building tool-using syst
 <Callout type="aside">
 **MCP is USB-C for AI.** USB-C standardized a connector that works across devices, manufacturers, and use cases, and the ecosystem effect, more than the technical merits of the connector itself, is what made it ubiquitous. MCP is doing the same for LLMs: one protocol, many tools, many clients. Engineers building tool-using systems today are likely to encounter MCP in production environments. **The transferability of MCP servers is the breakthrough**: one server can be consumed by every LLM client that speaks the protocol, and the integration work no longer scales with the product of "providers × tools" but only with "tools." That economic shift is what makes a protocol stick.
 </Callout>
-
-The final section closes with computer use, the frontier generalization of tool use, and Phase 13's trajectory from here.
 
 ## Exercises
 
@@ -407,6 +452,40 @@ import json
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+`title` is required (the function has no default for it); `duration_minutes` and `urgency` are optional with defaults, and `urgency` gets an `enum` since the docstring names a closed set of values.
+
+```python
+schedule_meeting_schema = {
+    "name": "schedule_meeting",
+    "description": "Schedule a meeting on the user's calendar. Use when the user asks to book, set up, or add a meeting.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "The meeting's title or topic."},
+            "duration_minutes": {
+                "type": "integer",
+                "description": "Length in minutes.",
+                "minimum": 5,
+                "maximum": 480,
+                "default": 30,
+            },
+            "urgency": {
+                "type": "string",
+                "description": "How urgent the meeting is.",
+                "enum": ["low", "normal", "high"],
+                "default": "normal",
+            },
+        },
+        "required": ["title"],
+    },
+}
+```
+
+</details>
 
 ### Exercise 2 (medium): Implement the agent loop
 
@@ -494,6 +573,44 @@ def agent_loop(model, tools, user_message, max_iterations=10):
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Append the assistant turn unconditionally, branch on `stop_reason`, and for `tool_use` execute every block and append a single user message carrying all the `tool_result`s before looping again.
+
+```python
+def agent_loop(model, tools, user_message, max_iterations=10):
+    messages = [{"role": "user", "content": user_message}]
+
+    for iteration in range(max_iterations):
+        response = model(messages, list(tools.keys()))
+        messages.append({"role": "assistant", "content": response["content"]})
+
+        if response["stop_reason"] == "end_turn":
+            for block in response["content"]:
+                if block.get("type") == "text":
+                    return block["text"]
+            return None
+
+        tool_results = []
+        for block in response["content"]:
+            if block.get("type") == "tool_use":
+                fn = tools[block["name"]]
+                result = fn(**block["input"])
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block["id"],
+                    "content": str(result),
+                })
+        messages.append({"role": "user", "content": tool_results})
+
+    return None   # hit max_iterations
+```
+
+Running this against `mock_model` and `TOOLS` gives `Final answer: Tokyo is 65°F (about 18.3°C).`, matching the expected output.
+
+</details>
 
 ### Exercise 3 (medium): Multi-tool routing via embeddings
 
@@ -584,6 +701,26 @@ def retrieve_tools(query, tools, top_k=5):
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Cosine similarity is the dot product normalized by both vector norms; retrieval embeds the query, scores every tool, and sorts descending.
+
+```python
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def retrieve_tools(query, tools, top_k=5):
+    q = embed_query(query)
+    scored = [(tool, cosine_similarity(q, tool["embedding"])) for tool in tools]
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    return scored[:top_k]
+```
+
+Running this on the four sample queries confirms the exercise's own observation: with these random 8-dim embeddings the top-5 lists are noise (e.g. "what's the weather in Paris" surfaces `deploy` and `git_status` ahead of `get_weather`, and "schedule a meeting next week" tops out at `search_database`). The mechanics, top-k by cosine similarity, are correct; only real embeddings would make the rankings semantically sensible.
+
+</details>
 
 ### Exercise 4 (hard): Idempotent tool dispatch
 
@@ -685,6 +822,37 @@ dispatcher.register("send_email", send_email)
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Look up `(tool_name, idem_key)` in the cache first; a hit returns the cached result and logs `"cached"` without touching `self.tools` again. A miss looks up and calls the function, stores the result, and logs `"executed"`.
+
+```python
+def dispatch(self, tool_name, args, idem_key=None):
+    if idem_key is None:
+        idem_key = str(uuid.uuid4())
+
+    cache_key = (tool_name, idem_key)
+    if cache_key in self.cache:
+        self.audit.append({"tool": tool_name, "idem_key": idem_key, "status": "cached", "ts": datetime.now()})
+        return self.cache[cache_key]
+
+    if tool_name not in self.tools:
+        error = {"status": "error", "message": f"Unknown tool: {tool_name}"}
+        self.audit.append({"tool": tool_name, "idem_key": idem_key, "status": "error", "ts": datetime.now()})
+        return error
+
+    fn = self.tools[tool_name]
+    result = fn(**args)
+    self.cache[cache_key] = result
+    self.audit.append({"tool": tool_name, "idem_key": idem_key, "status": "executed", "ts": datetime.now()})
+    return result
+```
+
+With this, the retry under `"email-001"` returns the cached `{'status': 'sent', 'id': 1}` and `sent_emails` stays at length 1; the `"email-002"` call executes fresh and `sent_emails` reaches length 2. The audit log has 3 entries: `executed`, `cached`, `executed`.
+
+</details>
+
 ## The full picture
 
 ### Computer use: the frontier
@@ -693,10 +861,10 @@ Anthropic's **computer use** (late 2024) generalizes tool use to *any* applicati
 
 The implications are substantial and the caveats are equally substantial. **No custom integration needed for legacy apps**: the model can use anything a human can use, which opens up a long tail of internal tools and enterprise software that never had a public API. **Slow and error-prone today**: each step requires a screenshot, a model call, and an action, so a five-step UI workflow that a human does in $10$ seconds takes a computer-use agent several minutes. **High-stakes by default**: a misaligned model with computer use can delete files, send emails, and click "buy now," so the production deployment needs careful guardrails. **Improving rapidly**: the model's UI-understanding accuracy has climbed quickly across $2024$ and into $2025$, and the latency tax has dropped as serving stacks specialized for the workload.
 
-### What's next in Phase 13
+### What's next in Part VII
 
 Tool use is the capability that turns a reasoning model into an agent. The Thought-Action-Observation loop from ReAct (Yao 2022) became production engineering across $2023$ – $2024$: structured tool calls with JSON Schema, constrained decoding for reliability, parallel calls for speed, multi-tool routing for scale, MCP for interoperability, computer use for legacy applications. **Every commercial agent built today rests on this stack**: and the engineering disciplines this chapter covered, schema design, loop control, observation handling, error recovery, idempotency, are what separate a production system from a demo.
 
-**Chapter 22 opens next: retrieval-augmented generation.** Retrieval is one of the most useful tools, the model looks up information it does not have memorized, but RAG has its own engineering depth (chunking, embedding, vector search, reranking) and gets its own chapter. **Chapter 23** extends the capability stack to multimodal inputs and outputs: vision, audio, video, the input modalities that make computer use practical and that unlock the next set of agent applications. **Then Phase 14** covers safety, interpretability, and evaluation, the disciplines that turn capable systems into trustworthy ones. **Then Phase 15** assembles everything into full agent architectures, where reasoning, tool use, retrieval, and multimodal compose into the complete systems that this chapter has been quietly building toward.
+**Chapter 22 opens next: retrieval-augmented generation.** Retrieval is one of the most useful tools, the model looks up information it does not have memorized, but RAG has its own engineering depth (chunking, embedding, vector search, reranking) and gets its own chapter. **Chapter 23** extends the capability stack to multimodal inputs and outputs: vision, audio, video, the input modalities that make computer use practical and that unlock the next set of agent applications. **Then Part VIII** covers safety, interpretability, and evaluation, the disciplines that turn capable systems into trustworthy ones. **Then Part IX** assembles everything into full agent architectures, where reasoning, tool use, retrieval, and multimodal compose into the complete systems that this chapter has been quietly building toward.
 
 The capability stack is being assembled. Reasoning gave the model time to think; tool use gives it agency; retrieval will give it knowledge; multimodal will extend it beyond text. The chapter that turns reasoning into agency is done; the chapter that gives that agency a knowledge base opens next.

@@ -105,7 +105,7 @@ print(f"PE at position 50 (first 8 dims): {PE[50, :8].round(3)}")
 print(f"\\nFar (slow) dimensions, position 0 vs position 50:")
 print(f"  pos  0, dims 60-63: {PE[0,  60:64].round(4)}")
 print(f"  pos 50, dims 60-63: {PE[50, 60:64].round(4)}")
-print(f"  (nearly identical, these dimensions have period ~62000)")
+print(f"  (nearly identical, these dimensions have periods of tens of thousands of positions)")
 `}
   packages={["numpy"]}
   height={460}
@@ -200,7 +200,7 @@ Sinusoidal and learned PE share an architectural assumption: position is injecte
 
 RoPE (Su et al. 2021, [arxiv.org/abs/2104.09864](https://arxiv.org/abs/2104.09864)) rejects this. Instead of adding position to the input, it modifies the Q and K vectors *inside* every attention layer. The token embeddings are not touched. The V vectors are not touched. Only Q and K, and only at the moment they enter the attention computation, get rotated by an angle that depends on their position.
 
-The motivation is direct. Sinusoidal PE allows the model to learn relative-position attention (Section 3) but does not enforce it. The trained model has to discover the relative-position structure through the gradients. RoPE asks: can we *build* the relative-position property into the attention computation itself, so the model gets it for free regardless of how training goes?
+The motivation is direct. Sinusoidal PE allows the model to learn relative-position attention (the implicit relative-position argument above) but does not enforce it. The trained model has to discover the relative-position structure through the gradients. RoPE asks: can we *build* the relative-position property into the attention computation itself, so the model gets it for free regardless of how training goes?
 
 The answer turns out to be yes, and it requires no learned parameters. The rotation angles are determined by position and dimension; nothing is learned beyond what is already in the standard Q and K projection matrices. A RoPE-equipped attention layer has *exactly* the same parameter count as a vanilla attention layer.
 
@@ -346,12 +346,12 @@ n_heads = 4
 bias = alibi_bias(seq_len, n_heads)
 
 print(f"Bias tensor shape: {bias.shape}")
-print(f"\\nHead 0, slope = {2 ** (-8 * 1 / n_heads):.4f}  (gentlest decay):")
+print(f"\\nHead 0, slope = {2 ** (-8 * 1 / n_heads):.4f}  (steepest decay):")
 print(bias[0].round(2))
-print(f"\\nHead 3, slope = {2 ** (-8 * 4 / n_heads):.4f}  (steepest decay):")
+print(f"\\nHead 3, slope = {2 ** (-8 * 4 / n_heads):.4f}  (gentlest decay):")
 print(bias[3].round(2))
-print(f"\\nNotice: distant positions get strongly negative bias (head 3),")
-print(f"while head 0 lets them through with minimal penalty.")
+print(f"\\nNotice: distant positions get strongly negative bias (head 0),")
+print(f"while head 3 lets them through with minimal penalty.")
 `}
   packages={["numpy"]}
   height={460}
@@ -372,7 +372,7 @@ The problem: a model trained at context length $L$ usually struggles to process 
 - **ALiBi** extrapolates cleanly out of the box. The linear-distance bias is meaningful at any length; the model trained at $L = 2048$ generalizes to $L = 8192$ with minimal quality loss, as the original paper demonstrated.
 - **RoPE** sits in between. The rotation angles are well-defined for any position, but for positions far outside the training range the rotation patterns are unfamiliar. Quality degrades, but RoPE-trained models can be *extended* through inference-time tricks that no other scheme supports as cleanly.
 
-The extension techniques for RoPE are what made the 100K+ context LLMs possible. *Position Interpolation* (Chen et al. 2023, [arxiv.org/abs/2306.15595](https://arxiv.org/abs/2306.15595)) was the first widely-used method: at inference time, divide all position indices by some factor before applying RoPE. A model trained at $L = 4096$ and evaluated at $L = 32{,}768$ uses position indices divided by $8$, so the rotation angles stay in the same range the model saw during training. The model "sees" compressed position information, but in a familiar range, and quality holds up well with a short fine-tuning pass on the longer context. *NTK-aware scaling* and *YaRN* (Peng et al. 2023) refine the idea further by interpolating different frequencies differently (the slow frequencies get compressed more, the fast frequencies less) and have become the standard for production long-context RoPE models.
+The extension techniques for RoPE are what made the 100K+ context LLMs possible. *Position Interpolation* (Chen et al. 2023, [arxiv.org/abs/2306.15595](https://arxiv.org/abs/2306.15595)) was the first widely-used method: at inference time, divide all position indices by some factor before applying RoPE. A model trained at $L = 4096$ and evaluated at $L = 32{,}768$ uses position indices divided by $8$, so the rotation angles stay in the same range the model saw during training. The model "sees" compressed position information, but in a familiar range, and quality holds up well with a short fine-tuning pass on the longer context. *NTK-aware scaling* (a community contribution, bloc97, 2023) and *YaRN* (Peng et al. 2023, [arxiv.org/abs/2309.00071](https://arxiv.org/abs/2309.00071)) refine the idea further: rather than rescaling position indices like PI, NTK-aware scaling adjusts the base $10000$ itself so different frequencies get stretched by different amounts (the slow frequencies get compressed more, the fast frequencies less), and YaRN combines both ideas. These frequency-dependent schemes have become the standard for production long-context RoPE models.
 
 The practical implication is direct. If you are designing a model that needs long context, the PE choice matters. RoPE plus position interpolation is the dominant pattern: train at a moderate context length (a few thousand to a few tens of thousands), then extend at inference time through PI or YaRN to reach 32K, 128K, or longer. Llama 3.1 trained at 8K and extended to 128K; many production models follow similar recipes. Sinusoidal PE and learned PE do not support these extensions, which is much of why RoPE has displaced both.
 
@@ -431,6 +431,40 @@ PE = sinusoidal_pe(max_len=100, d_model=64)
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Build the (max_len, d_model) matrix by broadcasting position indices against inverse frequencies, then filling even columns with sin and odd columns with cos.
+
+```python
+import numpy as np
+
+def sinusoidal_pe(max_len, d_model, base=10000.0):
+    pe = np.zeros((max_len, d_model))
+    positions = np.arange(max_len)[:, None]
+    k_indices = np.arange(0, d_model, 2)
+    inv_freq = 1.0 / (base ** (k_indices / d_model))
+    angles = positions * inv_freq
+    pe[:, 0::2] = np.sin(angles)
+    pe[:, 1::2] = np.cos(angles)
+    return pe
+
+PE = sinusoidal_pe(max_len=100, d_model=64)
+print(f"PE range: [{PE.min():.3f}, {PE.max():.3f}]")
+# PE range: [-1.000, 1.000]
+
+pair_sumsq = PE[:, 0] ** 2 + PE[:, 1] ** 2
+print(pair_sumsq.min(), pair_sumsq.max())
+# 1.0 1.0 (sin^2 + cos^2 = 1 at every position)
+
+print(abs(PE[0, 0] - PE[1, 0]))   # 0.841  -- dim 0 moves a lot between p=0,1
+print(abs(PE[0, 62] - PE[1, 62])) # 0.000133 -- dim 62 barely moves
+```
+
+Dim 0 has omega = 1 (period ~6.3), dim 62 has omega = 1/10000^(62/64) (period ~47,000) -- confirming fast-left, slow-right.
+
+</details>
+
 ### Exercise 2 (medium): Why learned PE doesn't extrapolate
 
 Train a tiny learned PE (random init) on positions 0-31 and try to use it at position 64. Demonstrate that there's no meaningful "position 64 embedding"; the model has no information about positions it wasn't trained on. Then compare to sinusoidal PE at the same position, sinusoidal gives a well-defined value, even though it wasn't seen during "training" (a learned PE wasn't trained on it).
@@ -476,6 +510,41 @@ def sinusoidal_pe_at(p, d_model, base=10000.0):
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+`learned_pe` is a (32, 32) array; indexing past its first axis is simply out of bounds. `sinusoidal_pe_at` is a closed-form function of `p`, so it's defined for any `p`.
+
+```python
+import numpy as np
+
+d_model = 32
+trained_len = 32
+rng = np.random.default_rng(42)
+learned_pe = rng.normal(0, 0.02, (trained_len, d_model))
+
+def sinusoidal_pe_at(p, d_model, base=10000.0):
+    pe = np.zeros(d_model)
+    k_indices = np.arange(0, d_model, 2)
+    inv_freq = 1.0 / (base ** (k_indices / d_model))
+    pe[0::2] = np.sin(p * inv_freq)
+    pe[1::2] = np.cos(p * inv_freq)
+    return pe
+
+try:
+    learned_pe[64]
+except IndexError as e:
+    print("learned_pe[64] raises IndexError:", e)
+# learned_pe[64] raises IndexError: index 64 is out of bounds for axis 0 with size 32
+
+print(sinusoidal_pe_at(64, d_model)[:5].round(3))
+# [ 0.92   0.392 -0.99  -0.138  0.984]  -- well-defined, no error
+```
+
+There is no principled "position 64" for the learned table: it was never fit, so any value returned there (crash, zero-pad, wraparound) is arbitrary. The sinusoidal formula has no such gap.
+
+</details>
+
 ### Exercise 3 (medium): Implement RoPE and verify the relative-position property
 
 Implement RoPE: rotate Q and K vectors by position-dependent angles before computing attention scores. Verify the key property: for fixed offset n - m, the dot product `RoPE(q, m) · RoPE(k, n)` is the same regardless of m.
@@ -518,6 +587,47 @@ for m, n in pairs:
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Split `x` into even/odd dims, treat each pair as a 2D vector, and rotate by `position * omega_k` using the standard 2D rotation formula.
+
+```python
+import numpy as np
+
+def rope(x, position_ids, base=10000.0):
+    """Apply RoPE to (seq_len, d_k) tensor."""
+    seq_len, d_k = x.shape
+    k_indices = np.arange(0, d_k, 2)
+    inv_freq = 1.0 / (base ** (k_indices / d_k))
+    angles = position_ids[:, None] * inv_freq[None, :]  # (seq_len, d_k/2)
+    cos, sin = np.cos(angles), np.sin(angles)
+
+    x_even, x_odd = x[:, 0::2], x[:, 1::2]
+    rot_even = x_even * cos - x_odd * sin
+    rot_odd = x_even * sin + x_odd * cos
+
+    out = np.empty_like(x)
+    out[:, 0::2] = rot_even
+    out[:, 1::2] = rot_odd
+    return out
+
+d_k = 8
+rng = np.random.default_rng(42)
+q = rng.normal(0, 1, (1, d_k))
+k = rng.normal(0, 1, (1, d_k))
+
+pairs = [(0, 5), (3, 8), (10, 15), (50, 55)]
+for m, n in pairs:
+    q_rot = rope(q, np.array([m]))
+    k_rot = rope(k, np.array([n]))
+    dot = (q_rot @ k_rot.T)[0, 0]
+    print(f"  q@pos{m}, k@pos{n}: dot = {dot:.6f}")
+# all four print dot = 0.164293
+```
+
+</details>
 
 ### Exercise 4 (hard): ALiBi and length extrapolation
 
@@ -567,4 +677,45 @@ bias = alibi_bias(seq_len, n_heads)
   packages={["numpy"]}
 />
 
-A modern LLM is roughly seven architectural decisions, each of which falls out of the material so far: the layer count $N$, the model dimension $d_{\text{model}}$, the number of heads per layer $h$, the positional encoding scheme, the context length $L$, the vocabulary size $V$, and the activation function inside the FFN. Pick those, and you have an architecture. Train it, and you have a model. The chapter completes the first half. Chapter 7 starts the second.
+<details>
+<summary>Solution</summary>
+
+Slopes are `2^(-8h/n_heads)` for `h = 1..n_heads`; the bias is `-slope * |m - n|`, broadcast over heads. Attention is standard scaled dot-product with that bias added before softmax.
+
+```python
+import numpy as np
+
+def softmax(x, axis=-1):
+    x = x - x.max(axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+def alibi_bias(seq_len, n_heads):
+    heads = np.arange(1, n_heads + 1)
+    slopes = 2.0 ** (-8.0 * heads / n_heads)          # (n_heads,)
+    positions = np.arange(seq_len)
+    distance = np.abs(positions[:, None] - positions[None, :])  # (seq_len, seq_len)
+    return -slopes[:, None, None] * distance[None, :, :]
+
+def attention_with_alibi(Q, K, V, n_heads):
+    seq_len, d_head = Q.shape[1], Q.shape[2]
+    scores = Q @ K.transpose(0, 2, 1) / np.sqrt(d_head)
+    scores = scores + alibi_bias(seq_len, n_heads)
+    weights = softmax(scores, axis=-1)
+    return weights @ V
+
+seq_len, n_heads = 16, 4
+bias = alibi_bias(seq_len, n_heads)
+print(bias.shape)          # (4, 16, 16)
+print(bias[0, 8].round(3))
+# [-2. -1.75 -1.5 -1.25 -1. -0.75 -0.5 -0.25 -0. -0.25 -0.5 -0.75 -1. -1.25 -1.5 -1.75]
+# V-shape centered at 0 (position 8), monotonically more negative with distance
+
+bias_long = alibi_bias(1024, n_heads)
+print(bias_long.shape)     # (4, 1024, 1024) -- same formula, no retraining needed
+```
+
+Head 1's slope is `2^-2 = 0.25` (steepest decay); head 4's slope is `2^-8 = 0.0039` (gentlest) -- ALiBi gives each head a different attention "radius" for free.
+
+</details>
+
+A modern LLM is roughly seven architectural decisions, each of which falls out of the material so far: the layer count $N$, the model dimension $d_{\text{model}}$, the number of heads per layer $h$, the positional encoding scheme, the context length $n$, the vocabulary size $V$, and the activation function inside the FFN. Pick those, and you have an architecture. Train it, and you have a model. The chapter completes the first half. Chapter 7 starts the second.

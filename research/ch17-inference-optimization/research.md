@@ -1,6 +1,6 @@
 # Chapter 17 — Inference optimization: research
 
-> Curated source material for Chapter 17's build sessions. **The chapter that opens Phase 12 (Inference).** Where Phase 11 (Ch 13-16) covered how to *train* aligned, deployable models, Phase 12 covers how to *serve* them efficiently at scale. This chapter is the foundation: KV cache (the most important optimization), prefill vs decode phases, batching strategies, Flash Attention (memory-efficient kernels), speculative decoding (draft + verify), and PagedAttention (the memory-management technique behind vLLM). **Practical engineering chapter** — like Ch 10 (training infrastructure) and Ch 15 (PEFT), the voice is grounded, the numbers are concrete, and the operational story matters. Single-topic chapter; uses the **4-file cadence**.
+> Curated source material for Chapter 17's build sessions. **The chapter that opens Part VI (Inference).** Where Part V (Ch 13-16) covered how to *train* aligned, deployable models, Part VI covers how to *serve* them efficiently at scale. This chapter is the foundation: KV cache (the most important optimization), prefill vs decode phases, batching strategies, Flash Attention (memory-efficient kernels), speculative decoding (draft + verify), and PagedAttention (the memory-management technique behind vLLM). **Practical engineering chapter** — like Ch 10 (training infrastructure) and Ch 15 (PEFT), the voice is grounded, the numbers are concrete, and the operational story matters. Single-topic chapter; uses the **4-file cadence**.
 
 ---
 
@@ -581,6 +581,6 @@ Eight outcomes. Exercises hit outcomes 2 (KV cache implementation/sizing), 6 (sp
 
 **Tonal framing**: practical engineering, like Ch 7 (data engineering), Ch 10 (training infrastructure), Ch 15 (PEFT). **Concrete numbers**: KV cache sizes in GB; throughput in tokens/sec; speedup factors. **Honest tradeoffs**: throughput vs latency; batch size sweet spots; draft model selection challenges.
 
-**Phase 12 opening**: Ch 17 opens Phase 12. Where Phase 11 (Ch 13-16) covered training methods, Phase 12 covers serving. The reader should feel a clear shift: **same models, different concerns**. Ch 17 is the foundation; Ch 18 (quantization) and Ch 19 (sampling) build on it.
+**Part VI opening**: Ch 17 opens Part VI. Where Part V (Ch 13-16) covered training methods, Part VI covers serving. The reader should feel a clear shift: **same models, different concerns**. Ch 17 is the foundation; Ch 18 (quantization) and Ch 19 (sampling) build on it.
 
 **Importance**: production serving cost is *enormous* — well-optimized inference can be 5-10× cheaper than naive. **Most engineers will encounter inference optimization at some point**; this chapter is their on-ramp.

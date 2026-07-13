@@ -1,6 +1,6 @@
 # Chapter 12 — State-space models and Mamba: research
 
-> Curated source material for Chapter 12's build sessions. The second (and last) chapter of Phase 10. Where Ch 11 (MoE) replaced the transformer's *FFN* with a sparse mixture, Ch 12 replaces the transformer's *attention* with state-space modeling. **State-space models (SSMs)** view a sequence as the trajectory of a continuous-time linear dynamical system; **Mamba** (2023) adds input-dependent dynamics to make SSMs competitive with attention. The architectural bet: attention's $O(N^2)$ cost is the bottleneck holding back long-context LLMs; if we replace it with linear-time recurrence, we trade some expressiveness for dramatic efficiency. Single-topic chapter — uses the **4-file cadence**.
+> Curated source material for Chapter 12's build sessions. The second (and last) chapter of Part IV. Where Ch 11 (MoE) replaced the transformer's *FFN* with a sparse mixture, Ch 12 replaces the transformer's *attention* with state-space modeling. **State-space models (SSMs)** view a sequence as the trajectory of a continuous-time linear dynamical system; **Mamba** (2023) adds input-dependent dynamics to make SSMs competitive with attention. The architectural bet: attention's $O(N^2)$ cost is the bottleneck holding back long-context LLMs; if we replace it with linear-time recurrence, we trade some expressiveness for dramatic efficiency. Single-topic chapter — uses the **4-file cadence**.
 
 ---
 
@@ -580,8 +580,8 @@ Files 74-75 from original BUILD_ORDER absorbed.
 
 Seven outcomes. Exercises hit outcomes 1-3 (implementation), 5 (comparison).
 
-**This chapter closes Phase 10 — alternative architectures.** Ch 11 (MoE) + Ch 12 (SSMs) = the two major architectural alternatives to standard dense transformers. After Ch 12 publishes, **Phase 10 is complete**.
+**This chapter closes Part IV — alternative architectures.** Ch 11 (MoE) + Ch 12 (SSMs) = the two major architectural alternatives to standard dense transformers. After Ch 12 publishes, **Part IV is complete**.
 
 **Important framing:** SSMs are not (yet) the dominant architecture. Most production LLMs in 2024 are still transformers (dense or MoE). Mamba is genuinely impressive but hasn't displaced attention. Be honest about this — don't oversell.
 
-After Phase 10, **Phase 11 (post-training)** begins — the largest remaining arc. 4 chapters on what to do with a pre-trained model (dense, MoE, or SSM) to make it useful: SFT, RLHF/DPO, PEFT, distillation.
+After Part IV, **Part V (post-training)** begins — the largest remaining arc. 4 chapters on what to do with a pre-trained model (dense, MoE, or SSM) to make it useful: SFT, RLHF/DPO, PEFT, distillation.

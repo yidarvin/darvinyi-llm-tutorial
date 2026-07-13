@@ -1,6 +1,6 @@
 # Chapter 24 — Safety: research
 
-> Curated source material for Chapter 24's build sessions. **The chapter that opens Phase 14.** Phase 13 ended with a stack of capabilities: reasoning, tool use, retrieval, multimodal. **Phase 14 asks whether those capabilities can be trusted.** This chapter is the first of three (Ch 24 Safety, Ch 25 Interpretability, Ch 26 Evaluation) that together form the discipline arc of the curriculum. **What does it mean for an AI system to be safe — and how do we know?** Alignment techniques (RLHF, Constitutional AI); jailbreaks and their taxonomy; prompt injection (direct and indirect); refusal calibration (the false-positive/false-negative dial); red-teaming and adversarial evaluation; frontier safety concerns (sleeper agents, deceptive alignment, sandbagging). **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns "can we build it" into "should we deploy it."**
+> Curated source material for Chapter 24's build sessions. **The chapter that opens Part VIII.** Part VII ended with a stack of capabilities: reasoning, tool use, retrieval, multimodal. **Part VIII asks whether those capabilities can be trusted.** This chapter is the first of three (Ch 24 Safety, Ch 25 Interpretability, Ch 26 Evaluation) that together form the discipline arc of the curriculum. **What does it mean for an AI system to be safe — and how do we know?** Alignment techniques (RLHF, Constitutional AI); jailbreaks and their taxonomy; prompt injection (direct and indirect); refusal calibration (the false-positive/false-negative dial); red-teaming and adversarial evaluation; frontier safety concerns (sleeper agents, deceptive alignment, sandbagging). **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns "can we build it" into "should we deploy it."**
 
 ---
 
@@ -8,7 +8,7 @@
 
 **Chapter title:** Safety
 
-**Premise:** Phase 13 covered what modern LLMs *can do*. Phase 14 covers whether they *should do it* — and how we verify they will. **Safety** is the engineering and research discipline of building AI systems that act consistently with what their developers and users want, refuse what they shouldn't do, and resist adversarial manipulation. **The chapter is about both techniques (RLHF, Constitutional AI, refusal training, red-teaming) and concepts (alignment, jailbreaks, prompt injection, dual-use).** It's not a moral essay; it's a working-engineer's view of what the field calls "safety" and how production systems get there.
+**Premise:** Part VII covered what modern LLMs *can do*. Part VIII covers whether they *should do it* — and how we verify they will. **Safety** is the engineering and research discipline of building AI systems that act consistently with what their developers and users want, refuse what they shouldn't do, and resist adversarial manipulation. **The chapter is about both techniques (RLHF, Constitutional AI, refusal training, red-teaming) and concepts (alignment, jailbreaks, prompt injection, dual-use).** It's not a moral essay; it's a working-engineer's view of what the field calls "safety" and how production systems get there.
 
 **The framing:** safety in AI has three concrete components:
 1. **Alignment**: making the model do what its developers and users want (and not the opposite)
@@ -39,7 +39,7 @@
 5. Refusal calibration (~400 words)
 6. Red-teaming and safety evaluation (~500 words)
 7. Frontier safety concerns (~400 words)
-8. Phase 14 ahead — connecting safety to interp and eval (~400 words)
+8. The discipline arc ahead — connecting safety to interp and eval (~400 words)
 
 Target: ~3800 words plus 2 widgets and 3 runnable code blocks.
 
@@ -372,9 +372,9 @@ Beyond standard alignment, frontier labs worry about advanced failure modes:
 
 **The frontier-safety mindset**: assume the model is more capable than it appears in testing; build in conservatism; monitor continuously.
 
-### Concept 8: Phase 14 ahead — connecting safety to interp and eval
+### Concept 8: The discipline arc ahead — connecting safety to interp and eval
 
-**Three disciplines** of Phase 14:
+**Three disciplines** of Part VIII:
 - **Ch 24 (Safety)**: what we want the model to do; how we make it do that; how we verify
 - **Ch 25 (Interpretability)**: what the model is *actually* computing internally
 - **Ch 26 (Evaluation)**: how we measure capability and safety quantitatively
@@ -384,9 +384,9 @@ Beyond standard alignment, frontier labs worry about advanced failure modes:
 - **Evaluation** is a thermometer: you can't know if alignment works without measurement
 - **Safety** depends on both: you need to measure what you're trying to do, and to see inside what you've built
 
-**The phase's central question**: **Can capable models be made trustworthy at scale?** Phase 14 doesn't fully answer it — but lays out the three disciplines that are trying.
+**The part's central question**: **Can capable models be made trustworthy at scale?** Part VIII doesn't fully answer it — but lays out the three disciplines that are trying.
 
-**Phase 15 (Agents)** then composes the capability + discipline stack into complete agent architectures. **The curriculum's final arc.**
+**Part IX (Agents)** then composes the capability + discipline stack into complete agent architectures. **The curriculum's final arc.**
 
 ---
 
@@ -770,6 +770,6 @@ Eight outcomes. Exercises hit outcomes 3, 4, 5, 7.
 
 **Tonal framing**: serious engineering with empirical realism. Safety in modern AI **isn't a solved problem**; the chapter should reflect that. Concrete numbers (jailbreak success rates 30-70%; HarmBench scores; over-refusal rates) and honest tradeoffs (helpfulness vs harmlessness; capability vs propensity; interp ↔ verification). **No hand-waving** about "safety" without operational content.
 
-**Phase 14 opening**: this chapter opens the discipline arc. **Phase 13 ended with "look what we can build."** Phase 14 begins with "but can we trust what we've built?" The chapter explicitly bridges these questions in sections 1 and 8.
+**Opening the discipline arc**: this chapter opens Part VIII. **Part VII ended with "look what we can build."** Part VIII begins with "but can we trust what we've built?" The chapter explicitly bridges these questions in sections 1 and 8.
 
 **Importance**: every engineer deploying an LLM system in production faces safety questions: jailbreaks, refusal calibration, prompt injection in RAG inputs, tool-use safety. **This chapter is the operational toolkit.** Plus: motivates interp (Ch 25) and eval (Ch 26) as the disciplines that turn safety from craft to engineering.

@@ -1,6 +1,6 @@
 # Chapter 26 — Evaluation: research
 
-> Curated source material for Chapter 26's build sessions. **The chapter that closes Phase 14.** Phase 14 has covered two of three disciplines: safety (Ch 24 — what we want the model to do) and interpretability (Ch 25 — what the model is actually doing). **This chapter covers the third — how to measure both.** Evaluation turns "this model is better" into a measurable claim. Capability benchmarks (MMLU, HumanEval, HellaSwag, GPQA, MATH); safety benchmarks (HarmBench, TruthfulQA, ToxiGen, WMDP); agentic benchmarks (SWE-bench, GAIA, OSWorld, Upwork HAPI); LLM-as-judge methodology (MT-Bench, Chatbot Arena); eval failure modes — saturation, contamination, reward hacking, Goodhart's law — and the design of new evals. **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns intuition into measurement — and the last chapter of the discipline arc.**
+> Curated source material for Chapter 26's build sessions. **The chapter that closes Part VIII.** Part VIII has covered two of three disciplines: safety (Ch 24 — what we want the model to do) and interpretability (Ch 25 — what the model is actually doing). **This chapter covers the third — how to measure both.** Evaluation turns "this model is better" into a measurable claim. Capability benchmarks (MMLU, HumanEval, HellaSwag, GPQA, MATH); safety benchmarks (HarmBench, TruthfulQA, ToxiGen, WMDP); agentic benchmarks (SWE-bench, GAIA, OSWorld, Upwork HAPI); LLM-as-judge methodology (MT-Bench, Chatbot Arena); eval failure modes — saturation, contamination, reward hacking, Goodhart's law — and the design of new evals. **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns intuition into measurement — and the last chapter of the discipline arc.**
 
 ---
 
@@ -38,7 +38,7 @@
 5. LLM-as-judge (~500 words)
 6. Eval failure modes (~600 words)
 7. Designing new evals (~400 words)
-8. Phase 14 closes — Phase 15 ahead (~400 words)
+8. The discipline arc, complete (~400 words)
 
 Target: ~3800 words plus 2 widgets and 3 runnable code blocks.
 
@@ -93,7 +93,7 @@ Target: ~3800 words plus 2 widgets and 3 runnable code blocks.
 - **arXiv:** [2404.07972](https://arxiv.org/abs/2404.07972)
 - **What it contributed:** **OSWorld** — computer-use agent benchmark with real desktop applications. Tests multimodal-agent capability (Ch 23 computer use); 369 tasks.
 
-### Chen et al. 2024 — "MLE-bench: Evaluating Machine Learning Agents on Machine Learning Engineering"
+### Chan et al. 2024 — "MLE-bench: Evaluating Machine Learning Agents on Machine Learning Engineering"
 - **arXiv:** [2410.07095](https://arxiv.org/abs/2410.07095)
 - **What it contributed:** **MLE-bench** — 75 Kaggle competitions; agents must produce code and submit predictions. **Tests ML engineering agency**, not just code generation.
 
@@ -220,13 +220,13 @@ $$\text{standard benchmarks} \;\;\Vert\;\; \text{open-ended evaluation} \;\;\Ver
 
 ### Concept 4: Agentic benchmarks
 
-**The new frontier of evaluation.** Phase 13 covered agentic capabilities (tool use, RAG, multimodal); Phase 14's eval discipline needs benchmarks for these.
+**The new frontier of evaluation.** Part VII covered agentic capabilities (tool use, RAG, multimodal); Part VIII's eval discipline needs benchmarks for these.
 
 **The agentic-benchmark landscape**:
 - **SWE-bench** (Jimenez 2023): real GitHub issues; produce a patch that passes hidden tests; the reference agentic-coding benchmark
 - **GAIA** (Mialon 2023): multi-step real-world tasks (web browsing, tool use, reasoning); humans solve ~92%, frontier agents ~60-75%
 - **OSWorld** (Xie 2024): computer-use tasks with real desktop applications; tests Ch 23 computer-use capability
-- **MLE-bench** (Chen 2024): 75 Kaggle competitions; agents produce code, submit predictions; tests ML engineering agency
+- **MLE-bench** (Chan 2024): 75 Kaggle competitions; agents produce code, submit predictions; tests ML engineering agency
 - **WebArena**: web-browsing agent tasks
 - **Cybench**: cybersecurity capture-the-flag tasks
 - **Upwork HAPI** (illustrative): real freelance tasks measuring agent performance on what Upwork freelancers actually do
@@ -374,9 +374,9 @@ $$\text{standard benchmarks} \;\;\Vert\;\; \text{open-ended evaluation} \;\;\Ver
 - **Domain-specific evals** in addition to broad benchmarks
 - **Live deployment metrics**: real-world signals are the ultimate eval
 
-### Concept 8: Phase 14 closes — Phase 15 ahead
+### Concept 8: The discipline arc, complete
 
-**Phase 14 retrospective**:
+**Part VIII retrospective**:
 
 The three disciplines come together:
 
@@ -391,15 +391,15 @@ The three disciplines come together:
 - Interpretability without measurement can't validate claims
 - Evaluation without safety thinking misses what matters
 
-**Where Phase 14 leaves the curriculum**: with a complete discipline arc. **A capable model (Phase 13)** + **a trustworthy development process (Phase 14)** = the foundations of modern AI production.
+**Where Part VIII leaves the curriculum**: with a complete discipline arc. **A capable model (Part VII)** + **a trustworthy development process (Part VIII)** = the foundations of modern AI production.
 
-**Phase 15 (Agents) ahead**:
+**Part IX (Agents) ahead**:
 - Ch 27 (Agent foundations) — ReAct, AutoGPT, the agentic loop
 - Ch 28 (Agents from scratch) — building real agents
 - Ch 29 (Multi-agent) — orchestration, agent-to-agent communication
 - Ch 30 (Agent eval and frameworks) — closes the curriculum
 
-**The arc completes**: capabilities (Phase 13) → disciplines (Phase 14) → composition (Phase 15). **Then the tutorial closes.**
+**The arc completes**: capabilities (Part VII) → disciplines (Part VIII) → composition (Part IX). **Then the tutorial closes.**
 
 ---
 
@@ -863,12 +863,12 @@ Planned file layout:
 5. Recognize eval failure modes (saturation, contamination, reward hacking, Goodhart)
 6. Design a new eval for a specific capability or domain
 7. Read benchmark results critically (multi-metric, calibrated, contamination-aware)
-8. Connect evaluation to Phase 15 (agents) and the curriculum's end
+8. Connect evaluation to Part IX (agents) and the curriculum's end
 
 Eight outcomes. Exercises hit outcomes 1, 4, 5, 6.
 
 **Tonal framing**: methodology with honest limits. **Evaluation is the bridge from craft to engineering**, but eval has its own failure modes. **Concrete numbers** (benchmark saturation timelines: 12-36 months; SWE-bench scores: 30% → 65% in 18 months; Chatbot Arena Elo ranges) and **honest tradeoffs** (single-metric vs dashboard; static vs dynamic; public vs private; cost vs coverage). **No overclaiming** about any single benchmark.
 
-**Phase 14 closing**: this chapter closes Phase 14's discipline arc. **Three disciplines complete** (safety, interpretability, evaluation). The reader leaves Phase 14 with a complete operational framework for trustworthy AI development.
+**Part VIII closing**: this chapter closes Part VIII's discipline arc. **Three disciplines complete** (safety, interpretability, evaluation). The reader leaves Part VIII with a complete operational framework for trustworthy AI development.
 
-**Importance**: every production AI team builds and runs evals. **This is one of the most directly-actionable chapters** in the curriculum — engineers leaving Ch 26 will start choosing benchmarks for their product, designing custom evals, and reading leaderboards critically. **Phase 14 culminates here**; Phase 15 (Agents) opens next and closes the curriculum.
+**Importance**: every production AI team builds and runs evals. **This is one of the most directly-actionable chapters** in the curriculum — engineers leaving Ch 26 will start choosing benchmarks for their product, designing custom evals, and reading leaderboards critically. **Part VIII culminates here**; Part IX (Agents) opens next and closes the curriculum.

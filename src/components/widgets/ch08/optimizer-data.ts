@@ -73,9 +73,9 @@ function computeAdamW(lr: number, weight_decay = 0.05, beta1 = 0.9, beta2 = 0.95
   return traj;
 }
 
-export const TRAJ_SGD: TrajectoryPoint[] = computeSGD(0.04);
-export const TRAJ_ADAM: TrajectoryPoint[] = computeAdam(0.3);
-export const TRAJ_ADAMW: TrajectoryPoint[] = computeAdamW(0.3, 0.05);
+export const TRAJ_SGD: TrajectoryPoint[] = computeSGD(0.07);
+export const TRAJ_ADAM: TrajectoryPoint[] = computeAdam(0.08);
+export const TRAJ_ADAMW: TrajectoryPoint[] = computeAdamW(0.08, 0.05);
 
 export type OptimizerKey = 'sgd' | 'adam' | 'adamw';
 

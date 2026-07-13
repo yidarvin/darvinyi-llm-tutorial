@@ -152,7 +152,7 @@ The reader can see the section heading. They don't need to be told what's coming
   - $Q, K, V$ for attention components
   - $\theta$ for parameters
   - $\pi$ for policies, $\pi_\text{ref}$ for the reference policy in RLHF/DPO
-  - $L$ for sequence length, $d$ for hidden dimension, $H$ for number of heads, $d_k$ for per-head dimension
+  - $n$ for sequence length (established by Chapters 4-6; some later, code-heavy chapters use $T$ to match PyTorch's `(B, T, ...)` tensor-shape convention — keep such use internally consistent within a chapter and don't let it collide with another local meaning), $d$ for hidden dimension, $H$ for number of heads, $d_k$ for per-head dimension
   - $\beta$ for KL temperature in DPO; $r$ for reward; $A$ for advantage
 - Don't reinvent symbols. Match the canonical paper for the chapter's topic.
 

@@ -1,6 +1,6 @@
 # Chapter 11 — Mixture of Experts (MoE): research
 
-> Curated source material for Chapter 11's build sessions. The first chapter of Phase 10 — alternative architectures. Where Ch 1-6 established the *standard* dense transformer, Ch 11 covers the most significant architectural variant of the modern era: **Mixture of Experts (MoE)**. Replace the dense feed-forward block with a sparse pattern — many small "expert" sub-networks plus a router that picks which experts to use per token. The result: dramatically more parameters at roughly the same FLOPs per token. Used by Mixtral, DeepSeek-V2/V3, GLaM, Switch Transformer, and reportedly GPT-4. **Single-topic chapter** — uses the **4-file cadence**.
+> Curated source material for Chapter 11's build sessions. The first chapter of Part IV — alternative architectures. Where Ch 1-6 established the *standard* dense transformer, Ch 11 covers the most significant architectural variant of the modern era: **Mixture of Experts (MoE)**. Replace the dense feed-forward block with a sparse pattern — many small "expert" sub-networks plus a router that picks which experts to use per token. The result: dramatically more parameters at roughly the same FLOPs per token. Used by Mixtral, DeepSeek-V2/V3, GLaM, Switch Transformer, and reportedly GPT-4. **Single-topic chapter** — uses the **4-file cadence**.
 
 ---
 
@@ -541,6 +541,6 @@ Original BUILD_ORDER may have more files (68+); will absorb appropriately.
 
 Eight outcomes. Exercises hit outcomes 1-2 (implementation), 3 (parameter math), 4 (aux loss).
 
-**This chapter begins Phase 10 — alternative architectures.** Ch 11 (MoE) and Ch 12 (Mamba) are the two major alternatives to dense transformers in 2024. Both deserve careful treatment. After Phase 10 closes, the tutorial enters post-training (Ch 13+) — a different texture.
+**This chapter begins Part IV — alternative architectures.** Ch 11 (MoE) and Ch 12 (Mamba) are the two major alternatives to dense transformers in 2024. Both deserve careful treatment. After Part IV closes, the tutorial enters post-training (Ch 13+) — a different texture.
 
 **Important framing:** MoE is *not* a replacement for dense transformers. Both coexist. The chapter should be honest about MoE's trade-offs: better at scale; harder to train and serve; not always the right choice. **Don't oversell.**

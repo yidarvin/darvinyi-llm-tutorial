@@ -30,12 +30,38 @@ export function allocateByRatio(C: number, r: number): { N: number; D: number } 
 }
 
 /**
- * Compute-optimal allocation under Chinchilla:
- *   N propto C^(beta/(alpha+beta)), D propto C^(alpha/(alpha+beta))
- * For the fitted constants, the optimum is approximately D/N = 20.
+ * Compute-optimal allocation: the actual loss-minimizing point along the
+ * 6*N*D = C constraint, found by sweeping the tokens-per-parameter ratio r
+ * and taking the argmin of chinchillaLoss.
+ *
+ * Note: with Hoffmann et al.'s published parametric constants, this true
+ * optimum is compute-dependent and lands well above the famous "~20 tokens
+ * per parameter" rule of thumb (it's in the 50-150+ range over the slider's
+ * compute span). The "~20" figure comes from Chinchilla's separate iso-FLOP
+ * analysis, not from directly solving this parametric fit — see the chapter
+ * prose for the distinction.
  */
-export function computeOptimalAllocation(C: number): { N: number; D: number } {
-  return allocateByRatio(C, 20);
+export function computeOptimalAllocation(C: number): { N: number; D: number; r: number } {
+  const rMin = 0.1;
+  const rMax = 2000;
+  const numPoints = 2000;
+  let bestR = rMin;
+  let bestN = 0;
+  let bestD = 0;
+  let bestLoss = Infinity;
+  for (let i = 0; i < numPoints; i++) {
+    const t = i / (numPoints - 1);
+    const r = rMin * Math.pow(rMax / rMin, t);
+    const { N, D } = allocateByRatio(C, r);
+    const loss = chinchillaLoss(N, D);
+    if (loss < bestLoss) {
+      bestLoss = loss;
+      bestR = r;
+      bestN = N;
+      bestD = D;
+    }
+  }
+  return { N: bestN, D: bestD, r: bestR };
 }
 
 export interface Strategy {
@@ -63,7 +89,7 @@ export const STRATEGIES: Strategy[] = [
     shortLabel: 'Chinchilla ★',
     ratio: 20,
     description:
-      'The Hoffmann et al. 2022 compute-optimal allocation. ~20 tokens per parameter. Minimizes loss given a fixed compute budget. Used by Chinchilla itself (70B params, 1.4T tokens) and many post-2022 frontier training runs. The mathematical optimum.',
+      "The actual loss-minimizing ratio for this compute budget, found by sweeping the 6ND=C constraint. Marked at the bottom of the curve. This ratio drifts with compute (roughly 50-150+ tokens/parameter over this widget's range) — it doesn't sit at a fixed \"20,\" which is Chinchilla's separate iso-FLOP rule of thumb (and happens to match the real Chinchilla model's own 70B-param/1.4T-token ratio) rather than a consequence of this parametric fit.",
     color: 'var(--cyan-400)',
   },
   {

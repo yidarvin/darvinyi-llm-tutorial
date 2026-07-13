@@ -41,7 +41,8 @@ export function computeCustomMoEParams(config: CustomMoEConfig): { total: number
 
   const attnParams = 4 * dModel * dModel;
   const lnParams = 4 * dModel;
-  const ffnPerExpert = 2 * dModel * dFFN;
+  // SwiGLU FFN (Mixtral/Llama-style): gate (W1), up (W3), down (W2) projections
+  const ffnPerExpert = 3 * dModel * dFFN;
   const routerParams = numExperts * dModel;
 
   const effectiveK = Math.min(topK, numExperts);

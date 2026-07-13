@@ -1,6 +1,6 @@
 # Chapter 16 — Distillation: research
 
-> Curated source material for Chapter 16's build sessions. **The compression chapter that closes Phase 11.** Where Chapters 13-15 covered how to *train* aligned models, Ch 16 covers how to *compress* them — take a trained large model (the "teacher") and produce a smaller model (the "student") with similar capabilities. The classic technique is **knowledge distillation** (Hinton et al. 2015): train the student to match the teacher's *soft probability distributions*, not just its hard predictions. The full Phase 11 picture: pre-trained base (Ch 7-10) → SFT (Ch 13) → preference optimization (Ch 14) → PEFT for efficient training (Ch 15) → **distillation to compress** (Ch 16). Single-topic chapter; uses the **4-file cadence**.
+> Curated source material for Chapter 16's build sessions. **The compression chapter that closes Part V.** Where Chapters 13-15 covered how to *train* aligned models, Ch 16 covers how to *compress* them — take a trained large model (the "teacher") and produce a smaller model (the "student") with similar capabilities. The classic technique is **knowledge distillation** (Hinton et al. 2015): train the student to match the teacher's *soft probability distributions*, not just its hard predictions. The full Part V picture: pre-trained base (Ch 7-10) → SFT (Ch 13) → preference optimization (Ch 14) → PEFT for efficient training (Ch 15) → **distillation to compress** (Ch 16). Single-topic chapter; uses the **4-file cadence**.
 
 ---
 
@@ -280,7 +280,7 @@ The student doesn't have to share the teacher's architecture, but compatible cho
 - You're producing the foundation model from which others will distill
 - You need deep capability shifts (new language, new modality)
 
-**Combined recipes** are common: train a strong teacher (full FT + RLHF); distill into a smaller student (Ch 16); then PEFT-tune the student for specific tasks (Ch 15). The full Phase 11 pipeline used in production.
+**Combined recipes** are common: train a strong teacher (full FT + RLHF); distill into a smaller student (Ch 16); then PEFT-tune the student for specific tasks (Ch 15). The full Part V pipeline used in production.
 
 ---
 
@@ -478,7 +478,7 @@ for T in [1, 2, 4, 8, 16, 32]:
     print(f"{T:>4} | {formatted} | class {top_class}")
 
 print("\nObservations:")
-print("- At T=1: top class (0) gets ~0.83 probability; others barely visible.")
+print("- At T=1: top class (0) gets ~0.55 probability; others small but visible.")
 print("- At T=4: probability spreads; non-target classes show their relative similarity.")
 print("- At T=32: distribution approaches uniform; dark knowledge fades.")
 print("- Sweet spot for distillation: T=2 to T=10.")
@@ -593,8 +593,8 @@ Eight outcomes. Exercises hit outcomes 3 (compute loss), 4 (hard vs soft tradeof
 
 **Tonal framing:** practical engineering with a side of historical context. Distillation is older than transformers (Bucilua 2006); Hinton 2015 is the canonical reference; modern recipes (R1-Distill, Phi) demonstrate its impact at scale. The voice should be: "here's a foundational technique with renewed relevance in the LLM era."
 
-**Importance to Phase 11:** Ch 16 closes Phase 11. It's the *deployment* counterpart to Ch 13-15's *training* methods. **The full Phase 11 picture**: pre-train → SFT (Ch 13) → preference optimization (Ch 14) → PEFT for efficient training (Ch 15) → distill for cheap deployment (Ch 16). All four are used in modern production.
+**Importance to Part V:** Ch 16 closes Part V. It's the *deployment* counterpart to Ch 13-15's *training* methods. **The full Part V picture**: pre-train → SFT (Ch 13) → preference optimization (Ch 14) → PEFT for efficient training (Ch 15) → distill for cheap deployment (Ch 16). All four are used in modern production.
 
-**Bridge to Phase 12:** after Ch 16 closes, Phase 12 (inference optimization, quantization, sampling) begins. **Distillation reduces parameter count; quantization reduces bits per parameter; sampling controls inference behavior.** The three layers of efficient deployment.
+**Bridge to Part VI:** after Ch 16 closes, Part VI (inference optimization, quantization, sampling) begins. **Distillation reduces parameter count; quantization reduces bits per parameter; sampling controls inference behavior.** The three layers of efficient deployment.
 
 This chapter completes the post-training arc. The reader should walk away knowing that real production deployments use the full pipeline — and that distillation is the bridge from "we have a great frontier model" to "we can deploy a useful model cheaply at scale."

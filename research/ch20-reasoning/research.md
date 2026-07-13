@@ -1,6 +1,6 @@
 # Chapter 20 — Reasoning: research
 
-> Curated source material for Chapter 20's build sessions. **The chapter that opens Phase 13 (Capabilities).** Where Phase 11 trained the model and Phase 12 made it deployable, Phase 13 makes it *useful* — starting with reasoning. **Two-topic chapter**: (1) the classic chain-of-thought era (Wei et al. 2022; self-consistency; tree-of-thoughts; ReAct) and (2) the modern reasoning paradigm (process reward models; test-time compute scaling; o1, R1, Gemini Thinking models). This is the chapter where readers see how production AI systems handle complex reasoning — and why the "thinking model" paradigm of 2024-2025 changed what's possible. Uses the **5-file cadence** (two-topic chapter).
+> Curated source material for Chapter 20's build sessions. **The chapter that opens Part VII (Modern Capabilities).** Where Part V trained the model and Part VI made it deployable, Part VII makes it *useful* — starting with reasoning. **Two-topic chapter**: (1) the classic chain-of-thought era (Wei et al. 2022; self-consistency; tree-of-thoughts; ReAct) and (2) the modern reasoning paradigm (process reward models; test-time compute scaling; o1, R1, Gemini Thinking models). This is the chapter where readers see how production AI systems handle complex reasoning — and why the "thinking model" paradigm of 2024-2025 changed what's possible. Uses the **5-file cadence** (two-topic chapter).
 
 ---
 
@@ -43,7 +43,7 @@ TOPIC 2 — Modern reasoning era (~2100 words):
 5. Process reward models (~500 words)
 6. Test-time compute scaling (~600 words)
 7. Modern reasoning models — o1, R1, Gemini Thinking (~600 words)
-8. The full picture and Phase 13 framing (~400 words)
+8. The full picture and Part VII framing (~400 words)
 
 Target: ~4100 words plus 2 widgets and 3 runnable code blocks.
 
@@ -318,13 +318,13 @@ A modern reasoning-capable system has multiple options:
 
 **Decision rule**: use the simplest technique that works. **For most chat tasks, modern instruction-tuned models with zero-shot CoT suffice**. **For hard reasoning, modern reasoning models** (o1, R1) are now the default.
 
-**Phase 13 trajectory**:
+**Part VII trajectory**:
 - **Ch 20** (this): how the model reasons
 - **Ch 21**: how the model uses tools (extends ReAct)
 - **Ch 22**: how the model retrieves external knowledge (RAG)
 - **Ch 23**: how the model handles other modalities (vision, audio)
 
-Together, Phase 13 turns deployable models (Phase 12) into useful systems.
+Together, Part VII turns deployable models (Part VI) into useful systems.
 
 ---
 
@@ -629,6 +629,6 @@ Eight outcomes. Exercises hit outcomes 2, 3, 5, 6.
 
 **Tonal framing**: exciting and forward-looking — the back half of the curriculum opens here. **Concrete numbers**: GSM8K improvements (5% → 46% with CoT); R1 vs o1 benchmark parity; AIME 2024 scores. **Honest tradeoffs**: PRM complexity vs ORM simplicity; compute cost of reasoning vs accuracy gain; hidden vs visible thinking.
 
-**Phase 13 opening**: Ch 20 opens Phase 13. The reader should feel a clear shift: **Phase 12 ended with deployable models; Phase 13 makes them useful.** Reasoning is the natural starting point — it's the capability that turns a chat model into a problem-solving system. **The energy should pick up here** — readers have done the hard groundwork of Phases 1-12, and now the payoff (capabilities, agents) begins.
+**Part VII opening**: Ch 20 opens Part VII. The reader should feel a clear shift: **Part VI ended with deployable models; Part VII makes them useful.** Reasoning is the natural starting point — it's the capability that turns a chat model into a problem-solving system. **The energy should pick up here** — readers have done the hard groundwork of Phases 1-12, and now the payoff (capabilities, agents) begins.
 
 **Importance**: reasoning is arguably the most important LLM capability in 2024-2025. The o1/R1 paradigm shift made reasoning models the default for hard tasks. **Engineers need to understand both eras**: classic CoT for general prompting; modern reasoning models for hard problems. **This chapter is their roadmap.**

@@ -1,6 +1,6 @@
 # Chapter 28 — Agents from scratch: research
 
-> Curated source material for Chapter 28's build sessions. **The engineering chapter of Phase 15.** Where Ch 27 was conceptual (what an agent is, the loop, ReAct, patterns), this chapter is operational: **how to actually build one.** Tool design and implementation patterns; JSON schemas and structured tool calls (function calling, MCP); production-grade error handling and recovery (retries, circuit breakers, fallback tools); observability and trace debugging; agent scaffolding (system prompts, tool descriptions, few-shot examples); cost and latency management. **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns "I understand agents" into "I can build one."**
+> Curated source material for Chapter 28's build sessions. **The engineering chapter of Part IX.** Where Ch 27 was conceptual (what an agent is, the loop, ReAct, patterns), this chapter is operational: **how to actually build one.** Tool design and implementation patterns; JSON schemas and structured tool calls (function calling, MCP); production-grade error handling and recovery (retries, circuit breakers, fallback tools); observability and trace debugging; agent scaffolding (system prompts, tool descriptions, few-shot examples); cost and latency management. **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns "I understand agents" into "I can build one."**
 
 ---
 
@@ -465,7 +465,7 @@ Set per-task budgets. **Hard caps prevent runaway costs.**
 
 ### Concept 8: Three chapters from the end
 
-**Phase 15 status**:
+**Part IX chapter map**:
 
 | Chapter | Topic | Status |
 |---------|-------|--------|
@@ -481,7 +481,7 @@ Set per-task budgets. **Hard caps prevent runaway costs.**
 **The trajectory**:
 - Ch 27 conceptual → Ch 28 engineering → Ch 29 composition → Ch 30 evaluation
 - Each builds on the prior
-- The curriculum closes with Ch 30 — bringing Phase 14's eval discipline back to bear on agent systems
+- The curriculum closes with Ch 30 — bringing Part VIII's eval discipline back to bear on agent systems
 
 **After Ch 30**: the reader has the full stack. **From numpy primitives (Ch 1) through transformer internals (Ch 4-6), pretraining and post-training (Ch 7-14), inference (Ch 17-19), reasoning and tools (Ch 20-23), safety/interp/eval (Ch 24-26), and agent systems (Ch 27-30) — every layer covered.**
 
@@ -980,6 +980,6 @@ Eight outcomes. Exercises hit outcomes 2, 3, 5, 7.
 
 **Tonal framing**: engineering with empathy for the LLM. **Tools should be designed so the LLM can use them effectively** — not so the engineer feels clever. **Concrete numbers** (production agent line counts: 500-5000; tool counts: 5-50; task costs: $0.01-$10; reliability targets: 95%+) and **honest tradeoffs** (sync vs async; function calling vs MCP; framework vs custom; cost vs reliability). **The 80% engineering reality** is the central frame — most agent failures are engineering failures, not LLM failures.
 
-**Phase 15 advancing**: this chapter takes the reader from Ch 27's concepts to production-ready code. **Three chapters from the curriculum's end.**
+**Part IX, chapter 2 of 4**: this chapter takes the reader from Ch 27's concepts to production-ready code. **Three chapters from the curriculum's end.**
 
 **Importance**: this is the chapter that lets engineers **actually build** what Ch 27 described. Without Ch 28, the foundations chapter is academic. **Production-grade agents are 80% the engineering this chapter covers.**

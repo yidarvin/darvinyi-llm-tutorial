@@ -1,6 +1,6 @@
 # Chapter 23 — Multimodal: research
 
-> Curated source material for Chapter 23's build sessions. **The chapter that takes LLMs beyond text — and closes Phase 13.** Where reasoning (Ch 20) gave the model time to think, tool use (Ch 21) gave it the ability to act, and RAG (Ch 22) gave it grounded knowledge, **multimodal extends all three across images, audio, and video.** Vision Transformers (ViT) — how images become tokens. CLIP — how image and text get aligned in a shared embedding space. Modern vision-language models — LLaVA, GPT-4V, Claude with vision, Gemini. Audio understanding — Whisper and voice-native models. Multimodal RAG. Computer use as visual agent (the Ch 21 bridge). **Single-topic chapter**; uses the **4-file cadence**. **The chapter that closes the capability arc — and sets up the disciplines of Phase 14 (Safety, Interp, Eval).**
+> Curated source material for Chapter 23's build sessions. **The chapter that takes LLMs beyond text — and closes Part VII.** Where reasoning (Ch 20) gave the model time to think, tool use (Ch 21) gave it the ability to act, and RAG (Ch 22) gave it grounded knowledge, **multimodal extends all three across images, audio, and video.** Vision Transformers (ViT) — how images become tokens. CLIP — how image and text get aligned in a shared embedding space. Modern vision-language models — LLaVA, GPT-4V, Claude with vision, Gemini. Audio understanding — Whisper and voice-native models. Multimodal RAG. Computer use as visual agent (the Ch 21 bridge). **Single-topic chapter**; uses the **4-file cadence**. **The chapter that closes the capability arc — and sets up the disciplines of Part VIII (Safety, Interp, Eval).**
 
 ---
 
@@ -37,7 +37,7 @@
 5. Audio: Whisper and voice-native models (~500 words)
 6. Multimodal RAG (~400 words)
 7. Computer use as visual agent (~400 words)
-8. Closing Phase 13 / opening Phase 14 (~400 words)
+8. The capability arc closes, the discipline arc opens (~400 words)
 
 Target: ~3800 words plus 2 widgets and 3 runnable code blocks.
 
@@ -309,9 +309,9 @@ Tool use (Ch 21) generalized to: any function the model can invoke. **Computer u
 
 **Frontier (2025)**: computer use is rapidly improving; latency and accuracy both dropping. **Production deployments** exist for QA automation, web scraping, and accessibility tooling.
 
-### Concept 8: Closing Phase 13 / opening Phase 14
+### Concept 8: The capability arc closes, the discipline arc opens
 
-**Phase 13 recap**:
+**Part VII recap**:
 - **Ch 20 (Reasoning)**: the model can think before answering
 - **Ch 21 (Tool use)**: the model can act in the world
 - **Ch 22 (RAG)**: the model can retrieve grounded knowledge
@@ -319,14 +319,14 @@ Tool use (Ch 21) generalized to: any function the model can invoke. **Computer u
 
 **Together**, these four capabilities turn raw next-token generation into something **closer to a generally-capable digital assistant**. A model that reasons + retrieves + acts + perceives can — in principle — handle most cognitive office-work tasks.
 
-**What Phase 13 doesn't cover**:
+**What Part VII doesn't cover**:
 - **Are these models safe?** (Ch 24)
 - **What's actually happening inside them?** (Ch 25)
 - **How do we measure progress?** (Ch 26)
 
-**Phase 14 (Safety, Interp, Eval)** answers these. The capability arc (Phase 13) and the discipline arc (Phase 14) are **complementary, not sequential** — modern AI labs work on both simultaneously.
+**Part VIII (Safety, Interp, Eval)** answers these. The capability arc (Part VII) and the discipline arc (Part VIII) are **complementary, not sequential** — modern AI labs work on both simultaneously.
 
-**Then Phase 15 (Agents)** composes the capability stack into complete agent architectures.
+**Then Part IX (Agents)** composes the capability stack into complete agent architectures.
 
 ---
 
@@ -683,6 +683,6 @@ Eight outcomes. Exercises hit outcomes 2, 3, 6, 8.
 
 **Tonal framing**: capability survey with operational realism. Multimodal is **rapidly evolving** in 2024-2025; the chapter has to balance "here's the foundational technique" with "here's what's currently frontier." **Concrete numbers**: token counts per image (196-4000), Whisper training data (680k hours), VLM context budgets (100K-1M tokens), voice-native latency (<500ms). **Honest tradeoffs**: bolt-on vs native; OCR limits; computer-use latency.
 
-**Phase 13 progression**: Ch 23 is the **final Phase 13 chapter**. **Closing the capability arc**: reasoning (think) + tool use (act) + RAG (retrieve) + multimodal (perceive). After this: Phase 14 opens with safety, interpretability, and evaluation as full disciplines.
+**Part VII progression**: Ch 23 is the **final Part VII chapter**. **Closing the capability arc**: reasoning (think) + tool use (act) + RAG (retrieve) + multimodal (perceive). After this: Part VIII opens with safety, interpretability, and evaluation as full disciplines.
 
 **Importance**: multimodal is the capability that brings LLMs out of the chat box and into the physical+digital world. Frontier products (GPT-4o, Claude vision, Gemini Live) are multimodal-native; computer-use agents are multimodal; voice interfaces are multimodal. **Engineers building modern AI products need to know how multimodal works conceptually — and where its limits are.** This chapter is their roadmap.

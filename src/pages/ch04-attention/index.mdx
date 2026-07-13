@@ -26,7 +26,7 @@ The 2017 breakthrough was to ask a sharper question. What if every position coul
 
 Attention as a concept predates the transformer by three years. Bahdanau, Cho, and Bengio (2014, [arxiv.org/abs/1409.0473](https://arxiv.org/abs/1409.0473)) introduced *attention* into neural machine translation as a learned alignment mechanism: a decoder generating a target sentence could "look at" specific positions in the source sentence rather than condensing the whole source into a single hidden vector. Luong, Pham, and Manning (2015, [arxiv.org/abs/1508.04025](https://arxiv.org/abs/1508.04025)) replaced Bahdanau's feedforward score with the cheaper dot product. Vaswani et al. (2017, [arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)) then made the structural leap: don't use attention as an auxiliary alignment mechanism for an RNN-based translator. Use it as the entire architecture. The paper's title (*Attention Is All You Need*) was a literal claim, and it has held up.
 
-This chapter is about the operation itself: what scaled dot-product attention computes, why each piece of the formula is the way it is, and what its costs are. The operation lives inside the transformer block (Chapter 7), which wraps it with feedforward layers, residuals, and normalization. Multi-head attention (Chapter 5) runs several copies of it in parallel. Positional encoding (Chapter 6) adds back the position information the operation itself does not see. The widgets, code, and derivations in this chapter all serve a single goal: the reader should leave able to write the operation from memory and explain every term in it.
+This chapter is about the operation itself: what scaled dot-product attention computes, why each piece of the formula is the way it is, and what its costs are. The operation lives inside the transformer block (Chapter 5), which wraps it with feedforward layers, residuals, and normalization. Multi-head attention (Chapter 5) runs several copies of it in parallel. Positional encoding (Chapter 6) adds back the position information the operation itself does not see. The widgets, code, and derivations in this chapter all serve a single goal: the reader should leave able to write the operation from memory and explain every term in it.
 
 <Callout type="aside">
 "Attention" in this chapter means *self-attention* by default: the variant where queries, keys, and values all come from the same input sequence. Section 7 introduces cross-attention, where the query comes from a different sequence than the keys and values. The original 2017 paper introduced both; modern decoder-only LLMs (the GPT family, Llama, Mistral, Claude) use only self-attention with causal masking, and the broader literature has settled into using "attention" to mean self-attention unless otherwise specified.
@@ -54,7 +54,7 @@ where $W^Q, W^K \in \R^{d_{\text{model}} \times d_k}$ and $W^V \in \R^{d_{\text{
 
 $Q$ and $K$ must agree on dimension because we are going to take their dot product. That product $q_i \cdot k_j$ is the similarity score between position $i$'s query and position $j$'s key. $V$'s dimension $d_v$ can differ in principle, but in practice it is almost always set equal to $d_k$. In Vaswani's multi-head attention, $d_k = d_v = d_{\text{model}} / h$ where $h$ is the number of heads; Chapter 5 picks that up.
 
-A small classroom analogy makes the three cards feel less arbitrary. Picture eight students in a room. Each holds three cards: a Query card describing what they are curious about, a Key card describing what they know, and a Value card containing the actual content they would share. To form a study cluster, each student looks at every other student's Key card and decides how much to listen: *I will listen most to the students whose Keys match my Query*. The listening is graded, not all-or-nothing: each student distributes a fixed budget of attention across everyone. After voting, each student's resulting understanding is a weighted blend of *Value* cards from across the room, weighted by Query-Key alignment. Eight students, three cards each, one soft lookup per student. That is self-attention.
+A small classroom analogy makes the three cards feel less arbitrary. Picture eight students in a room. Each holds three cards: a Query card describing what they are curious about, a Key card describing what they know, and a Value card containing the actual content they would share. To form a study cluster, each student looks at every student's Key card — including their own — and decides how much to listen: *I will listen most to the students (myself included) whose Keys match my Query*. The listening is graded, not all-or-nothing: each student distributes a fixed budget of attention across everyone in the room, themselves included. After voting, each student's resulting understanding is a weighted blend of *Value* cards from across the room, weighted by Query-Key alignment; it is entirely normal, and often typical, for a student's own Value card to carry the largest weight in their own blend. Eight students, three cards each, one soft lookup per student. That is self-attention.
 
 <Callout type="insight">
 A common misconception is that $Q$, $K$, $V$ are fundamentally different *things*. They are not. In self-attention they originate from the same input matrix $X$; the distinction is which learned projection is applied. Three different views of the same data play three different *roles* in the attention computation, but ontologically they are the same sequence transformed three ways. This is the structural reason a single embedding can simultaneously *ask* something at position $i$ and *answer* something at position $j$: the query side and the key side of the same vector are independently learned linear functions of it.
@@ -137,7 +137,7 @@ print(f"\\nRow sums: {weights.sum(axis=-1)}")
 
 The widget below ties the formula to a concrete sequence. The same six-position input flows through the same four operations the code above implements: $Q$ and $K$ projected from the input, their dot product producing the scores matrix, the scaling and softmax turning scores into weights, the weights blending the values into the output.
 
-<WidgetFrame title="Scaled dot-product attention" caption="Watch attention compute step by step on the sentence 'the cat sat on the mat'. Hand-tuned Q, K, V matrices produce an interpretable local-attention pattern at the softmax stage: each token attends primarily to its neighbor.">
+<WidgetFrame title="Scaled dot-product attention" caption="Watch attention compute step by step on the sentence 'the cat sat on the mat'. Hand-tuned Q, K, V matrices produce a near-uniform attention pattern at the softmax stage: without positional encoding (added in Chapter 6), each token attends most strongly to itself, with the remaining weight spread thinly and fairly evenly across the other positions.">
   <AttentionHeatmap client:visible />
 </WidgetFrame>
 
@@ -206,7 +206,7 @@ for d_k in [8, 64, 512, 4096]:
   height={280}
 />
 
-The raw score std tracks $\sqrt{d_k}$: roughly 2.8 at $d_k = 8$, 8 at $d_k = 64$, 22.6 at $d_k = 512$, 64 at $d_k = 4096$. The scaled score std stays near 1 throughout. The unscaled softmax max approaches 1 as $d_k$ grows (the distribution saturates), while the scaled version stays moderate. The derivation and the empirical numbers agree.
+The raw score std tracks $\sqrt{d_k}$, in the ballpark of 2.8, 8, 22.6, and 64 at $d_k = 8, 64, 512, 4096$ respectively — though with only 5 rows of random samples in this demo, the printed numbers wander around those theoretical values (a run with seed 0 prints roughly 2.8, 7.7, 23.4, and 70). The scaled score std stays near 1 throughout. The unscaled softmax max approaches 1 as $d_k$ grows (the distribution saturates), while the scaled version stays moderate. The derivation and the empirical numbers agree.
 
 <Callout type="insight">
 This is one of the cleanest design-justification arguments in deep learning. A four-line variance calculation explains an engineering choice that, encountered first in a formula, looks arbitrary. Many readers see $\sqrt{d_k}$ for the first time as a "magic" denominator; the variance argument turns it into "of course." Several other normalization choices in modern architectures (layer norm's $1/\sqrt{d}$ scaling on weight initialization, the $1/\sqrt{\text{fan-in}}$ in He and Glorot init) fall out of the same logic.
@@ -260,7 +260,7 @@ $$\text{scores}_{ij} = \begin{cases} \dfrac{q_i \cdot k_j}{\sqrt{d_k}} & \text{i
 
 Two implementation details matter. First, the mask is added *before* softmax, not after. A natural-seeming alternative (compute the full softmax, then zero out illegal positions) would break the sum-to-one constraint: the remaining probabilities would not sum to 1, and the weighted sum across the past would be miscalibrated by an unpredictable factor. Adding $-\infty$ pre-softmax ensures the blocked positions contribute zero probability mass and the legal positions automatically renormalize.
 
-Second, "negative infinity" in practice is implemented as a large negative number ($-10^9$ is conventional) rather than literal `-np.inf`. The reason is purely numerical: certain softmax implementations subtract the max before exponentiating, and if every row entry is $-\infty$, the subtraction yields $-\infty - (-\infty) = $ `NaN`. A finite large negative number behaves identically for any practical purpose ($e^{-10^9}$ rounds to zero in any normal floating-point format) without the `NaN` failure mode.
+Second, "negative infinity" in practice is often implemented as a large negative number ($-10^9$ is conventional) rather than literal `-np.inf`. The reason is purely numerical: certain softmax implementations subtract the max before exponentiating, and if every row entry is $-\infty$, the subtraction yields $-\infty - (-\infty) = $ `NaN`. A finite large negative number behaves identically for any practical purpose ($e^{-10^9}$ rounds to zero in any normal floating-point format) without the `NaN` failure mode. The code in this chapter uses literal `-np.inf`, which is safe specifically because causal masking always leaves the diagonal entry ($j = i$) unmasked; no row is ever entirely $-\infty$, so the max-subtraction never produces `NaN`. A mask that could blank out an entire row (e.g. a padding mask on a fully-padded sequence) would need the finite-large-negative-number version instead.
 
 In matrix form, the mask is a lower-triangular matrix with zeros below or on the diagonal and $-\infty$ above. It is added to $QK^\top / \sqrt{d_k}$ before the softmax is applied row-wise.
 
@@ -366,15 +366,15 @@ for n in [256, 1024, 4096, 16384, 131072]:
   height={280}
 />
 
-For a more realistic LLM-scale picture: a 7B-parameter model with $n = 4096$ and per-head dimension $d = 64$ does roughly $4096^2 \times 64 \times 2 \approx 2 \times 10^9$ FLOPs of attention compute per head per layer. With 32 heads and 32 layers, total attention compute is on the order of $10^{12}$ FLOPs per forward pass per token. The feedforward layers (each FFN multiplies by a $4 d_{\text{model}}$-wide hidden layer) contribute more per layer when $n$ is small; as $n$ grows, attention's $n^2$ scaling overtakes the FFN's linear scaling, and at long enough contexts attention dominates the FLOPs.
+For a more realistic LLM-scale picture: a 7B-parameter model with $n = 4096$ and per-head dimension $d = 64$ does roughly $4096^2 \times 64 \times 2 \approx 2 \times 10^9$ FLOPs for the $QK^\top$ matmul per head per layer, and another $\approx 2 \times 10^9$ for the $AV$ matmul, so $\approx 4 \times 10^9$ FLOPs of attention compute per head per layer. With 32 heads and 32 layers, total attention compute is on the order of $10^{12}$ FLOPs per forward pass over the full sequence. The feedforward layers (each FFN multiplies by a $4 d_{\text{model}}$-wide hidden layer) contribute more per layer when $n$ is small; as $n$ grows, attention's $n^2$ scaling overtakes the FFN's linear scaling, and at long enough contexts attention dominates the FLOPs.
 
-The quadratic scaling is the structural reason context length is a major architectural choice. Doubling $n$ quadruples both compute and memory for the attention matrix. Going from 4K to 128K context is a 32× multiplier on $n$, but a 1024× multiplier on attention's resource demand. The full $128$K attention matrix at fp16 is $\sim 32$ GB per head per layer, vastly exceeding any single GPU's memory.
+The quadratic scaling is the structural reason context length is a major architectural choice. Doubling $n$ quadruples both compute and memory for the attention matrix. Going from 4K to 128K context is a 32× multiplier on $n$, but a 1024× multiplier on attention's resource demand. The full $128$K attention matrix at fp16 is $\sim 32$ GB per head per layer; a single such matrix fits in one modern GPU's memory, but summed across many heads and layers (and multiplied by batch size), the aggregate vastly exceeds any single GPU's memory.
 
 <Callout type="note">
-At $n = 131072$ (the 128K context length of recent Claude and GPT-class models), the raw attention matrix at fp16 is roughly $32$ GB per head per layer for batch size 1. The largest single-GPU memory available today is 80 GB; a multi-layer multi-head model cannot materialize all those matrices simultaneously. This is why long-context inference depends on Flash Attention and related memory-efficient implementations that *never* materialize the full $n \times n$ matrix. They compute attention in tiles, fusing the softmax and matmul into a single pass through GPU memory. Same math, different memory layout.
+At $n = 131072$ (the 128K context length of recent Claude and GPT-class models), the raw attention matrix at fp16 is roughly $32$ GB per head per layer for batch size 1. Even the largest single-GPU memory available today (on the order of 150–200 GB) cannot hold that matrix for every head of every layer at once; a multi-layer multi-head model cannot materialize all those matrices simultaneously. This is why long-context inference depends on Flash Attention and related memory-efficient implementations that *never* materialize the full $n \times n$ matrix. They compute attention in tiles, fusing the softmax and matmul into a single pass through GPU memory. Same math, different memory layout.
 </Callout>
 
-The cost is also the motivation for much of the rest of the tutorial. Chapter 11 introduces state-space models, alternative architectures with $O(n)$ scaling that may or may not displace attention for long-context tasks. Chapter 17 introduces the *KV cache*: at inference time, the $K$ and $V$ matrices for past tokens are computed once and cached, so each new token's attention costs $O(n)$ rather than $O(n^2)$. Chapter 17 also covers Flash Attention and related techniques. The reason the rest of the tutorial spends so much time on these variants is the cost discussed here.
+The cost is also the motivation for much of the rest of the tutorial. Chapter 12 introduces state-space models, alternative architectures with $O(n)$ scaling that may or may not displace attention for long-context tasks. Chapter 17 introduces the *KV cache*: at inference time, the $K$ and $V$ matrices for past tokens are computed once and cached, so each new token's attention costs $O(n)$ rather than $O(n^2)$. Chapter 17 also covers Flash Attention and related techniques. The reason the rest of the tutorial spends so much time on these variants is the cost discussed here.
 
 ## From single-head to multi-head
 
@@ -430,6 +430,38 @@ V = rng.normal(0, 1, (n, d_k))
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+The scaling divides the raw scores by $\sqrt{d_k}$ before the softmax; that's the entire implementation. The peakedness check just compares `softmax` on raw scores vs. scaled scores at a large $d_k$, where raw dot products have grown large enough to saturate softmax.
+
+```python
+def scaled_dot_product_attention(Q, K, V):
+    d_k = Q.shape[-1]
+    scores = Q @ K.T / np.sqrt(d_k)
+    weights = softmax(scores, axis=-1)
+    output = weights @ V
+    return output, weights
+
+out, weights = scaled_dot_product_attention(Q, K, V)
+print(f"Row sums: {weights.sum(axis=-1)}")  # [1. 1. 1. 1. 1. 1.]
+
+for dk in [8, 512]:
+    rng2 = np.random.default_rng(1)
+    Qd = rng2.normal(0, 1, (6, dk))
+    Kd = rng2.normal(0, 1, (6, dk))
+    scores = Qd @ Kd.T
+    unscaled = softmax(scores)
+    scaled = softmax(scores / np.sqrt(dk))
+    print(f"d_k={dk}: unscaled max={unscaled.max():.4f}, scaled max={scaled.max():.4f}")
+# d_k=8:   unscaled max=0.9251, scaled max=0.5213
+# d_k=512: unscaled max=1.0000, scaled max=0.7216
+```
+
+At $d_k=512$ the unscaled softmax puts essentially all its weight (1.0000) on one key; scaling keeps the max in a much softer 0.72 range. The gap between unscaled and scaled widens as $d_k$ grows, confirming the variance argument from this chapter.
+
+</details>
+
 ### Exercise 2 (medium): Implement causal masking
 
 Extend your scaled dot-product attention from Exercise 1 to support causal masking. Verify that each position only attends to itself and earlier positions; verify that masked rows still sum to 1.
@@ -475,6 +507,39 @@ V = rng.normal(0, 1, (n, d_k))
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Build the mask with `np.triu(..., k=1)` to grab the strictly-upper triangle, set those entries to $-\infty$, and add the mask to the scores before softmax — after softmax, $-\infty$ becomes exactly 0.
+
+```python
+def causal_mask(n):
+    mask = np.zeros((n, n))
+    mask[np.triu_indices(n, k=1)] = -np.inf
+    return mask
+
+def causal_attention(Q, K, V):
+    d_k = Q.shape[-1]
+    scores = Q @ K.T / np.sqrt(d_k)
+    scores = scores + causal_mask(Q.shape[0])
+    weights = softmax(scores, axis=-1)
+    output = weights @ V
+    return output, weights
+
+out, weights = causal_attention(Q, K, V)
+print(weights.round(3))
+# [[1.    0.    0.    0.    0.   ]
+#  [0.218 0.782 0.    0.    0.   ]
+#  [0.571 0.342 0.087 0.    0.   ]
+#  [0.032 0.717 0.192 0.059 0.   ]
+#  [0.516 0.063 0.1   0.127 0.195]]
+print(f"Row sums: {weights.sum(axis=-1)}")  # [1. 1. 1. 1. 1.]
+```
+
+The upper triangle is exactly 0 in every row, and each row still sums to 1 — masking only redistributes probability mass among the allowed (earlier and current) positions.
+
+</details>
+
 ### Exercise 3 (medium): Quantify the O(n²) memory cost
 
 Compute the memory required for attention at various sequence lengths. Compare to the memory required for the FFN's largest tensor at the same sequence length. Find the crossover point where attention's memory exceeds FFN's.
@@ -508,6 +573,45 @@ for n in [256, 1024, 4096, 16384, 65536]:
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Attention memory is $O(n^2)$ (quadratic in sequence length); FFN memory is $O(n)$ (linear). At small $n$ the FFN's constant factor ($4 \cdot d_{model}$) dominates, but attention eventually overtakes it.
+
+```python
+def attention_memory_bytes(n, dtype_bytes=2):
+    return n * n * dtype_bytes
+
+def ffn_memory_bytes(n, d_model, dtype_bytes=2, expansion=4):
+    return n * expansion * d_model * dtype_bytes
+
+d_model = 4096
+for n in [256, 1024, 4096, 16384, 65536]:
+    attn = attention_memory_bytes(n)
+    ffn = ffn_memory_bytes(n, d_model)
+    print(f"n = {n:>6d}: attn = {attn/1e9:>5.2f} GB, ffn = {ffn/1e9:>5.2f} GB, ratio = {attn/ffn:>5.2f}")
+
+for n in range(1, 200_000):
+    if attention_memory_bytes(n) >= ffn_memory_bytes(n, d_model):
+        print("crossover n =", n)
+        break
+```
+
+Output:
+
+```
+n =    256: attn =  0.00 GB, ffn =  0.01 GB, ratio =  0.02
+n =   1024: attn =  0.00 GB, ffn =  0.03 GB, ratio =  0.06
+n =   4096: attn =  0.03 GB, ffn =  0.13 GB, ratio =  0.25
+n =  16384: attn =  0.54 GB, ffn =  0.54 GB, ratio =  1.00
+n =  65536: attn =  8.59 GB, ffn =  2.15 GB, ratio =  4.00
+crossover n = 16384
+```
+
+The crossover is exactly $n = 16384 = 4 \cdot d_{model}$, matching the hint's estimate: attention memory equals FFN memory when $n^2 = 4 \cdot d_{model} \cdot n$, i.e. $n = 4 \cdot d_{model}$.
+
+</details>
 
 ### Exercise 4 (hard): Implement cross-attention
 
@@ -555,4 +659,27 @@ V_enc = rng.normal(0, 1, (n_enc, d_k))
   packages={["numpy"]}
 />
 
-Everything else in this tutorial is downstream of this. Chapter 5 stacks multiple parallel attentions into multi-head attention. Chapter 6 adds positional information back into a permutation-symmetric operation. Chapter 7 wraps attention in the transformer block. Chapter 11 introduces an alternative that trades the formula for linear scaling. Chapter 17 makes inference efficient without changing the math.
+<details>
+<summary>Solution</summary>
+
+Cross-attention is the same formula as self-attention; only the source of Q vs. K/V differs, so $QK^T$ is no longer square when the two sequences have different lengths.
+
+```python
+def cross_attention(Q, K, V):
+    d_k = Q.shape[-1]
+    scores = Q @ K.T / np.sqrt(d_k)
+    weights = softmax(scores, axis=-1)
+    output = weights @ V
+    return output, weights
+
+out, weights = cross_attention(Q_dec, K_enc, V_enc)
+print(f"Output shape: {out.shape}")    # (4, 8)
+print(f"Weights shape: {weights.shape}")  # (4, 6)
+print(f"Row sums: {weights.sum(axis=-1)}")  # [1. 1. 1. 1.]
+```
+
+Output is `(n_dec, d_v) = (4, 8)`, weights are `(n_dec, n_enc) = (4, 6)` — rectangular, not square — and each of the 4 decoder rows still sums to 1 over the 6 encoder positions it's mixing.
+
+</details>
+
+Everything else in this tutorial is downstream of this. Chapter 5 stacks multiple parallel attentions into multi-head attention and wraps the result in the transformer block. Chapter 6 adds positional information back into a permutation-symmetric operation. Chapter 12 introduces an alternative that trades the formula for linear scaling. Chapter 17 makes inference efficient without changing the math.

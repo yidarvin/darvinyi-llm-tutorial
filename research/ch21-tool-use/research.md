@@ -18,7 +18,7 @@ A tool is any externally-callable function the model can invoke during generatio
 - The constrained decoding that enforces tool-call format (Ch 19)
 - Retrieval as a kind of tool (Ch 22 — RAG has its own chapter; this chapter assumes tool use exists)
 - Multimodal tool use (Ch 23 covers vision/audio; this chapter focuses on text-based tools)
-- Full agent architectures (Phase 15)
+- Full agent architectures (Part IX, Ch 27–30)
 
 **In scope and locked:**
 - **The Thought-Action-Observation loop** — ReAct's pattern, productionized
@@ -40,7 +40,7 @@ A tool is any externally-callable function the model can invoke during generatio
 5. Multi-tool routing (~400 words)
 6. Observation handling and error recovery (~400 words)
 7. MCP and modern protocols (~400 words)
-8. The full picture and Phase 13 trajectory (~400 words)
+8. The full picture and Part VII trajectory (~400 words)
 
 Target: ~3700 words plus 2 widgets and 3 runnable code blocks.
 
@@ -679,7 +679,7 @@ unknown_tool = {"name": "lookup", "input": {"query": "tools"}}
 - **Ch 24 (Safety)**: tool use is the highest-risk capability — incorrect tool calls can have real-world consequences (sending emails, deleting files, charging cards).
 - **Ch 25 (Interpretability)**: tool call traces are valuable interpretability artifacts — they show what the model was *trying* to do.
 - **Ch 26 (Evaluation)**: tool-use benchmarks (TaskBench, ToolBench) have their own methodology — different from chat eval.
-- **Ch 27-30 (Agents)**: tool use is the foundation. Phase 15 builds full agent architectures on top.
+- **Ch 27-30 (Agents)**: tool use is the foundation. Part IX builds full agent architectures on top.
 
 ---
 
@@ -732,6 +732,6 @@ Eight outcomes. Exercises hit outcomes 2, 3, 5, 8.
 
 **Tonal framing**: operational and confident — the chapter that turns reasoning into agency. **Concrete numbers**: tool catalog sizes (50 = manageable, 500 = need retrieval); typical agent loop step counts (5-50 in production); production tool call success rates (~85-95% on benchmarks). **Honest tradeoffs**: structured tool calls vs computer use; description-based routing vs embedding-based retrieval; serial vs parallel execution.
 
-**Phase 13 trajectory**: Ch 21 follows Ch 20 (reasoning) in Phase 13. **Tool use is reasoning made effectual** — the model can finally do things, not just describe them. After Ch 21: Ch 22 (RAG) covers retrieval as a kind of tool; Ch 23 (Multimodal) extends to other input modalities. **The capability stack is being assembled.**
+**Part VII trajectory**: Ch 21 follows Ch 20 (reasoning) in Part VII. **Tool use is reasoning made effectual** — the model can finally do things, not just describe them. After Ch 21: Ch 22 (RAG) covers retrieval as a kind of tool; Ch 23 (Multimodal) extends to other input modalities. **The capability stack is being assembled.**
 
 **Importance**: tool use is the single most economically consequential LLM capability of 2023-2025. Every production agent runs on it. **Engineers and product folks both need to understand the pattern, the API conventions, the failure modes, and the modern protocols (MCP). The chapter is their roadmap.**

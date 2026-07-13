@@ -167,12 +167,12 @@ export const BENCHMARKS: AgentBenchmark[] = [
       'Designed to be hard for humans too (~30%)',
       'Multi-source synthesis required',
       'No single lookup suffices',
-      'Frontier agents actually exceed human baseline',
-      'OpenAI 2024; recent benchmark with growing adoption',
+      'Frontier agents (~42%) top the ~30% human figure',
+      'OpenAI 2025; recent benchmark with growing adoption',
     ],
     whatItMeasures:
-      "Complex web-research capability — the rare benchmark where **frontier agents (~42%) actually exceed human performance (~30%)** on the average task. Reflects that agents have tireless browsing capacity humans lack, even when their reasoning is weaker per-step.",
-    year: 2024,
+      "Complex web-research capability — the rare benchmark where **frontier agents (~42%) score above the ~30% human figure**, though that human number reflects trainers working under a time limit who mostly gave up rather than answered incorrectly, so it isn't a clean human ceiling. Reflects that agents have tireless browsing capacity humans lack, even when their reasoning is weaker per-step.",
+    year: 2025,
     maturity: 'emerging',
   },
 ];

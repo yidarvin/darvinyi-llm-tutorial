@@ -1,6 +1,6 @@
 # Chapter 10 — Training infrastructure: research
 
-> Curated source material for Chapter 10's build sessions. The systems engineering chapter that closes Phase 9 (Pre-training). Where Ch 9 covered the *mathematics* of distribution (Chinchilla + DP/TP/PP/FSDP), Ch 10 covers the *practical reality* — GPU hardware, interconnects (NVLink + InfiniBand), NCCL collective implementations, training frameworks (DeepSpeed, Megatron, PyTorch FSDP), custom GPU kernels (Triton, FlashAttention), and the cost economics of frontier-scale training. Framed in Ch 9's section 8 as *practical depth* rather than *core knowledge* — useful for engineers who'll run the systems, optional for those who just want the conceptual story.
+> Curated source material for Chapter 10's build sessions. The systems engineering chapter that closes Part III (Pre-training). Where Ch 9 covered the *mathematics* of distribution (Chinchilla + DP/TP/PP/FSDP), Ch 10 covers the *practical reality* — GPU hardware, interconnects (NVLink + InfiniBand), NCCL collective implementations, training frameworks (DeepSpeed, Megatron, PyTorch FSDP), custom GPU kernels (Triton, FlashAttention), and the cost economics of frontier-scale training. Framed in Ch 9's section 8 as *practical depth* rather than *core knowledge* — useful for engineers who'll run the systems, optional for those who just want the conceptual story.
 
 > **Single-topic chapter** — uses the **4-file cadence** (research + 3 chapter sessions).
 
@@ -549,6 +549,6 @@ File 64 from the original BUILD_ORDER absorbed.
 
 Eight outcomes. The exercises will hit outcomes 2 (bandwidth math), 4-5 (kernels), 6 (checkpointing memory math), and 7 (MFU calculation).
 
-**This chapter closes Phase 9 — the entire training arc.** Ch 7 (data) + Ch 8 (loop) + Ch 9 (scaling math + parallelism strategies) + Ch 10 (infrastructure) = the complete training-side story. After Ch 10, the tutorial moves to alternative architectures (Ch 11+), post-training (Ch 13+), and inference (Ch 17+).
+**This chapter closes Part III — the entire training arc.** Ch 7 (data) + Ch 8 (loop) + Ch 9 (scaling math + parallelism strategies) + Ch 10 (infrastructure) = the complete training-side story. After Ch 10, the tutorial moves to alternative architectures (Ch 11+), post-training (Ch 13+), and inference (Ch 17+).
 
 Framing within the tutorial: Ch 10 is **practical depth** — the reader who stops at Ch 9 has the conceptual training story; Ch 10 adds the production reality. The chapter should be honest that its content is more specialized than earlier chapters.

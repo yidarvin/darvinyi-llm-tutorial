@@ -141,7 +141,7 @@ export default function PromptInjectionClassifier() {
 
       <div className={styles.caption}>
         Click through the samples. Notice that <strong>three of the clean samples</strong> match no patterns
-        and three <strong>adversarial samples</strong> match multiple. <strong>The calendar invite</strong>
+        and all four <strong>adversarial samples</strong> match multiple. <strong>The calendar invite</strong>
         demonstrates how easily an attacker can plant instructions in content the user didn't write —
         anyone can send a meeting invite. <strong>The web snippet</strong> shows how invisible HTML
         (0px text, white-on-white) carries hidden payloads that humans don't see. <strong>Defense-in-depth

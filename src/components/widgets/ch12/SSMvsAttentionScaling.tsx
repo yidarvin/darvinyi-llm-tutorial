@@ -147,8 +147,8 @@ export default function SSMvsAttentionScaling() {
           </span>
           <span className={styles.ratioNote}>
             {seqLen < crossover
-              ? "Below crossover; attention's matmul efficiency dominates."
-              : "Above crossover; SSM's linear scaling wins."}
+              ? "Below the wall-clock crossover: attention's matmul efficiency still wins on real hardware, even though the curves above already show SSM using fewer raw FLOPs/bytes here."
+              : "Above the wall-clock crossover: SSM wins both on the raw FLOPs/bytes plotted above and on wall-clock time."}
           </span>
         </div>
       </div>
@@ -344,7 +344,7 @@ function PlotSvg({ curve, metric, dModel, currentSeqLen, crossover, onHover }: P
         y={PADDING.top + 12}
         className={styles.crossoverLabel}
       >
-        ← crossover (~{formatSeqLen(crossover)})
+        ← wall-clock crossover (~{formatSeqLen(crossover)})
       </text>
 
       <path d={attnPath} fill="none" className={styles.attentionLine} />

@@ -1,6 +1,6 @@
 # Chapter 27 — Agent foundations: research
 
-> Curated source material for Chapter 27's build sessions. **The opening chapter of Phase 15 — the curriculum's final arc.** Phase 14 closed the discipline arc (safety, interpretability, evaluation). **Phase 15 is composition** — taking capable, disciplined models and assembling them into systems that observe, think, act, and iterate. This chapter introduces the LLM as an actor: not just a text generator, but a system in a loop with an environment. **The agentic loop** (observe → think → act → observe). **ReAct** (Yao 2022) as the foundational pattern. The **2023 agent boom** (AutoGPT, BabyAGI) and what survived. **Memory and state**. **Common patterns and anti-patterns**. The **agentic stack today** (Anthropic's MCP, LangGraph, OpenAI Assistants). **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns a chat model into an actor.**
+> Curated source material for Chapter 27's build sessions. **The opening chapter of Part IX — the curriculum's final arc.** Part VIII closed the discipline arc (safety, interpretability, evaluation). **Part IX is composition** — taking capable, disciplined models and assembling them into systems that observe, think, act, and iterate. This chapter introduces the LLM as an actor: not just a text generator, but a system in a loop with an environment. **The agentic loop** (observe → think → act → observe). **ReAct** (Yao 2022) as the foundational pattern. The **2023 agent boom** (AutoGPT, BabyAGI) and what survived. **Memory and state**. **Common patterns and anti-patterns**. The **agentic stack today** (Anthropic's MCP, LangGraph, OpenAI Assistants). **Single-topic chapter**; uses the **4-file cadence**. **The chapter that turns a chat model into an actor.**
 
 ---
 
@@ -40,7 +40,7 @@
 5. Memory and state (~400 words)
 6. Patterns and anti-patterns (~500 words)
 7. The agentic stack today (~400 words)
-8. Phase 15 opens — chapter map (~400 words)
+8. Part IX: chapter map (~400 words)
 
 Target: ~3600 words plus 2 widgets and 3 runnable code blocks.
 
@@ -126,7 +126,7 @@ An **agent** is **an LLM acting as a controller in a loop with an environment**.
 **The defining feature** — **iteration and decision-making across multiple turns.** An agent decides what to do next; a chat model just responds.
 
 **Why this matters now**:
-- **Capable models exist** (Phase 13) — but capability ≠ agency
+- **Capable models exist** (Part VII) — but capability ≠ agency
 - **Tools are mature** (Ch 21) — but tool use ≠ planning
 - **Production needs require composition** — most real tasks are multi-step
 - **The trajectory of 2023-2025** — frontier labs are investing heavily in agentic capabilities; agents are the next deployment frontier
@@ -404,9 +404,9 @@ LLMs have **no persistent state across calls**. Each agentic loop call is a fres
 - **Anthropic, OpenAI, Google** are all investing heavily — frontier capability is moving fast
 - The **autonomous-AGI framing** of 2023 has given way to **bounded-agent-with-oversight** framing of 2025
 
-### Concept 8: Phase 15 opens — chapter map
+### Concept 8: Part IX chapter map
 
-**Phase 15 (Agents) — the curriculum's final arc**:
+**Part IX (Agents) — the curriculum's final arc**:
 
 | Chapter | Topic | What it covers |
 |---------|-------|----------------|
@@ -416,11 +416,11 @@ LLMs have **no persistent state across calls**. Each agentic loop call is a fres
 | **Ch 30** | Agent eval and frameworks | How to evaluate agents (connecting back to Ch 26); production frameworks; the curriculum's close |
 
 **The arc completes**:
-- **Phase 13 (Capabilities)** — what individual models can do
-- **Phase 14 (Disciplines)** — making capable development trustworthy
-- **Phase 15 (Composition)** — assembling models into systems
+- **Part VII (Capabilities)** — what individual models can do
+- **Part VIII (Disciplines)** — making capable development trustworthy
+- **Part IX (Composition)** — assembling models into systems
 
-**Why agents close the curriculum**: they're the **highest level of composition** — combining capability (Phase 13), discipline (Phase 14), and orchestration into systems that act in the world. **After Ch 30, the reader has the full stack** from numpy primitives (Ch 1) to production agent systems.
+**Why agents close the curriculum**: they're the **highest level of composition** — combining capability (Part VII), discipline (Part VIII), and orchestration into systems that act in the world. **After Ch 30, the reader has the full stack** from numpy primitives (Ch 1) to production agent systems.
 
 **The trajectory of this chapter into Ch 28**:
 - Ch 27 (this chapter) — **conceptual**: what an agent is and how the loop works
@@ -869,12 +869,12 @@ Planned file layout:
 5. Decide when to use short-term vs long-term memory
 6. Recognize common agent patterns and anti-patterns
 7. Name the layers of the 2025 agentic stack
-8. Locate themselves in Phase 15's chapter map and understand the trajectory
+8. Locate themselves in Part IX's chapter map and understand the trajectory
 
 Eight outcomes. Exercises hit outcomes 3, 5, 6, 8.
 
 **Tonal framing**: engineering with honest limits. **Agents are useful for narrow, well-defined tasks** with bounded autonomy and human oversight. **Open-ended autonomous agents remain unsolved.** Concrete numbers (GAIA at 60-75% for frontier, SWE-bench at ~50%, BabyAGI/AutoGPT GitHub stars) and **honest tradeoffs** (autonomy vs reliability; single-agent vs multi-agent; framework vs custom). **No overhype** about agent capabilities; **no underhype** about how much production progress has happened in 2024-2025.
 
-**Phase 15 opening framing**: this is the curriculum's final arc. **Reader has reached the chapters that compose everything** they've learned. The end is in sight — four chapters remain.
+**Part IX opening framing**: this is the curriculum's final arc. **Reader has reached the chapters that compose everything** they've learned. The end is in sight — four chapters remain.
 
-**Importance**: agents are the production deployment frontier of 2024-2026. **Most engineers reading this curriculum will need to build or work with agents.** This chapter gives them the foundational vocabulary, patterns, and anti-patterns. **Ch 28 (Agents from scratch) builds on this conceptual foundation.** Phase 15 closes the curriculum.
+**Importance**: agents are the production deployment frontier of 2024-2026. **Most engineers reading this curriculum will need to build or work with agents.** This chapter gives them the foundational vocabulary, patterns, and anti-patterns. **Ch 28 (Agents from scratch) builds on this conceptual foundation.** Part IX closes the curriculum.

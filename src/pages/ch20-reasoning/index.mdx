@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch20-reasoning
-description: 'Reasoning, the capability that turns deployable models into useful systems. Two eras, classic CoT prompting (Wei 2022 chain-of-thought, Wang 2022 self-consistency, Yao 2023 tree-of-thoughts, Yao 2022 ReAct) and modern trained reasoning (Lightman 2023 process reward models, Snell 2024 test-time compute scaling, OpenAI o1, DeepSeek R1, Gemini Thinking). The chapter that opens Phase 13, where deployable models become genuinely useful for math, code, and complex reasoning tasks. From "let''s think step by step" prompts to RLVR-trained reasoning models.'
+description: 'Reasoning, the capability that turns deployable models into useful systems. Two eras, classic CoT prompting (Wei 2022 chain-of-thought, Wang 2022 self-consistency, Yao 2023 tree-of-thoughts, Yao 2022 ReAct) and modern trained reasoning (Lightman 2023 process reward models, Snell 2024 test-time compute scaling, OpenAI o1, DeepSeek R1, Gemini Thinking). The chapter that opens Part VII, where deployable models become genuinely useful for math, code, and complex reasoning tasks. From "let''s think step by step" prompts to RLVR-trained reasoning models.'
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { TestTimeComputeCurves, SelfConsistencyAggregator } from '@components/widgets';
 
-Phase 12 ended with a deployable model, efficient on the forward pass, quantized to fit on commodity hardware, and sampling tokens cleanly. But a deployable model is not automatically a *useful* one. For factual questions ("who painted the Mona Lisa?") direct generation works fine: the answer is in the weights and one forward pass suffices. For **hard reasoning**, math word problems, multi-step logic, code with a subtle bug, planning across many moves, direct generation often fails. The model commits to early decisions it cannot revise, and a wrong intermediate step compounds into a wrong final answer. **Reasoning techniques** address this by giving the model space to think before it answers.
+Part VI ended with a deployable model, efficient on the forward pass, quantized to fit on commodity hardware, and sampling tokens cleanly. But a deployable model is not automatically a *useful* one. For factual questions ("who painted the Mona Lisa?") direct generation works fine: the answer is in the weights and one forward pass suffices. For **hard reasoning**, math word problems, multi-step logic, code with a subtle bug, planning across many moves, direct generation often fails. The model commits to early decisions it cannot revise, and a wrong intermediate step compounds into a wrong final answer. **Reasoning techniques** address this by giving the model space to think before it answers.
 
 This chapter walks the two-era arc that produced the reasoning capabilities deployed today. **The classic era (2022 – 2023)** discovered that *prompting* a model to "think step by step" dramatically improved accuracy without changing the model at all. Wei et al. 2022 introduced chain-of-thought; Wang et al. 2022 added self-consistency (sample $N$ traces, majority vote); Yao et al. 2023 generalized to tree-of-thoughts; Yao et al. 2022 added ReAct as the reasoning-plus-action pattern that became modern agents. **The modern era (2024 – 2025)** trained reasoning directly. OpenAI's o1, DeepSeek's R1, and Google's Gemini Thinking all use RLVR (Chapter 14) to teach the model to produce long internal reasoning traces autonomously. **Test-time compute scaling** (Snell 2024) showed empirically that thinking longer monotonically improves accuracy on hard problems, the result that made the o1/R1 paradigm economically viable.
 
-**Phase 13 opens here.** Reasoning is the natural starting point because it is the capability that turns a chat model into a problem-solving system. Chapter 21 covers **tool use**, extending the ReAct pattern into engineered agents. Chapter 22 covers **RAG**, where retrieval extends the model's context with external knowledge. Chapter 23 covers **multimodal** systems that span vision and audio. Together, Phase 13 turns deployable models into useful ones. After Phase 13: safety, interpretability, evaluation (Phase 14), and then agents (Phase 15). The deployment work of Phases 11 and 12 was the price of admission; the capability work begins now.
+Part VII opens here. Reasoning is the natural starting point because it is the capability that turns a chat model into a problem-solving system. Chapter 21 covers **tool use**, extending the ReAct pattern into engineered agents. Chapter 22 covers **RAG**, where retrieval extends the model's context with external knowledge. Chapter 23 covers **multimodal** systems that span vision and audio. Together, Part VII turns deployable models into useful ones. After Part VII: safety, interpretability, evaluation (Part VIII), and then agents (Part IX). The deployment work of Parts V and VI was the price of admission; the capability work begins now.
 
 ## Why reasoning matters
 
@@ -20,23 +20,23 @@ This chapter walks the two-era arc that produced the reasoning capabilities depl
 
 A trained transformer's forward pass emits tokens autoregressively, one token, then the next, conditioned on everything before. For factual recall this is plenty: the model has the answer in its weights and the right token comes out first. For *reasoning* it often is not. **A single forward pass commits to early decisions.** Once the model emits "the answer is $120$," it cannot easily revise; the sampler will not retroactively decide that the third token should have been different. Without intermediate steps the model has no place to do the work that an arithmetic problem or a multi-step plan demands.
 
-The empirical evidence for this gap is unambiguous and it was the original motivation for the field. **GPT-3 on GSM8K** (the canonical grade-school math benchmark) scores about $5\%$ with direct generation, barely above chance on a multiple-choice subset. With chain-of-thought prompting the same model reaches roughly $46\%$, a nine-fold improvement from nothing more than a change in prompt structure. Larger models show the same pattern with a higher ceiling: PaLM 540B goes from $17\%$ direct to $57\%$ with CoT. The model already had the reasoning capability latent in its weights; what was missing was the inference-time machinery to elicit it.
+The empirical evidence for this gap is unambiguous and it was the original motivation for the field. **GPT-3 on GSM8K** (the canonical grade-school math benchmark, free-response, not multiple-choice) scores about $5\%$ with direct generation. With chain-of-thought prompting, GPT-3-class models reach roughly $46\%$, a nine-fold improvement from nothing more than a change in prompt structure. Larger models show the same pattern with a higher ceiling: PaLM 540B goes from $17\%$ direct to $57\%$ with CoT. The model already had the reasoning capability latent in its weights; what was missing was the inference-time machinery to elicit it.
 
 ### The chapter's two-era arc
 
 The story since 2022 splits cleanly into two paradigms with very different implementation surfaces. **The classic era (2022 – 2023)** achieved reasoning via prompting alone: the model was unchanged; only the prompt structure differed. Few-shot exemplars with intermediate steps, "let's think step by step," majority voting over $N$ samples, tree search over partial traces, all inference-time interventions, all applicable to any model. **The modern era (2024 – 2025)** trains reasoning in directly via RL. The model autonomously produces long internal reasoning traces; the user just sees the answer (o1) or sees both (R1, Gemini Thinking). The capability is no longer a prompting trick but a property of the trained weights.
 
-**Both eras are still relevant.** CoT prompting works on any model and is essentially free to apply; modern reasoning models are the state of the art for hard math, code, and science. The choice depends on the task and the budget, and the chapter's final section gives the decision rule.
+Both eras are still relevant. CoT prompting works on any model and is essentially free to apply; modern reasoning models are the state of the art for hard math, code, and science. The choice depends on the task and the budget, and the chapter's final section gives the decision rule.
 
 <Callout type="note">
-Reasoning is not just "longer answers." **Reasoning is *intermediate computation* that the model performs before committing to a final answer.** A reasoning trace is the model's scratch paper: each token in the trace gives the model another forward pass of compute, and each new token attends back through the KV cache (Chapter 17) to everything the model has thought so far. Even a perfectly trained chat model benefits from CoT on hard problems because the extra tokens buy more compute per query. The trick of the modern era is making the model decide on its own when to use that compute.
+Reasoning is not just "longer answers." Reasoning is *intermediate computation* that the model performs before committing to a final answer. A reasoning trace is the model's scratch paper: each token in the trace gives the model another forward pass of compute, and each new token attends back through the KV cache (Chapter 17) to everything the model has thought so far. Even a perfectly trained chat model benefits from CoT on hard problems because the extra tokens buy more compute per query. The trick of the modern era is making the model decide on its own when to use that compute.
 </Callout>
 
 ## Chain-of-thought prompting
 
 ### Few-shot CoT
 
-Wei et al. 2022 introduced **chain-of-thought prompting**: provide few-shot examples in which each answer includes its intermediate reasoning steps before the final answer. The model imitates the pattern and produces reasoning on the new query. The technique is mechanically trivial, a different prompt template, and empirically dramatic. **GPT-3 on GSM8K: direct ~$5\%$; CoT ~$46\%$. PaLM 540B: direct ~$17\%$; CoT ~$57\%$.** The paper's central claim is that the capability was already there; the prompt was what unlocked it. The model had seen enough step-by-step solutions during pre-training to know the form of mathematical reasoning, but in the absence of exemplars it defaulted to direct answer generation.
+Wei et al. 2022 introduced **chain-of-thought prompting**: provide few-shot examples in which each answer includes its intermediate reasoning steps before the final answer. The model imitates the pattern and produces reasoning on the new query. The technique is mechanically trivial, a different prompt template, and empirically dramatic. GPT-3 on GSM8K: direct ~$5\%$; CoT ~$46\%$. PaLM 540B: direct ~$17\%$; CoT ~$57\%$. The paper's central claim is that the capability was already there; the prompt was what unlocked it. The model had seen enough step-by-step solutions during pre-training to know the form of mathematical reasoning, but in the absence of exemplars it defaulted to direct answer generation.
 
 The choice of exemplars matters more than the count. **Few-shot CoT typically uses three to eight examples** drawn from the same problem domain, with intermediate steps that match the reasoning style the target query will need. Mismatched exemplars, say, exemplars that use one notation when the target query uses another, hurt performance even when the underlying math is identical. Production systems often retrieve relevant CoT examples per query rather than pinning a single static prompt template.
 
@@ -94,10 +94,8 @@ print("- This is the simplest reasoning technique that works.")
 </RunnableCode>
 
 <Callout type="aside">
-"CoT works because the model is being more honest about its thinking" is false. **The CoT trace is generation, not introspection.** The model produces tokens that *look like* reasoning, sometimes those tokens are an accurate reflection of its internal computation, but often they are plausible-sounding fabrications that nevertheless correlate with better answers. The empirical fact that CoT improves accuracy does not imply the trace reflects ground-truth reasoning. **CoT is a useful pattern, not a window into the model's mind.** The chapter returns to this distinction in section 7 with modern reasoning models, where the same caveat applies despite the traces being much longer.
+"CoT works because the model is being more honest about its thinking" is false. The CoT trace is generation, not introspection. The model produces tokens that *look like* reasoning, sometimes those tokens are an accurate reflection of its internal computation, but often they are plausible-sounding fabrications that nevertheless correlate with better answers. The empirical fact that CoT improves accuracy does not imply the trace reflects ground-truth reasoning. CoT is a useful pattern, not a window into the model's mind. The chapter returns to this distinction in section 7 with modern reasoning models, where the same caveat applies despite the traces being much longer.
 </Callout>
-
-The next section covers two techniques that aggregate or search over multiple traces, self-consistency and tree-of-thoughts, and where the test-time compute story begins.
 
 ## Self-consistency and tree-of-thoughts
 
@@ -115,7 +113,7 @@ The reason this works at all is the wisdom-of-crowds principle applied to one mo
 
 ### Tree-of-thoughts
 
-Yao et al. 2023 generalized the multi-trace idea to explicit search. **Tree-of-thoughts** represents reasoning as a tree: each "thought" is a node; child nodes extend the reasoning. A BFS or DFS expands promising branches and prunes weak ones, with the language model itself scoring intermediate states ("does this partial reasoning look like it is heading somewhere?"). The search backtracks when a branch looks unpromising, in a way that linear CoT cannot, once CoT commits to a wrong step, the rest of the trace is downstream of it.
+Yao et al. 2023 generalized the multi-trace idea to explicit search. **Tree-of-thoughts** represents reasoning as a tree: each "thought" is a node; child nodes extend the reasoning. A BFS or DFS expands promising branches and prunes weak ones, with the language model itself scoring intermediate states ("does this partial reasoning look like it is heading somewhere?"). The search backtracks when a branch looks unpromising, in a way that linear CoT cannot, once CoT commits to a wrong step, the rest of the trace is downstream of it. Some ToT variants swap the plain tree walk for **MCTS-style search**: instead of a heuristic score deciding which node to expand next, simulate full rollouts to a leaf, back up the result to estimate each node's value, and bias future expansion toward the highest-value branches, the same explore/exploit machinery behind AlphaGo's board-position search, repurposed for reasoning traces. MCTS costs more bookkeeping than plain BFS/DFS but handles deceptive intermediate states better, cases where a step looks weak by a shallow heuristic but leads somewhere good several moves later.
 
 The empirical wins are large but narrow. **ToT significantly outperforms CoT on planning puzzles**, Game of 24, creative writing tasks with multiple drafts, crosswords, where the search structure matches the problem's branching structure. On standard math benchmarks the win is smaller, and the cost is much higher: **ToT is typically $10\times$ to $100\times$ more expensive than CoT** for the same query, since each branch is a full sub-rollout. ToT pays off for hard problems that genuinely require backtracking and rarely for problems that do not. In production it is reached for sparingly; for most chat-style reasoning the modern reasoning models of section 7 win on both quality and cost.
 
@@ -169,10 +167,8 @@ print("- This is the simplest test-time compute technique that works.")
 </RunnableCode>
 
 <Callout type="warning">
-**Self-consistency needs *sampling variance*.** A common bug: running the same prompt $N$ times at temperature $0$, all samples are identical, no variance, no benefit. **Self-consistency requires non-zero temperature** (typical: $T = 0.7$, top-p $= 0.95$, see Chapter 19). The variance is what creates the wisdom-of-crowds effect; without it, $N = 10$ samples are just one sample copied ten times. If you run self-consistency and accuracy looks identical to single-sample greedy, check the temperature first.
+Self-consistency needs *sampling variance*. A common bug: running the same prompt $N$ times at temperature $0$, all samples are identical, no variance, no benefit. **Self-consistency requires non-zero temperature** (typical: $T = 0.7$, top-p $= 0.95$, see Chapter 19). The variance is what creates the wisdom-of-crowds effect; without it, $N = 10$ samples are just one sample copied ten times. If you run self-consistency and accuracy looks identical to single-sample greedy, check the temperature first.
 </Callout>
-
-The next section steps from "model thinking" to "model acting", the ReAct pattern, which closes the classic era and previews Chapter 21.
 
 ## ReAct and tool-integrated reasoning
 
@@ -195,15 +191,13 @@ Three things change once actions enter the loop. **Grounding**, each observation
 
 ### Bridge to Chapter 21
 
-This chapter establishes the pattern; Chapter 21 covers the engineering. **How are actions parsed?** Usually with constrained decoding (Chapter 19) so the action emits as valid JSON or a typed function call. **How are observations formatted?** Usually as a structured block the model has been trained or prompted to interpret. **How does the loop terminate?** Either when the model emits a designated final-answer marker, when a tool call returns a terminal result, or when a maximum step count is hit. **How are errors handled?** The model sees the tool's error message as the observation and decides whether to retry, fix the call, or give up.
+This chapter establishes the pattern; Chapter 21 covers the engineering. How are actions parsed? Usually with constrained decoding (Chapter 19) so the action emits as valid JSON or a typed function call. How are observations formatted? Usually as a structured block the model has been trained or prompted to interpret. How does the loop terminate? Either when the model emits a designated final-answer marker, when a tool call returns a terminal result, or when a maximum step count is hit. How are errors handled? The model sees the tool's error message as the observation and decides whether to retry, fix the call, or give up.
 
 All of that engineering belongs in Chapter 21. For this chapter, ReAct is the conceptual bridge from "model thinking" to "model acting," and the natural close of Topic 1. The classic era ended with the observation that reasoning and action can interleave; the modern era opens with the observation that the model can be *trained* to do this autonomously rather than prompted into it.
 
 <Callout type="note">
-The ReAct pattern is **arguably the most influential prompting paradigm in production LLM systems.** Every modern agent, whether built on Claude, GPT, or open-source models, uses some form of Thought → Action → Observation underneath the API. Chapter 21 covers the production engineering: parsing structured actions, validating observations, handling tool errors, terminating loops, and the practical question of which tools to expose. Here the point is just that the pattern exists and that it is where reasoning meets the outside world.
+The ReAct pattern is arguably the most influential prompting paradigm in production LLM systems. Every modern agent, whether built on Claude, GPT, or open-source models, uses some form of Thought → Action → Observation underneath the API. Chapter 21 covers the production engineering: parsing structured actions, validating observations, handling tool errors, terminating loops, and the practical question of which tools to expose. Here the point is just that the pattern exists and that it is where reasoning meets the outside world.
 </Callout>
-
-The next section opens Topic 2, the modern reasoning era, with process reward models, the first piece of machinery built specifically for trained reasoning.
 
 ## Process reward models
 
@@ -211,7 +205,7 @@ The next section opens Topic 2, the modern reasoning era, with process reward mo
 
 Topic 1 covered prompting; Topic 2 covers training. The hinge between them is **the reasoning-answer gap problem** that section 2 raised: a CoT trace can be wrong even when the answer is right (lucky guess) or right even when the answer is wrong (final-step slip). If the reward signal only sees the final answer, the model has no way to learn that a sloppy trace happened to work or that a careful trace landed in a typo. **Process reward models** (Lightman et al. 2023) address this by scoring *each step* of a reasoning trace, not just the final answer.
 
-The reward model is trained on per-step labels: "is this step correct given the steps before it?" Each step gets a score in $[0, 1]$, and the trace's overall score combines them (minimum, mean, or product, depending on the recipe). The training data is expensive: someone has to label intermediate reasoning steps, not just final answers, and the canonical dataset (PRM800K, the dataset behind Lightman 2023) used GPT-4 to generate step annotations for math problems at scale.
+The reward model is trained on per-step labels: "is this step correct given the steps before it?" Each step gets a score in $[0, 1]$, and the trace's overall score combines them (minimum, mean, or product, depending on the recipe). The training data is expensive: someone has to label intermediate reasoning steps, not just final answers. The canonical dataset (PRM800K, the dataset behind Lightman 2023) is exactly this: GPT-4 generated the candidate solutions to MATH problems, and human annotators then labeled roughly 800,000 individual steps across those solutions as positive, negative, or neutral. The expense is the human step-level labeling, not the solution generation.
 
 ### Two uses
 
@@ -221,7 +215,7 @@ PRMs serve two roles in the reasoning stack and the distinction matters for how 
 
 The simpler alternative is an **outcome reward model (ORM)** that only scores the final answer. ORMs need only outcome-level labels (much cheaper than per-step labels) and avoid the failure mode where a PRM hallucinates that an intermediate step is "correct" when it is not. PRMs offer denser feedback but introduce reward-hacking risks: the model can learn to *perform* reasoning steps that look correct to the PRM without those steps actually helping the answer.
 
-**The R1 surprise was decisive on this point.** DeepSeek showed that **pure outcome rewards work** for reasoning, no PRM needed; rule-based ORMs (exact-match on math; test-pass rate on code) trained via GRPO produced a model that matches o1 on hard benchmarks. The field has reconsidered whether PRMs are necessary for training. They are still useful for inference-time filtering, and they remain a research topic, but the simplest training recipe that works does not use them.
+The R1 surprise was decisive on this point. DeepSeek showed that **pure outcome rewards work** for reasoning, no PRM needed; rule-based verifiers (exact-match on math; test-pass rate on code) supplied the reward for a policy trained via GRPO (Chapter 14), producing a model that matches o1 on hard benchmarks. The field has reconsidered whether PRMs are necessary for training. They are still useful for inference-time filtering, and they remain a research topic, but the simplest training recipe that works does not use them.
 
 <RunnableCode client:visible>
 ```python
@@ -263,22 +257,20 @@ print("- This is the inference-time use of PRMs; no model retraining needed.")
 </RunnableCode>
 
 <Callout type="aside">
-"PRMs are strictly better than ORMs" is false. **R1 demonstrated that pure outcome rewards work** with no PRM. PRMs add complexity and can introduce reward-hacking, the model "performs reasoning steps" to score well, even when the steps do not help the answer. **Both have their place**: PRMs are still useful for inference-time filtering and as research artifacts; ORMs are simpler for training and were the engine behind the open-source reasoning breakthrough. The right default depends on the budget and what you can label.
+"PRMs are strictly better than ORMs" is false. **R1 demonstrated that pure outcome rewards work** with no PRM, and no learned ORM either — a rule-based verifier (exact-match, test-pass rate) was enough. PRMs add complexity and can introduce reward-hacking, the model "performs reasoning steps" to score well, even when the steps do not help the answer. **Both have their place**: PRMs are still useful for inference-time filtering and as research artifacts; rule-based outcome rewards are simpler for training and were the engine behind the open-source reasoning breakthrough. The right default depends on the budget and what you can label (or verify).
 </Callout>
-
-The next section covers the empirical observation that makes the modern paradigm work at all, test-time compute scaling.
 
 ## Test-time compute scaling
 
 ### The empirical claim
 
-Snell et al. 2024 ran the experiment that retroactively justified the o1/R1 design space. **For many tasks, increasing inference-time compute outperforms increasing model size.** The setup was a controlled sweep: take a fixed model; run it many ways at inference time, from direct generation ($1\times$ compute) through self-consistency and best-of-$N$ + PRM up to deep tree search ($100\times$+ compute); measure accuracy as a function of compute. The result, across the math benchmarks they studied, was that accuracy scales with inference compute along **surprisingly stable curves**. Doubling inference compute often beats doubling model size, especially on hard problems.
+Snell et al. 2024 ran the experiment that retroactively justified the o1/R1 design space. For many tasks, increasing inference-time compute outperforms increasing model size. The setup was a controlled sweep: take a fixed model; run it many ways at inference time, from direct generation ($1\times$ compute) through self-consistency and best-of-$N$ + PRM up to deep tree search ($100\times$+ compute); measure accuracy as a function of compute. The result, across the math benchmarks they studied, was that accuracy scales with inference compute along **surprisingly stable curves**. Doubling inference compute often beats doubling model size, especially on hard problems.
 
-The framing matters as much as the numbers. Before 2024, the operational story was simple: bigger model, better answers; compute spent at inference time is mostly fixed by the model size. Snell's result said that this is wrong, **inference compute is a separately tunable dimension that genuinely contributes to accuracy.** A smaller model with more thinking time can match a larger model with less thinking time on the kinds of problems where extra thinking helps. That observation made the o1/R1 paradigm economically defensible: training the model to think for ten minutes is absurd unless you have evidence that ten minutes of thinking is *worth* anything, and Snell provided the evidence.
+The framing matters as much as the numbers. Before 2024, the operational story was simple: bigger model, better answers; compute spent at inference time is mostly fixed by the model size. Snell's result said that this is wrong, inference compute is a separately tunable dimension that genuinely contributes to accuracy. A smaller model with more thinking time can match a larger model with less thinking time on the kinds of problems where extra thinking helps. That observation made the o1/R1 paradigm economically defensible: training the model to think for ten minutes is absurd unless you have evidence that ten minutes of thinking is *worth* anything, and Snell provided the evidence.
 
 ### The scaling curve
 
-The functional form Snell fit is the simplest one consistent with the data: accuracy depends on a product of model-size effect and compute effect, each with its own exponent.
+A schematic form that captures the qualitative shape of the data (not Snell's specific fitted model, which is an empirical compute-optimal allocation across difficulty bins rather than a single closed-form law): accuracy depends on a product of a model-size effect and a compute effect, each with its own exponent.
 
 <Equation label="20.test-time-scaling">
 $$\text{Accuracy}(\text{model size} = M, \text{compute} = C) \approx f(M^{\alpha} \cdot C^{\beta})$$
@@ -286,17 +278,15 @@ $$\text{Accuracy}(\text{model size} = M, \text{compute} = C) \approx f(M^{\alpha
 
 The empirical fact that $\beta > 0$ is the load-bearing observation, inference compute *contributes*, and the fact that $\beta$ is large enough to compete with $\alpha$ for relevant ranges of $(M, C)$ is what makes the trade interesting. The curve flattens on easy problems and on the very-large-$C$ tail (diminishing returns set in), but in the middle range it is essentially linear-in-log.
 
-The implication for deployment is real and the operational evidence is now everywhere. **Test-time compute is now a deployment knob.** o1's API exposes `reasoning_effort = low | medium | high`. R1's serving stack accepts `max_thinking_tokens`. Before 2024 there was no such knob; there was just the model. **Cost-quality trade-off**: $10\times$ to $100\times$ inference compute for hard problems can outperform a $10\times$ larger model, and is often the better economic choice when the harder model would have to be trained, served, and maintained from scratch.
+The implication for deployment is real and the operational evidence is now everywhere. Test-time compute is now a deployment knob. o1's API exposes `reasoning_effort = low | medium | high`. R1's serving stack accepts `max_thinking_tokens`. Before 2024 there was no such knob; there was just the model. **Cost-quality trade-off**: $10\times$ to $100\times$ inference compute for hard problems can outperform a $10\times$ larger model, and is often the better economic choice when the harder model would have to be trained, served, and maintained from scratch.
 
-<WidgetFrame title="Test-time compute scaling" caption="Accuracy vs inference compute across six reasoning techniques. Pick a problem difficulty (easy / medium / hard) and watch the curves. On easy problems, everyone reaches the ceiling fast, extra compute is wasted. On hard problems, modern reasoning models pull 30+ points ahead. This is Snell 2024's central empirical insight, and the economic foundation of the o1/R1 paradigm.">
+<WidgetFrame title="Test-time compute scaling" caption="Accuracy vs inference compute across six reasoning techniques. Pick a problem difficulty (easy / medium / hard) and watch the curves. On easy problems, everyone reaches the ceiling fast, extra compute is wasted. On hard problems, modern reasoning models pull roughly 20 points ahead of the next-best technique (best-of-N+PRM) and 60+ points ahead of direct generation. This is Snell 2024's central empirical insight, and the economic foundation of the o1/R1 paradigm.">
   <TestTimeComputeCurves client:visible />
 </WidgetFrame>
 
 <Callout type="note">
-"Test-time compute always pays off" is false. **Diminishing returns are real.** Spending $100\times$ inference compute on a question the model could already answer at $1\times$ is wasteful, and the curve flattens fast on easy problems. **Scaling helps most on the *hardest* problems**, where the marginal benefit of extra thinking is largest, sometimes $30$+ percentage points on AIME-style math, almost nothing on factual recall. The right serving strategy routes problem difficulty to compute budget, not the other way around. Modern reasoning APIs expose the knob; the engineering is in deciding when to turn it.
+"Test-time compute always pays off" is false. Diminishing returns are real. Spending $100\times$ inference compute on a question the model could already answer at $1\times$ is wasteful, and the curve flattens fast on easy problems. Snell's own difficulty-binned result is more specific than "harder is always better": compute-optimal test-time scaling most reliably beats a much larger model (their headline comparison: up to $14\times$ larger) on **easy-to-medium** problems; on the very hardest problems in their study, spending the equivalent compute on *pretraining* a bigger model still won. The separate observation that **thinking helps most on the hardest problems**, sometimes $30$+ percentage points on AIME-style math, almost nothing on factual recall, is the o1/R1-era empirical finding, not Snell's compute-allocation result. The right serving strategy routes problem difficulty to compute budget, not the other way around. Modern reasoning APIs expose the knob; the engineering is in deciding when to turn it.
 </Callout>
-
-The next section covers the production models that turned this empirical result into a paradigm, o1, R1, and Gemini Thinking.
 
 ## Modern reasoning models: o1, R1, Gemini Thinking
 
@@ -304,15 +294,39 @@ The next section covers the production models that turned this empirical result 
 
 OpenAI released o1 in September 2024 as the first widely-deployed reasoning model. The system card and announcement covered the deployable behavior more than the training recipe, but the pattern is clear in the externally visible properties. **o1 has an internal chain-of-thought, trained via RL**, not a CoT prompt applied at inference, but a reasoning behavior baked into the weights. It **thinks for variable time before answering**, from roughly ten seconds on easy queries to several minutes on hard ones, with the deployment exposing this through the `reasoning_effort` knob. The results are substantially ahead of GPT-4 class models on math (AIME, IMO problems), code (Codeforces-level competitive programming), and science (PhD-level physics). **o1 does not reveal its internal reasoning trace** to the user, a design choice OpenAI made for a mix of competitive and safety reasons. The user sees only the final answer.
 
+o1 itself is history now: OpenAI succeeded it with o3 in April 2025, then folded the reasoning line into the GPT-5 family (through GPT-5.6 as of mid-2026), each generation keeping the same "think before answering, RL-trained" shape while pushing the effort/quality knob further. o1 is still the cleanest first example of the paradigm, which is why it anchors this section; as of $2026$-$07$-$13$ it is no longer the frontier model, and this space moves fast enough that any specific model name here will be superseded again within the year.
+
 ### DeepSeek R1
 
-DeepSeek released R1 in January 2025 and the field's center of gravity shifted within weeks. **R1 matched o1's reasoning ability on math and code benchmarks, open-source.** The paper released the recipe in usable detail: start with a base model; apply rule-based outcome rewards (exact match for math; test-pass rate for code); run RLVR via GRPO (Chapter 14); train. **No PRM. No SFT bootstrap.** The result was a model that learns to generate long reasoning traces, sometimes $10{,}000$+ thinking tokens, that produce correct answers, with the entire trace exposed in `<think>...</think>` tags so users can see what the model considered. DeepSeek also released **distilled smaller models** (1.5B to 32B; Chapter 16) that inherit much of R1's reasoning capability, the recipe transfers via distillation, and small reasoning models became a practical option overnight.
+DeepSeek released R1 in January 2025 and the field's center of gravity shifted within weeks. R1 matched o1's reasoning ability on math and code benchmarks, open-source. The paper's most surprising result actually belongs to an intermediate model, **R1-Zero**: apply rule-based outcome rewards (exact match for math; test-pass rate for code) directly to a base model via RLVR through GRPO (Chapter 14). **No PRM. No SFT bootstrap at any stage.** R1-Zero learned to generate long, effective reasoning traces from outcome reward alone, proof that SFT scaffolding was not strictly necessary to bootstrap reasoning. The released **R1** builds on that result but is not itself pure-RL: DeepSeek added a small cold-start SFT stage before RL (and a further rejection-sampled SFT round afterward) specifically to fix R1-Zero's readability and language-mixing problems, then continued training with rule-based rewards and GRPO. The result, R1, generates long reasoning traces, sometimes $10{,}000$+ thinking tokens, that produce correct answers, with the entire trace exposed in `<think>...</think>` tags so users can see what the model considered. DeepSeek also released **distilled smaller models** (1.5B to 70B; Chapter 16) that inherit much of R1's reasoning capability, the recipe transfers via distillation, and small reasoning models became a practical option overnight.
 
-The implication is the one that mattered most for the field: **a pure-outcome RL recipe, with no PRM and no SFT bootstrap, produces a model that thinks effectively.** Before R1 the assumed recipe for trained reasoning required PRMs and SFT scaffolding; after R1 the field reconsidered whether either was necessary. The open weights and the published recipe meant anyone could reproduce the result, and many groups did within a quarter.
+The implication is the one that mattered most for the field: **R1-Zero showed that a pure-outcome RL recipe, with no PRM and no SFT bootstrap, can produce a model that thinks effectively**, and R1 showed that a small dose of SFT is enough to fix the rough edges without giving up the RL-driven gains. Before R1(-Zero) the assumed recipe for trained reasoning required PRMs and SFT scaffolding; afterward the field reconsidered whether either was necessary. The open weights and the published recipe meant anyone could reproduce the result, and many groups did within a quarter.
+
+DeepSeek's own production line has moved on from R1: DeepSeek-V4 (April 2026) is a hybrid thinking/non-thinking model built around a different, more compute-efficient attention architecture, and no separate "R2" has shipped as of $2026$-$07$-$13$. None of that changes why R1 is taught here: it remains the clearest open, reproducible instance of RLVR-plus-GRPO with no PRM and no SFT bootstrap, and every open reasoning model released since has followed the recipe it demonstrated.
+
+### RLVR and GRPO: what "trained via GRPO" actually means
+
+Every mention of R1's training in this chapter has deferred to Chapter 14 for the mechanics. Two ideas are worth unpacking here, because they are the two curriculum-level claims the R1 result rests on. **RLVR (RL with Verifiable Rewards)** is a reward-design choice: the reward for a rollout comes from a *verifier* that checks correctness directly, exact-match against a ground-truth number for math, a test suite passing for code, a proof checker accepting a derivation, rather than from a learned reward model trained on human preferences. There is no reward model in the loop at all; the check is deterministic and the same every time it runs.
+
+**GRPO (Group Relative Policy Optimization)** is the optimizer R1 pairs with that reward. PPO's advantage estimate needs a learned value function, a second trained model (the critic) that predicts expected return from a state, specifically so the policy update has a low-variance baseline to subtract. GRPO removes the critic entirely. For a given prompt, sample a **group** of $G$ completions from the current policy, score each one with the reward (the verifier, here), and use the group's own mean reward as the baseline directly:
+
+<Equation label="20.grpo-advantage">
+$$A_i = R_i - \bar{R}, \qquad \bar{R} = \frac{1}{G}\sum_{j=1}^{G} R_j$$
+</Equation>
+
+Completions that scored above the group average get positive advantage; completions that scored below it get negative advantage; this single scalar $A_i$ is broadcast to every token of completion $y_i$, so the credit-assignment question ("which token in this trace deserves the credit?") gets resolved by ignoring it, every token in an above-average completion is pushed up equally. No value function is trained, no critic model exists, and the baseline costs nothing beyond computing a mean over $G$ numbers you already had. That is the "shift away from value models" the curriculum points at: pair RLVR's verifier with GRPO's group baseline and two of PPO's models, the reward model and the critic, both disappear, leaving just the policy and a frozen reference to KL against. <EqRef id="20.grpo-advantage" /> is a simplified read of the objective; Chapter 14 derives the full clipped-surrogate GRPO loss, including the group standard-deviation normalization and the explicit KL term.
+
+### The aha moment
+
+DeepSeek's R1 paper reports something the training recipe never specified: as RLVR training on R1-Zero progressed, the model's reasoning traces got measurably longer, and their character changed. The model started pausing mid-trace to reconsider a step, trying a second approach after the first one stalled, and explicitly re-checking an intermediate answer before committing to a final one, behavior the paper's authors describe encountering as an "aha moment" when they read the transcripts. None of this was demonstrated anywhere in training. RLVR's reward only ever checked the final answer; no SFT data showed the model what backtracking looks like, and no prompt template asked for it. The behavior emerged because outcome reward pushed up the token probabilities of whichever sampled completions happened to land on the correct answer, and some of the completions that happened to land correctly also happened to backtrack along the way.
+
+<Callout type="insight">
+The aha moment is striking evidence that RL training *can* discover reasoning strategies nobody hand-specified, not evidence that the model has learned to introspect. The mechanism, why backtracking specifically is the behavior that outcome reward selects for, is not understood; DeepSeek's paper is candid about this. Treat it the same way section 2's aside treated CoT traces generally: a real, reproducible training-time phenomenon, not a window into what the model is "thinking."
+</Callout>
 
 ### The paradigm shift
 
-**Gemini Thinking** (December 2024) is Google's variant of the same paradigm, internal reasoning trained via RL; thinking traces exposed to the user; similar performance profile on math and code. The exact training details differ but the shape is the same as R1's and the user-facing behavior is similar.
+**Gemini Thinking** (December 2024) is Google's variant of the same paradigm, internal reasoning trained via RL; thinking traces exposed to the user; similar performance profile on math and code. The exact training details differ but the shape is the same as R1's and the user-facing behavior is similar. Google's reasoning line has since become **Gemini 3 Deep Think**, a heavier reasoning mode layered on Gemini 3 Pro; **Claude** has converged on the same idea too, with Anthropic's extended thinking (an effort parameter toggling how much internal reasoning the model spends before answering) shipping through the Opus 4.x line. Three labs converging on "train the model to think longer, expose or hide the trace, expose an effort knob" is the strongest evidence that this is a paradigm and not a one-off trick, and it is why the RLVR and GRPO mechanics covered above are worth learning in general rather than as trivia about any one 2024–2025 model.
 
 The shift from classic to modern is sharp enough to state directly. **Classic era:** CoT was a *prompt* applied at inference. Same model, different prompt; the reasoning was something the model could be coaxed into doing. **Modern era:** reasoning is *trained in* via RL. The model *autonomously* decides when and how long to think. The trace lives behind a structural marker (`<think>...</think>` for R1, hidden for o1) and the model emits as much or as little of it as the problem warrants.
 
@@ -322,13 +336,11 @@ The compact form:
 $$\text{Model}(\text{prompt}) \to \langle \text{think} \rangle \, \text{long reasoning trace} \, \langle / \text{think} \rangle \to \text{answer}$$
 </Equation>
 
-The model emits the reasoning autonomously; the user sees the answer (o1) or both (R1, Gemini Thinking). The bridge back to earlier chapters is direct. **Long reasoning traces stress the KV cache aggressively**, $10{,}000$+ thinking tokens per query is routine for hard problems, and that memory pressure is what makes PagedAttention (Chapter 17) essential for serving reasoning models efficiently. Some production stacks combine reasoning models with **KV cache quantization** (Chapter 18) to keep the memory cost tractable. The deployment engineering of Phase 12 is what made the modern reasoning paradigm shippable.
+The model emits the reasoning autonomously; the user sees the answer (o1) or both (R1, Gemini Thinking). The bridge back to earlier chapters is direct. **Long reasoning traces stress the KV cache aggressively**, $10{,}000$+ thinking tokens per query is routine for hard problems, and that memory pressure is what makes PagedAttention (Chapter 17) essential for serving reasoning models efficiently. Some production stacks combine reasoning models with **KV cache quantization** (Chapter 18) to keep the memory cost tractable. The deployment engineering of Part VI is what made the modern reasoning paradigm shippable.
 
 <Callout type="note">
-**R1 is the most accessible exemplar of the modern paradigm**, open-source, transparent, replicable. The recipe is simple in concept: start with a base model; apply RLVR (Chapter 14) with rule-based outcome rewards (math exact match; code test-pass rate); train via GRPO. The breakthrough was that this works **at all without any SFT bootstrap**, the model learns to think purely from outcome reward, with no demonstrations of what good reasoning looks like. That is the result that changed the field's assumed recipe for trained reasoning, and it is the result that this chapter's modern era is built on.
+**R1 and R1-Zero together are the most accessible exemplars of the modern paradigm**, open-source, transparent, replicable. The recipe is simple in concept: start with a base model; apply RLVR (Chapter 14) with rule-based outcome rewards (math exact match; code test-pass rate); train via GRPO. The breakthrough, demonstrated by **R1-Zero**, was that this works **at all without any SFT bootstrap**, the model learns to think purely from outcome reward, with no demonstrations of what good reasoning looks like. The shipped **R1** adds a light cold-start SFT stage on top of that recipe for readability, but the core result, that outcome-only RL produces effective reasoning, is R1-Zero's. That is the result that changed the field's assumed recipe for trained reasoning, and it is the result that this chapter's modern era is built on.
 </Callout>
-
-The final section pulls Topic 1 and Topic 2 together with a decision rule and a Phase 13 preview.
 
 ## Exercises
 
@@ -409,6 +421,35 @@ questions = [
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+The prompt function just appends the trigger phrase; the extractor tries the two labeled patterns before falling back to the last number in the trace.
+
+```python
+import re
+
+def zero_shot_cot_prompt(question):
+    return question + " Let's think step by step."
+
+def extract_numeric_answer(trace):
+    m = re.search(r"answer is (\d+(?:\.\d+)?)", trace.lower())
+    if m:
+        return float(m.group(1)) if "." in m.group(1) else int(m.group(1))
+    m = re.search(r"answer:\s*(\d+(?:\.\d+)?)", trace.lower())
+    if m:
+        return float(m.group(1)) if "." in m.group(1) else int(m.group(1))
+    nums = re.findall(r"\d+(?:\.\d+)?", trace)
+    if not nums:
+        return None
+    last = nums[-1]
+    return float(last) if "." in last else int(last)
+```
+
+Run against the three questions: direct generation returns 120 for all three (the mock's fallback, wrong every time); zero-shot CoT returns 30, 9, 52 (all correct). The extractor catches "The answer is 30." via pattern 1, "Answer: 9." via pattern 2, and "52 books remain" (no labeled phrase) via the last-number fallback.
+
+</details>
+
 ### Exercise 2 (medium): Self-consistency aggregation
 
 Implement self-consistency: given N traces (with varied final answers), return the majority answer and confidence. Verify the wisdom-of-crowds effect on a noisy trace pool.
@@ -486,6 +527,28 @@ mock_pool = [
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Count extracted answers, take the mode, and report its share of the total as confidence.
+
+```python
+from collections import Counter
+
+def self_consistency(traces):
+    answers = [extract_numeric_answer(t) for t in traces]
+    answers = [a for a in answers if a is not None]
+    if not answers:
+        return None, 0.0
+    counts = Counter(answers)
+    majority, count = counts.most_common(1)[0]
+    return majority, count / len(answers)
+```
+
+With `random.seed(42)` on `mock_pool` (8 correct at 30, 2 wrong at 40/25), sampling gives: N=1 -> 30 (100%), N=3 -> 30 (100%), N=5 -> 30 (80%), N=7 -> 30 (71%), N=10 -> 30 (80%). Every draw in this particular seeded run lands on the correct majority — with only 2 wrong traces out of 10, a wrong-outlier draw is possible at small N (20% chance at N=1) but this seed doesn't hit it. The underlying mechanism still holds: at N=1 you're exposed to the full 20% error rate of a single trace, while at N>=5 the wrong traces would need to be a majority of the sample to flip the vote, which is increasingly unlikely as N grows.
+
+</details>
 
 ### Exercise 3 (medium): Best-of-N with PRM scoring
 
@@ -585,13 +648,38 @@ mock_pool = [
 #
 # # Observation:
 # # - Random single: ~70% reliable here
-# # - Majority vote: more robust (~95% with this pool)
+# # - Majority vote: correct and deterministic on this fixed 10-trace pool (7/10 agree on 30)
 # # - Best-of-N + PRM: picks the *best-reasoned* trace
 # # - When PRM is informative, BoN+PRM ≥ majority vote in expectation.
 # # - When PRM is uninformative (random scores), BoN+PRM ≈ random single.
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+The mock PRM combines three cheap proxies for reasoning quality — length (capped), density of math operators (capped), and absence of hedging language — into a score in [0, 1]; best-of-N just takes the argmax.
+
+```python
+def mock_prm_score(trace):
+    score = 0.0
+    score += min(len(trace) / 100, 1.0) * 0.4        # length, capped
+    math_ops = sum(trace.count(op) for op in ['=', '/', '+', '-'])
+    score += min(math_ops / 4, 1.0) * 0.4              # math density, capped
+    lower = trace.lower().strip()
+    if not (lower.startswith("i think") or lower.startswith("maybe") or "guess" in lower):
+        score += 0.2                                    # confident phrasing
+    return score
+
+def best_of_n_prm(traces):
+    best_trace = max(traces, key=mock_prm_score)
+    return best_trace, extract_numeric_answer(best_trace)
+```
+
+With `rng = random.Random(0)` on the 10-trace pool (7 correct at 30, 3 wrong): `random_single` draws "Maybe 25? Answer is 25." — wrong. `majority_vote` returns 30 (7/10 agree). `best_of_n_prm` scores the most detailed correct trace ("We have distance=60 and time=2, so speed = 60/2 = 30. Answer: 30.", score 0.86) above everything else, including above the uncertain wrong traces (which score 0.09-0.16 for starting with "I think"/"Maybe" or containing "guess"), and returns 30. Here majority vote and best-of-N+PRM agree because both signals point the same way; the PRM's edge shows up when the correct answer is a minority but better-reasoned than the wrong majority, which majority vote alone can't detect.
+
+</details>
 
 ### Exercise 4 (hard): Test-time compute scaling math
 
@@ -645,8 +733,8 @@ def majority_vote_accuracy(p, n):
 #
 # # Observations:
 # # - p=0.5: majority vote at any N is 50% (no info to extract)
-# # - p=0.7: saturates around 90% by N=21, with diminishing returns
-# # - p=0.9: saturates around 99% by N=11
+# # - p=0.7: reaches ~90% around N=9-11, and ~97% by N=21, with diminishing returns
+# # - p=0.9: saturates around 99% by N=9-11
 # #
 # # The qualitative pattern matches the marquee widget:
 # # - Curves saturate
@@ -666,6 +754,25 @@ def majority_vote_accuracy(p, n):
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Sum the binomial tail from the majority threshold to N, using `math.comb` for the coefficients.
+
+```python
+import math
+
+def majority_vote_accuracy(p, n):
+    return sum(
+        math.comb(n, j) * p**j * (1 - p) ** (n - j)
+        for j in range(math.ceil(n / 2), n + 1)
+    )
+```
+
+Values: p=0.5 stays at 50% for every N (no signal to extract, as expected — averaging noise gives noise). p=0.7 climbs 70% (N=1) -> 90.1% (N=9) -> 92.2% (N=11) -> 97.4% (N=21) -> 99.9% (N=51), reaching 95% at N=10. p=0.9 climbs 90% (N=1) -> 99.1% (N=5) -> 99.9% (N=9) -> essentially 100% by N=15. This reproduces the widget's qualitative pattern exactly: curves saturate, higher starting accuracy saturates faster, and returns diminish sharply past the first ~10-20 samples — which is why self-consistency is typically run at N in the 5-40 range rather than the hundreds.
+
+</details>
+
 ## The full picture
 
 ### When to use which technique
@@ -683,17 +790,17 @@ The chapter covered eight techniques across two eras. The decision rule across t
 | Best-of-$N$ + PRM | When intermediate scoring is feasible | $N\times$ |
 | Modern reasoning model | Hard math, code, science | $10\text{–}100\times$ |
 
-For most chat tasks, modern instruction-tuned models with zero-shot CoT suffice, the model already produces step-by-step reasoning when the prompt invites it, and self-consistency is unnecessary at the accuracy level chat users care about. For hard reasoning, competition math, code with subtle bugs, multi-step science problems, **modern reasoning models (o1, R1) are now the default.** They are expensive per query and slow at the high-effort setting, but the alternative is failure on problems that direct generation simply cannot reach.
+For most chat tasks, modern instruction-tuned models with zero-shot CoT suffice, the model already produces step-by-step reasoning when the prompt invites it, and self-consistency is unnecessary at the accuracy level chat users care about. For hard reasoning, competition math, code with subtle bugs, multi-step science problems, trained reasoning models are now the default. o1 and R1 are the models that defined this category and are still the cleanest teaching examples of the recipe; the frontier has since moved to their successors (OpenAI's o3/GPT-5 line, DeepSeek's V4, Gemini 3 Deep Think, Claude's extended thinking), all running the same "think longer, autonomously, via RL" pattern. They are expensive per query and slow at the high-effort setting, but the alternative is failure on problems that direct generation simply cannot reach.
 
-### What's next in Phase 13
+### What's next in Part VII
 
-Phase 13 is four chapters and reasoning is the first one. The trajectory:
+Part VII is four chapters and reasoning is the first one. The trajectory:
 
 - **Chapter 21 (tool use)** extends the ReAct pattern of section 4 into engineered systems. Function calling, structured action parsing (the constrained decoding of Chapter 19 does its operational work here), tool-error handling, and the agent loop.
 - **Chapter 22 (RAG)** covers retrieval-augmented generation. The model looks up relevant context from a vector store and conditions on it; ReAct-style search is a special case.
 - **Chapter 23 (multimodal)** covers vision, audio, and video, how the same transformer backbone extends to non-text inputs.
-- **After Phase 13:** safety, interpretability, and evaluation (Phase 14); then agents (Phase 15), where reasoning, tools, retrieval, and multimodal all combine into the systems the curriculum has been building toward.
+- **After Part VII:** safety, interpretability, and evaluation (Part VIII); then agents (Part IX), where reasoning, tools, retrieval, and multimodal all combine into the systems the curriculum has been building toward.
 
-Reasoning is the capability that turns deployable models into useful systems. The classic era, CoT, self-consistency, ToT, ReAct, discovered the techniques that work on any model. The modern era, PRMs, test-time compute scaling, o1, R1, Gemini Thinking, trained reasoning directly via RLVR, with test-time compute as a first-class deployment knob. **Both eras remain relevant**: CoT prompting still works on any model and is essentially free; modern reasoning models are state-of-the-art for hard tasks and are now the default when accuracy on competition-level problems matters more than per-query cost.
+Reasoning is the capability that turns deployable models into useful systems. The classic era, CoT, self-consistency, ToT, ReAct, discovered the techniques that work on any model. The modern era, PRMs, test-time compute scaling, o1, R1, Gemini Thinking, trained reasoning directly via RLVR, with test-time compute as a first-class deployment knob; o1 and R1 defined that era, and every reasoning model shipped since, up through 2026's o3/GPT-5 line, DeepSeek V4, Gemini 3 Deep Think, and Claude's extended thinking, still runs the recipe they established. **Both eras remain relevant**: CoT prompting still works on any model and is essentially free; modern reasoning models are state-of-the-art for hard tasks and are now the default when accuracy on competition-level problems matters more than per-query cost.
 
-Chapter 21 opens next with tool use. Where reasoning gave the model time to think, tools give it the ability to *act*, call APIs, search the web, execute code, retrieve information from systems the model itself does not know about. **The ReAct pattern this chapter introduced is the foundation; Chapter 21 covers the engineering.** Chapter 22 covers RAG; Chapter 23 covers multimodal. By the end of Phase 13 the curriculum has a model that reasons, uses tools, retrieves knowledge, and handles non-text inputs, the full capability stack of a modern AI system, with Phases 14 and 15 layering safety, evaluation, and agency on top.
+Where reasoning gave the model time to think, tools give it the ability to *act*, call APIs, search the web, execute code, retrieve information from systems the model itself does not know about. The ReAct pattern this chapter introduced is the foundation; Chapter 21 covers the engineering, and Chapter 22 covers RAG while Chapter 23 covers multimodal systems. By the end of Part VII the curriculum has a model that reasons, uses tools, retrieves knowledge, and handles non-text inputs, the full capability stack of a modern AI system, with Parts VIII and IX layering safety, evaluation, and agency on top.

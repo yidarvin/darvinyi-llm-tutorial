@@ -196,9 +196,95 @@ for (pair, merged) in merges[:8]:
   height={540}
 />
 
-The first merge on this corpus is usually *t* + *h*, the most frequent adjacent pair, because *the* appears six times. The second is *th* + *e*, collapsing *the* into a single token. From there, common bigrams in the corpus get pulled together in roughly frequency order. With a larger corpus, the same algorithm produces the vocabularies that ship with GPT-2 and LLaMA, same loop, different scale.
+The first merge on this corpus is *t* + *h*, because *the* appears five times, tying *t*+*h*, *h*+*e*, and *a*+*t* for the most frequent adjacent pair; the code's deterministic tiebreak (lexicographic on the byte pair) picks *t*+*h* first. The second is *th* + *e*, collapsing *the* into a single token. From there, common bigrams in the corpus get pulled together in roughly frequency order. With a larger corpus, the same algorithm produces the vocabularies that ship with GPT-2 and LLaMA, same loop, different scale.
 
-There is a problem with the version above. The base alphabet is bytes, which sidesteps an issue character-level BPE has with Unicode. The next section makes that explicit.
+### Decoding: bytes back out
+
+The `merges` list trained above is enough to encode; decoding, going back from token IDs to text, is its mirror image. Look up each ID's byte string in the vocabulary and concatenate them in the order they occur. The result is a single byte string; UTF-8-decoding it recovers the original text.
+
+<Equation>
+$$
+\text{token IDs} \xrightarrow{\;\text{vocab lookup}\;} \text{byte strings} \xrightarrow{\;\text{concatenate}\;} \text{bytes} \xrightarrow{\;\text{UTF-8 decode}\;} \text{string}
+$$
+</Equation>
+
+Every vocabulary entry, by construction, is itself a concatenation of smaller byte strings all the way down to the base 256 single bytes. Concatenating the vocabulary entries for any sequence of token IDs the encoder could actually produce always yields a valid, complete byte string, so the whole pipeline is lossless: `decode(encode(text)) == text` for every string in the input space, not just the training corpus. This is the round-trip guarantee that makes tokenization safe to treat as a reversible preprocessing step rather than a lossy one.
+
+<RunnableCode
+  client:visible
+  defaultCode={`from collections import Counter, defaultdict
+
+def train_bpe(words, vocab_size=270):
+    word_freq = Counter(tuple(bytes([b]) for b in w.encode('utf-8')) for w in words)
+    vocab = {bytes([i]) for i in range(256)}
+    merges = []
+    while len(vocab) < vocab_size:
+        pair_counts = defaultdict(int)
+        for word, count in word_freq.items():
+            for i in range(len(word) - 1):
+                pair_counts[(word[i], word[i+1])] += count
+        if not pair_counts:
+            break
+        best = max(pair_counts, key=lambda p: (pair_counts[p], p))
+        new_token = best[0] + best[1]
+        vocab.add(new_token)
+        merges.append((best, new_token))
+        new_freq = {}
+        for word, count in word_freq.items():
+            new_word, i = [], 0
+            while i < len(word):
+                if i < len(word) - 1 and (word[i], word[i+1]) == best:
+                    new_word.append(new_token); i += 2
+                else:
+                    new_word.append(word[i]); i += 1
+            new_freq[tuple(new_word)] = count
+        word_freq = new_freq
+    return merges, vocab
+
+def encode(text, merges):
+    tokens = [bytes([b]) for b in text.encode('utf-8')]
+    for (a, b), merged in merges:
+        new_tokens, i = [], 0
+        while i < len(tokens):
+            if i < len(tokens) - 1 and (tokens[i], tokens[i+1]) == (a, b):
+                new_tokens.append(merged); i += 2
+            else:
+                new_tokens.append(tokens[i]); i += 1
+        tokens = new_tokens
+    return tokens
+
+def decode(tokens):
+    """Concatenate token byte-strings and UTF-8-decode. The inverse of encode()."""
+    return b"".join(tokens).decode('utf-8')
+
+# Same corpus and training loop as the toy example above.
+corpus = "the cat sat on the mat the dog sat on the rug the cat purred".split()
+merges, vocab = train_bpe(corpus, vocab_size=270)
+
+# Round-trip verification: encode then decode should recover the original string.
+for word in ["the", "cat", "purring", "café"]:
+    tokens = encode(word, merges)
+    restored = decode(tokens)
+    print(f"{word!r:10s} -> {len(tokens)} tokens -> decode: {restored!r}  (match: {restored == word})")
+
+# The edge case: 'café' ends in a two-byte UTF-8 character, split across two
+# byte-level tokens (this training corpus never saw 'café', so the pair
+# never merged). Decoding those tokens *individually*, instead of
+# concatenating first, breaks on the lone continuation byte.
+last_two = encode("café", merges)[-2:]
+print("last two byte-tokens of 'café':", last_two)
+try:
+    last_two[-1].decode('utf-8')
+except UnicodeDecodeError as e:
+    print("decoding the last token alone fails:", e)
+`}
+  packages={[]}
+  height={480}
+/>
+
+The failure at the end of that block is not a bug, it is the reason production decoders never decode token-by-token. A streaming chat completion emits token IDs one at a time; if a multi-byte Unicode character happens to be split across two tokens (`café`'s `é` is two bytes, `\xc3\xa9`, and BPE has no obligation to keep character boundaries intact when it merges bytes), decoding the first of those two tokens in isolation produces an invalid UTF-8 sequence. Real streaming implementations buffer raw bytes across token boundaries and only attempt a UTF-8 decode once they have a complete character, exactly the pattern OpenAI's and Anthropic's streaming APIs use under the hood.
+
+There is a problem with the training loop above, independent of decoding. The base alphabet is bytes, which sidesteps an issue character-level BPE has with Unicode. The next section makes that explicit.
 
 ## Byte-level BPE: handling all unicode
 
@@ -259,7 +345,7 @@ $$
 
 which rewards pairs whose joint frequency is high relative to the product of their marginals, pairs that "really do" go together, rather than pairs that happen to co-occur because both halves are individually common.
 
-In practice, WordPiece and BPE produce similar tokenizations on most inputs but disagree at the margins. WordPiece is used by the BERT family, BERT itself, DistilBERT, MobileBERT, ELECTRA, and by Google's earlier neural machine translation work, where it was introduced (Wu et al. 2016, [arxiv.org/abs/1609.08144](https://arxiv.org/abs/1609.08144)). BERT's WordPiece tokenizer also uses a different convention for whitespace and word boundaries: subword continuation pieces are prefixed with `##` (so *tokenization* might tokenize as `token`, `##ization`), rather than including a leading space as part of the next token.
+In practice, WordPiece and BPE produce similar tokenizations on most inputs but disagree at the margins. WordPiece was introduced by Schuster and Nakajima (2012, "Japanese and Korean Voice Search") for speech recognition, then popularized for neural machine translation by Wu et al. (2016, [arxiv.org/abs/1609.08144](https://arxiv.org/abs/1609.08144), the GNMT paper), which is where BERT picked it up two years later. WordPiece is used by the BERT family, BERT itself, DistilBERT, MobileBERT, ELECTRA. BERT's WordPiece tokenizer also uses a different convention for whitespace and word boundaries: subword continuation pieces are prefixed with `##` (so *tokenization* might tokenize as `token`, `##ization`), rather than including a leading space as part of the next token.
 
 **Unigram LM** is a different algorithm entirely. Kudo (2018, [arxiv.org/abs/1804.10959](https://arxiv.org/abs/1804.10959)) starts not from a small alphabet that gets merged upward, but from a *large* candidate vocabulary that gets pruned downward:
 
@@ -268,13 +354,13 @@ In practice, WordPiece and BPE produce similar tokenizations on most inputs but 
 3. Iteratively remove the candidates whose removal hurts the corpus likelihood least, until the vocabulary reaches the target size.
 4. At encoding time, find the segmentation of the input that maximizes the unigram likelihood.
 
-Unigram LM has two useful properties BPE lacks. First, the encoder is *probabilistic* in a way that admits multiple valid segmentations per input, a feature called *subword regularization*, used as a form of data augmentation during model training. Second, the algorithm naturally supports *byte fallback*: if a word cannot be segmented from the learned vocabulary, fall back to its raw bytes, guaranteeing no-OOV in the same way byte-level BPE does. Unigram LM is used by T5, mT5, ALBERT, XLNet, and Mistral.
+Unigram LM has two useful properties BPE lacks. First, the encoder is *probabilistic* in a way that admits multiple valid segmentations per input, a feature called *subword regularization*, used as a form of data augmentation during model training. Second, the algorithm naturally supports *byte fallback*: if a word cannot be segmented from the learned vocabulary, fall back to its raw bytes, guaranteeing no-OOV in the same way byte-level BPE does. Unigram LM is used by T5, mT5, ALBERT, and XLNet.
 
 Practical map of which model family uses which tokenizer:
 
-- **BPE / byte-level BPE:** GPT-2, GPT-3, GPT-4, LLaMA, Code Llama, most open-source models
+- **BPE / byte-level BPE:** GPT-2, GPT-3, GPT-4, LLaMA, Mistral, Gemma, Code Llama, most open-source models
 - **WordPiece:** BERT, DistilBERT, MobileBERT, ELECTRA
-- **Unigram LM:** T5, mT5, ALBERT, XLNet, current Mistral (with byte fallback), Gemma
+- **Unigram LM:** T5, mT5, ALBERT, XLNet
 
 The three algorithms produce *different* segmentations of the same text. The string `tokenization` becomes `["token", "ization"]` under one, `["token", "##ization"]` under another, and `["▁token", "ization"]` under a third (SentencePiece prefixes whitespace with `▁`). Switching between them requires retraining the model from scratch; the embedding table is keyed to specific token IDs, the output projection is sized to a specific vocab, and every position in the training corpus is preprocessed by a specific tokenizer.
 
@@ -360,24 +446,65 @@ The model learns what each special token *means* the same way it learns what `th
 This is the structural reason prompt formatting matters as much as it does. When a user sends a prompt formatted differently from how the model was trained (wrong special tokens, missing system message wrapper, leading-space convention reversed), the model is in a slightly off-distribution state. The behaviors that show up in *that* state were not directly trained for; they emerge from how the model generalizes. Sometimes the generalization is graceful and the model behaves nearly as well. Sometimes it is brittle and the model behaves erratically. The variance is what makes "exact prompt format matters" a load-bearing rule for production deployments.
 
 <Callout type="aside">
-The chat formats used by ChatGPT, Claude, Gemini, and the open-source chat-tuned models are not freeform text wrappers. They are specific token sequences, `<|im_start|>system`, `<|im_end|>`, `<|im_start|>user`, and so on, that the model was trained to recognize as turn boundaries. The text between the special tokens is conventional content; the tokens themselves carry the conversation structure. This is the structural reason "prompt formatting matters" is not a stylistic claim but a literal one about the input tokens the model is reading.
+The chat formats used by ChatGPT, Claude, Gemini, and the open-source chat-tuned models are not freeform text wrappers. They are specific token sequences, `<|im_start|>system`, `<|im_end|>`, `<|im_start|>user`, and so on, that the model was trained to recognize as turn boundaries. The text between the special tokens is conventional content; the tokens themselves carry the conversation structure. This is the structural reason "prompt formatting matters" is not a stylistic claim but a literal one about the input tokens the model is reading. Chapter 13 (supervised fine-tuning) returns to this in detail: the chat template a model is fine-tuned on is exactly this kind of special-token scaffolding.
 </Callout>
 
 ## The long tail of consequences
 
-Tokenization is an algorithm, but its consequences are empirical, and they show up in places that have nothing to do with tokenization on the surface. Three examples are vivid enough to make the abstract claim *"tokenizer choices shape model behavior"* feel concrete.
+Tokenization is an algorithm, but its consequences are empirical, and they show up in places that have nothing to do with tokenization on the surface. Four examples are vivid enough to make the abstract claim *"tokenizer choices shape model behavior"* feel concrete.
 
 ### Number tokenization and arithmetic
 
-GPT-2's BPE tokenizer splits the string `"100"` into the tokens `[' 1', '00']`. The string `"100000"` becomes `[' 100', '000']`. The exact split depends on which digit sequences happened to be frequent in the BPE training corpus, completely arbitrary from the perspective of arithmetic.
+GPT-2's BPE tokenizer splits the string `" 1234"` (a number as it would appear mid-sentence, with its leading space) into the tokens `[' 12', '34']`. The longer string `" 1234567"` fragments further, into `[' 123', '45', '67']`. Short, common numbers fare better: `17` and `432` each survive as a single token. The exact split depends on which digit sequences happened to be frequent in the BPE training corpus, completely arbitrary from the perspective of arithmetic.
 
 A model whose tokenizer fragments numbers this way does not see `1234` as a single quantity. It sees a sequence of two or three tokens whose joint meaning has to be reconstructed by attention. *Multiply 432 by 17* becomes a problem in which the model first has to figure out that `' 432'` is one token whose "value" is the integer 432, that `' 17'` is one token whose "value" is the integer 17, and then perform multiplication, all in a representation that was not designed for it.
 
 The empirical consequence is that GPT-2 and GPT-3 were notably bad at multi-digit arithmetic. GPT-4 improved partly by adopting a tokenizer (`cl100k_base`) that keeps 1-, 2-, and 3-digit numbers as single tokens; longer numbers still split, but more consistently and along digit-count boundaries. The model still makes arithmetic errors on long numbers, and tokenization is a substantial part of the reason. It is not the *only* reason; multi-step arithmetic also stresses the model's ability to track intermediate state. But the tokenizer puts a structural ceiling on how cleanly the model can represent numerical inputs in the first place.
 
+### Code tokenization
+
+Source code has a byte distribution nothing like prose: long runs of repeated indentation whitespace, symbols like `{`, `}`, `->`, `::`, `__init__`, and identifiers in `camelCase` or `snake_case` that a natural-language pre-tokenizer was never designed to split sensibly. Recall the GPT-2 pre-tokenization regex from the earlier section on pre-tokenization: it captures at most one leading space per word-unit (` ?\p{L}+`), so a run of leading spaces longer than one has to be consumed by the whitespace alternatives before the word starts. On a corpus with little code in it, those whitespace runs get no dedicated merges, and every extra space in a Python indent costs its own token.
+
+That is exactly what happens to GPT-2. Its BPE training corpus, WebText, was scraped from Reddit-linked web pages and contains very little code, so it never learned a merge for "four spaces" or "eight spaces" as a unit. Encoding a short, doubly-indented Python function with the real GPT-2 tokenizer gives one token per space of indentation:
+
+```
+def foo(x):
+    return x + 1
+
+def bar(y):
+        return y * 2
+```
+
+GPT-2 tokenizes this snippet into 32 tokens, ten of which are the single-space token `' '` (id 220), one per indentation space beyond the space that attaches to `return`. `cl100k_base`, GPT-4's tokenizer, tokenizes the same snippet into 21 tokens: the four-space indent collapses into one token (`'   '`, three spaces, the fourth folded into the following word-unit as `' return'`) and the eight-space indent collapses into a second single token (`'       '`, seven spaces). `cl100k_base`'s training mixture included far more source code (OpenAI's Codex line of models was trained specifically on code, and `cl100k_base` inherited a vocabulary shaped by that mixture), so it learned dedicated tokens for the whitespace runs that Python indentation actually produces.
+
+<RunnableCode
+  client:visible
+  defaultCode={`# The GPT-2 pre-tokenization regex applied to indented code.
+# Compare how many whitespace units a deeper indent produces.
+import regex
+
+PAT = regex.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)|\\s+""")
+
+code = "def foo(x):\\n    return x + 1\\n\\ndef bar(y):\\n        return y * 2"
+units = PAT.findall(code)
+print(units)
+print(f"{len(units)} pre-tokenization units")
+
+# Each indentation level shows up as its own whitespace unit (all but the
+# last space, which attaches to the following word). Whether that whitespace
+# unit collapses into a *single* BPE token, instead of one token per
+# character, depends entirely on whether the training corpus had enough
+# code in it to make that specific run of spaces frequent.
+`}
+  packages={["regex"]}
+  height={280}
+/>
+
+The gap is not really about whitespace specifically; it is the general pattern from the rest of this chapter. BPE has no notion of "this is code" or "this is an indentation level," only frequency statistics over byte sequences. A tokenizer trained on prose-heavy data mishandles code the same way an English-heavy tokenizer mishandles Korean: not because the algorithm is wrong, but because the training corpus never gave it the merges the domain needs. Both problems have the same fix, more representative training data, and the same practical consequence, more tokens and thus more compute for underrepresented content.
+
 ### Language asymmetry
 
-The byte-level BPE asymmetry from section 4 has a direct economic consequence. English content averages around 4 characters per token under `cl100k_base`. Korean averages around 1.5. Hindi averages around 1.7. Arabic averages around 1.8. The same content in Korean costs roughly 2.5× more per character than the same content in English on per-token API pricing.
+The byte-level BPE asymmetry from section 4 has a direct economic consequence. English content averages around 4 characters per token under `cl100k_base`. Korean averages around 1.5. Hindi averages around 1.7. Arabic averages around 1.8. The same content in Korean costs roughly 2.7× more per character than the same content in English on per-token API pricing.
 
 The asymmetry exists because BPE training corpora are dominated by English and other high-resource European languages. The tokenizer learns efficient merges for the bigrams that dominate those corpora; the merges for other languages are sparser, so non-English text bottoms out closer to the raw-byte representation. Petrov et al. (2023, [arxiv.org/abs/2305.15425](https://arxiv.org/abs/2305.15425)) measured this across 17 tokenizers and confirmed the pattern across nearly every language other than English.
 
@@ -400,6 +527,8 @@ The widget below shows the same input text tokenized under different tokenizers,
 <WidgetFrame title="Compare tokenizers" caption="See how the same text breaks into tokens under three real tokenizers, GPT-2 (byte-level BPE), GPT-4 (cl100k_base), and SentencePiece (T5). Notice how token counts differ across languages and content types.">
   <TokenizerComparison client:visible />
 </WidgetFrame>
+
+The comparison above is deliberately limited to three tokenizer families; WordPiece's likelihood-based merge criterion is illustrated instead in Exercise 4 below.
 
 The runnable block below uses a fresh BPE training on a number-heavy corpus to demonstrate the number-tokenization pattern. The exact split depends on the training corpus and the vocabulary size; the point is that BPE has no notion of numbers as a special category. They are just byte sequences whose tokenization is governed by frequency.
 
@@ -504,6 +633,77 @@ for sentence in my_corpus:
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Copy `train_bpe` from section 3 verbatim, split any corpus on whitespace, and print the merges it returns. On a 6-sentence corpus built around `the`, `fox`, and `dog`, the high-frequency pairs merge first, exactly as the algorithm promises:
+
+```python
+from collections import Counter, defaultdict
+
+def train_bpe(words, vocab_size=270):
+    word_freq = Counter(tuple(bytes([b]) for b in w.encode('utf-8')) for w in words)
+    vocab = {bytes([i]) for i in range(256)}
+    merges = []
+    while len(vocab) < vocab_size:
+        pair_counts = defaultdict(int)
+        for word, count in word_freq.items():
+            for i in range(len(word) - 1):
+                pair_counts[(word[i], word[i+1])] += count
+        if not pair_counts:
+            break
+        best = max(pair_counts, key=lambda p: (pair_counts[p], p))
+        new_token = best[0] + best[1]
+        vocab.add(new_token)
+        merges.append((best, new_token))
+        new_freq = {}
+        for word, count in word_freq.items():
+            new_word, i = [], 0
+            while i < len(word):
+                if i < len(word) - 1 and (word[i], word[i+1]) == best:
+                    new_word.append(new_token); i += 2
+                else:
+                    new_word.append(word[i]); i += 1
+            new_freq[tuple(new_word)] = count
+        word_freq = new_freq
+    return merges, vocab
+
+my_corpus = [
+    "the quick brown fox jumps over the lazy dog",
+    "the dog barks at the fox",
+    "a quick fox runs through the forest",
+    "the forest is quiet and the dog is tired",
+    "foxes and dogs rarely get along",
+    "the lazy dog sleeps all day",
+]
+words = []
+for sentence in my_corpus:
+    words.extend(sentence.split())
+
+merges, vocab = train_bpe(words, vocab_size=280)
+for i, ((a, b), merged) in enumerate(merges[:10]):
+    print(f"Merge {i+1}: {a!r} + {b!r} -> {merged!r}")
+```
+
+Output:
+
+```
+Merge 1: b't' + b'h' -> b'th'
+Merge 2: b'th' + b'e' -> b'the'
+Merge 3: b'f' + b'o' -> b'fo'
+Merge 4: b'o' + b'g' -> b'og'
+Merge 5: b'd' + b'og' -> b'dog'
+Merge 6: b'r' + b'e' -> b're'
+Merge 7: b'fo' + b'x' -> b'fox'
+Merge 8: b'u' + b'i' -> b'ui'
+Merge 9: b'q' + b'ui' -> b'qui'
+Merge 10: b'z' + b'y' -> b'zy'
+```
+
+`the` (appears 6 times) collapses by merge 2; `dog` and `fox` (5 occurrences each, counting the plural forms' prefixes) follow immediately after. The first ten merges are all substrings of the corpus's most repeated words, confirming the frequency-count mechanism is doing what it claims.
+
+</details>
+
 ### Exercise 2 (medium): Implement BPE encoding
 
 After training BPE (exercise 1), implement the encoding function: given a new string, apply the learned merges in priority order to produce a sequence of tokens.
@@ -537,6 +737,48 @@ The key idea: at each step, look for the available merge with the lowest *learne
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Build a `{pair: index_learned_at}` map once, then repeatedly scan the current token list for the lowest-index applicable pair and apply it, exactly like the training loop's inner rewrite step but driven by learned priority instead of frequency:
+
+```python
+def encode_bpe(word, merges):
+    tokens = [bytes([b]) for b in word.encode('utf-8')]
+    merge_priority = {pair: i for i, (pair, merged) in enumerate(merges)}
+    merge_map = dict(merges)
+
+    while True:
+        best_pair, best_priority = None, None
+        for i in range(len(tokens) - 1):
+            pair = (tokens[i], tokens[i+1])
+            if pair in merge_priority:
+                p = merge_priority[pair]
+                if best_priority is None or p < best_priority:
+                    best_priority, best_pair = p, pair
+        if best_pair is None:
+            break
+        merged = merge_map[best_pair]
+        new_tokens, i = [], 0
+        while i < len(tokens):
+            if i < len(tokens) - 1 and (tokens[i], tokens[i+1]) == best_pair:
+                new_tokens.append(merged); i += 2
+            else:
+                new_tokens.append(tokens[i]); i += 1
+        tokens = new_tokens
+    return tokens
+
+corpus = "the cat sat on the mat the dog sat on the rug the cat purred".split()
+merges, vocab = train_bpe(corpus, vocab_size=270)
+
+print(encode_bpe("hello", merges))  # [b'h', b'e', b'l', b'l', b'o']
+print(encode_bpe("the", merges))    # [b'the']
+```
+
+`"the"` collapses to a single token because that exact merge chain was learned. `"hello"` stays fully split into five single bytes, none of `h+e`, `e+l`, `l+l`, `l+o` were ever merged on this corpus, which is the point: encoding can only apply merges the training corpus actually produced.
+
+</details>
+
 ### Exercise 3 (medium): Quantify language asymmetry
 
 Take the same BPE tokenizer (trained on English text in exercise 1) and tokenize three short sentences: one in English, one in Korean (use Google Translate if needed), and one in Russian. Report bytes-per-token for each. Comment on the result.
@@ -544,7 +786,7 @@ Take the same BPE tokenizer (trained on English text in exercise 1) and tokenize
 <details>
 <summary>Hint</summary>
 
-Convert each sentence to UTF-8 bytes, then run it through your BPE tokenizer. `bytes_per_token = byte_count / token_count`. Expect English to be ~2-3 bytes/token, Korean ~1 byte/token (because each Korean character is 3 bytes and gets split), Russian somewhere in between.
+Convert each sentence to UTF-8 bytes, then run it through your BPE tokenizer. `bytes_per_token = byte_count / token_count`. Expect English to land around 2-3 bytes/token, since BPE learned real English merges. Korean and Russian are both entirely outside the training corpus's script, so no merges apply to either, expect *both* to land near 1 byte/token (pure byte-level fallback), not a Russian value "in between" Korean and English. A tokenizer only distinguishes scripts it was trained on.
 
 </details>
 
@@ -568,6 +810,42 @@ sentences = {
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Encode each sentence word-by-word with `encode_bpe` from exercise 2, using the tokenizer trained on the English corpus from exercise 1, then divide byte count by token count:
+
+```python
+corpus = "the cat sat on the mat the dog sat on the rug the cat purred".split()
+merges, vocab = train_bpe(corpus, vocab_size=270)
+
+sentences = {
+    'English': "the cat sat on the mat",
+    'Korean':  "고양이가 매트 위에 앉았다",
+    'Russian': "Кошка сидит на коврике",
+}
+
+for lang, text in sentences.items():
+    n_bytes = len(text.encode('utf-8'))
+    tokens = []
+    for word in text.split():
+        tokens.extend(encode_bpe(word, merges))
+    n_tokens = len(tokens)
+    print(f"{lang:8s} {n_bytes:3d} bytes, {n_tokens:3d} tokens, {n_bytes/n_tokens:.2f} bytes/token")
+```
+
+Output:
+
+```
+English   22 bytes,   7 tokens, 3.14 bytes/token
+Korean    36 bytes,  33 tokens, 1.09 bytes/token
+Russian   41 bytes,  38 tokens, 1.08 bytes/token
+```
+
+English compresses to ~3 bytes/token because this tokenizer's merges came from English text. Korean and Russian both land at ~1 byte/token, essentially no compression, not because Russian happens to fall "between" English and Korean, but because *neither* script appears in the training corpus, so *zero* merges apply to either one. Every Korean and Russian character decomposes to its raw UTF-8 bytes with no merging, regardless of whether that character is 2 bytes (Cyrillic) or 3 bytes (Hangul) wide, byte-per-token depends on what the tokenizer was trained on, not on the script's raw byte width.
+
+</details>
 
 ### Exercise 4 (hard): Implement WordPiece
 
@@ -604,6 +882,59 @@ def train_wordpiece(words, vocab_size=270):
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Same loop structure as `train_bpe`, but track single-token counts alongside pair counts and pick the pair maximizing `count(a,b) / (count(a) * count(b))` instead of raw frequency:
+
+```python
+def train_wordpiece(words, vocab_size=270):
+    word_freq = Counter(tuple(bytes([b]) for b in w.encode('utf-8')) for w in words)
+    vocab = {bytes([i]) for i in range(256)}
+    merges = []
+
+    while len(vocab) < vocab_size:
+        pair_counts = defaultdict(int)
+        token_counts = defaultdict(int)
+        for word, count in word_freq.items():
+            for i in range(len(word)):
+                token_counts[word[i]] += count
+            for i in range(len(word) - 1):
+                pair_counts[(word[i], word[i+1])] += count
+        if not pair_counts:
+            break
+
+        def score(pair):
+            a, b = pair
+            return pair_counts[pair] / (token_counts[a] * token_counts[b])
+
+        best = max(pair_counts, key=lambda p: (score(p), p))
+        new_token = best[0] + best[1]
+        vocab.add(new_token)
+        merges.append((best, new_token))
+
+        new_freq = {}
+        for word, count in word_freq.items():
+            new_word, i = [], 0
+            while i < len(word):
+                if i < len(word) - 1 and (word[i], word[i+1]) == best:
+                    new_word.append(new_token); i += 2
+                else:
+                    new_word.append(word[i]); i += 1
+            new_freq[tuple(new_word)] = count
+        word_freq = new_freq
+
+    return merges, vocab
+
+corpus = "the cat sat on the mat the dog sat on the rug the cat purred".split()
+bpe_merges, _ = train_bpe(corpus, vocab_size=270)
+wp_merges, _ = train_wordpiece(corpus, vocab_size=270)
+```
+
+BPE's first merges (by raw frequency): `t+h`, `th+e`, `a+t`, `s+at`, `o+n`, ... WordPiece's first merges (by lift score): `p+u`, `u+g`, `r+ug`, `pu+r`, `pur+r`, ... WordPiece front-loads pairs built from *rare* characters (`p`, `u`, `g` from `purred`/`rug`, each appearing only once or twice), because dividing by the product of two small marginal counts inflates the score for any pair that co-occurs even once. BPE, by contrast, front-loads `th`/`the`, the pair with the highest raw count. Same corpus, genuinely different first ten merges, exactly as the exercise predicts.
+
+</details>
 
 ## From tokens to attention
 

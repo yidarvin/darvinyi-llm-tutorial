@@ -403,7 +403,7 @@ export const TOOLS: ToolFunction[] = [
         },
       ],
     },
-    designNote: 'An eval-style tool. **The description explicitly enumerates supported and unsupported features** — preventing the LLM from trying `import` statements or variable assignments. Implementation note: the function uses sandboxed `eval` with an empty `__builtins__` to block dangerous operations. Schema can\'t enforce this; the engineer must.',
+    designNote: 'An eval-style tool. **The description explicitly enumerates supported and unsupported features** — preventing the LLM from trying `import` statements or variable assignments. Implementation note: `eval` with an empty `__builtins__` is a *restricted* eval, not a real sandbox — it blocks the obvious cases but is famously escapable (e.g. via `().__class__.__bases__[0].__subclasses__()`). For untrusted input, use `ast.literal_eval`, a real expression parser, or a subprocess/container. Schema can\'t enforce this; the engineer must.',
   },
   {
     id: 'schedule-meeting',
@@ -538,6 +538,6 @@ export const PATTERN_LABELS: Record<SchemaPattern, string> = {
   search:    'optional params',
   action:    'side-effect',
   'file-io': 'bounded output',
-  eval:      'sandboxed eval',
+  eval:      'restricted eval',
   complex:   'complex shape',
 };

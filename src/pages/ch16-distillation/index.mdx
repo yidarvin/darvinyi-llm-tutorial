@@ -1,38 +1,36 @@
 ---
 layout: ../../layouts/ChapterLayout.astro
 slug: ch16-distillation
-description: Distillation, the compression technique that turns a frontier-capable teacher into a deploy-cheaply student. Hinton et al. 2015 introduced soft-label distillation with temperature scaling, the dark knowledge in non-target class probabilities helps the student learn faster than from hard labels alone. Modern recipes (DistilBERT 40% smaller at 97% of BERT, the Phi family on textbook-quality data, Gemma 2 distilled variants, DeepSeek-R1-Distill matching o1-mini on reasoning) demonstrate distillation's impact at LLM scale. The chapter that closes Phase 11, pre-train → SFT → preference optimization → PEFT → distill, the full post-training pipeline used in production.
+description: Distillation, the compression technique that turns a frontier-capable teacher into a deploy-cheaply student. Hinton et al. 2015 introduced soft-label distillation with temperature scaling, the dark knowledge in non-target class probabilities helps the student learn faster than from hard labels alone. Modern recipes (DistilBERT 40% smaller at 97% of BERT, the Phi family on textbook-quality data, Gemma 2 distilled variants, DeepSeek-R1-Distill matching o1-mini on reasoning) demonstrate distillation's impact at LLM scale. The chapter that closes Part V, pre-train → SFT → preference optimization → PEFT → distill, the full post-training pipeline used in production.
 ---
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
 import { TemperatureScaling, DistillationPipeline } from '@components/widgets';
 
-Chapters 13 through 15 left you with the techniques to train and align large language models. *Large* is the operative word. A $70$B-parameter model is too expensive to deploy at scale for most use cases, even with the quantization and inference optimizations of Phase 12, serving it cheaply at high throughput is hard. Most production teams want models in the $7$B–$14$B range. The capability gap, though, is significant: a $7$B base model is typically $10$ to $30$ MMLU points behind a $70$B base. Without help, the smaller model is not a viable substitute.
+Chapters 13 through 15 left you with the techniques to train and align large language models. *Large* is the operative word. A $70$B-parameter model is too expensive to deploy at scale for most use cases, even with the quantization and inference optimizations of Part VI, serving it cheaply at high throughput is hard. Most production teams want models in the $7$B–$14$B range. The capability gap, though, is significant: a $7$B base model is typically $10$ to $30$ MMLU points behind a $70$B base. Without help, the smaller model is not a viable substitute.
 
 **Distillation** is the technique that closes that gap. Train a small student model to imitate a large teacher. The student does not need to discover the teacher's behaviors from scratch, it only needs to match them. The result is models like **DistilBERT** (40% smaller than BERT, 97% of its capability), the **Phi family** (Microsoft's textbook-quality models), the distilled variants of **Gemma 2**, and most recently **DeepSeek-R1-Distill**, students from $1.5$B to $32$B that inherit reasoning capabilities from a frontier teacher. Distillation predates transformers; Buciluă et al. (2006) introduced the idea nine years before Hinton et al. (2015) popularized it. The LLM era has revived interest because the economics of serving frontier-quality models are unforgiving and even modest compression has enormous value.
 
-This chapter covers the classic Hinton 2015 framework (soft labels, temperature scaling, KL divergence on softened distributions), the practical hard-distillation recipes that dominate modern production, the architectural choices for the student, the modern recipe lineage, and the new frontier of reasoning distillation. **It closes Phase 11**: pre-train → SFT (Ch 13) → preference optimization (Ch 14) → PEFT for cheap training (Ch 15) → distill for cheap deployment (Ch 16). That is the full post-training pipeline used in production.
+This chapter covers the classic Hinton 2015 framework (soft labels, temperature scaling, KL divergence on softened distributions), the practical hard-distillation recipes that dominate modern production, the architectural choices for the student, the modern recipe lineage, and the new frontier of reasoning distillation. **It closes Part V**: pre-train → SFT (Ch 13) → preference optimization (Ch 14) → PEFT for cheap training (Ch 15) → distill for cheap deployment (Ch 16). That is the full post-training pipeline used in production.
 
 ## Why distill: the case for compression
 
 ### The deployment math
 
-A $70$B model in BF16 occupies roughly $140$ GB just for the weights. Serving it requires at least $2 \times$ A100 $80$GB per inference instance; at production batch sizes, throughput lands around $50$ tokens per second per instance and per-token decode latency near $25$ ms. A $7$B model in the same precision fits on a single A100, or even a single A6000, pushes around $500$ tokens per second, and decodes at roughly $5$ ms per token. **An order of magnitude cheaper per request**: plus much higher concurrency per GPU because batches fit more sequences. For a product surface measured in queries per second per dollar, the gap is decisive.
+A $70$B model in BF16 occupies roughly $140$ GB just for the weights. Serving it requires at least $2 \times$ A100 $80$GB per inference instance; at production batch sizes, throughput lands around $50$ tokens per second per instance and per-token decode latency near $25$ ms. A $7$B model in the same precision fits on a single A100, or even a single A6000, pushes around $500$ tokens per second, and decodes at roughly $5$ ms per token. That is an order of magnitude cheaper per request, plus much higher concurrency per GPU because batches fit more sequences. For a product surface measured in queries per second per dollar, the gap is decisive.
 
-The catch is the capability gap. A $7$B base model is typically $10$ to $30$ points behind a $70$B base on MMLU and similar capability benchmarks. **Without distillation, the $7$B isn't a viable substitute** for most use cases. Customers notice the regression, and the cost savings stop being real because you have to retain the larger model for fallback. The point of distillation is to close that capability gap enough that the smaller model can actually take over.
+The catch is the capability gap. A $7$B base model is typically $10$ to $30$ points behind a $70$B base on MMLU and similar capability benchmarks. Without distillation, the $7$B isn't a viable substitute for most use cases. Customers notice the regression, and the cost savings stop being real because you have to retain the larger model for fallback. The point of distillation is to close that capability gap enough that the smaller model can actually take over.
 
 ### The Pareto frontier
 
 Distillation moves you up and to the left on the cost–capability frontier: cheaper *and* nearly as capable. The empirical evidence is striking. **DistilBERT** retains $97$% of BERT's GLUE score at $40$% of the parameter count. **Phi-3-mini** ($3.8$B) approaches GPT-3.5 on many benchmarks despite being roughly two orders of magnitude smaller. **R1-Distill-Qwen-32B** matches o1-mini on math and coding benchmarks, having inherited reasoning behavior from a much larger frontier teacher. The pattern across the literature is consistent: a well-distilled student recovers most of the teacher's capability at a fraction of the deployment cost, and the gap shrinks faster than naive scaling-laws extrapolation suggests.
 
-That makes distillation the natural closing step of the Phase 11 pipeline. Pre-train the base model (Ch 7–10); SFT it into an instruction follower (Ch 13); align it with preference optimization (Ch 14); reach for PEFT when full fine-tuning is too expensive (Ch 15); **distill the result for cheap deployment (this chapter).** Bottom line: distillation is what bridges *"we have a great frontier model"* to *"we can deploy a useful model cheaply at scale."*
+That makes distillation the natural closing step of Part V's pipeline. Pre-train the base model (Ch 7–10); SFT it into an instruction follower (Ch 13); align it with preference optimization (Ch 14); reach for PEFT when full fine-tuning is too expensive (Ch 15); distill the result for cheap deployment (this chapter). Bottom line: distillation is what bridges *"we have a great frontier model"* to *"we can deploy a useful model cheaply at scale."*
 
 <Callout type="note">
 Distillation is not new. **Buciluă et al. (2006)** introduced model compression via teacher–student training nine years before Hinton's 2015 paper popularized it for neural networks. The modern LLM era has revived the technique because the cost of serving frontier-quality models is so high that even moderate compression has enormous economic value. Hinton popularized the idea and introduced temperature scaling and soft labels; credit the older paper for the core insight.
 </Callout>
-
-The next section unpacks the Hinton 2015 insight, why soft labels carry more information per example than hard labels do.
 
 ## Soft labels and dark knowledge
 
@@ -50,7 +48,7 @@ The pedagogical analogy is exact. A standardized-test answer key says "Question 
 
 ### Temperature scaling
 
-There is a practical problem with using raw softmax distributions as soft labels: well-trained models produce *peaked* distributions. The correct class might get probability $0.999$, with everything else compressed near zero. **The dark knowledge is *there* but *crushed***: the non-target class probabilities are too small to provide useful gradient signal. The teacher's similarity structure is buried under the dominant peak.
+There is a practical problem with using raw softmax distributions as soft labels: well-trained models produce *peaked* distributions. The correct class might get probability $0.999$, with everything else compressed near zero. The dark knowledge is *there* but *crushed*: the non-target class probabilities are too small to provide useful gradient signal. The teacher's similarity structure is buried under the dominant peak.
 
 **Temperature scaling** fixes this. Divide the logits by a temperature $T > 1$ before the softmax:
 
@@ -60,7 +58,7 @@ $$
 
 At $T = 1$ this is the standard softmax. At $T > 1$ the distribution softens, probability mass spreads away from the peak and the non-target tails inflate. As $T \to \infty$ the distribution flattens toward uniform. Both the teacher and the student are softened with the same $T$ during the distillation loss: the teacher's softened distribution becomes the target; the student's softened distribution is what we train to match it. Typical values land at $T = 2$ to $T = 10$. The widget below makes the reshaping visceral.
 
-<WidgetFrame title="Temperature scaling" caption="The teacher's softmax distribution for 'Paris is the capital of ___' across 15 candidate completions. At T=1: France dominates (0.87); dark knowledge is hidden. Raise T to see the next tier, Spain, Italy, Germany, emerge as the European-capital cluster. At T=32+: distribution flattens; signal lost. The sweet spot for distillation is T=4-8.">
+<WidgetFrame title="Temperature scaling" caption="The teacher's softmax distribution for 'Paris is the capital of ___' across 15 candidate completions. At T=1: France dominates (0.80); dark knowledge is hidden. Raise T to see the next tier, Spain, Italy, Germany, emerge as the European-capital cluster. At T=32+: distribution flattens; signal lost. The sweet spot for distillation is T=4-8.">
   <TemperatureScaling client:visible />
 </WidgetFrame>
 
@@ -90,7 +88,7 @@ for T in [1, 2, 4, 8, 16, 32]:
     print(f"T={T:>3} | {top3_str}")
 
 print("\nObservations:")
-print("- T=1:  top class dominates (~0.83); dark knowledge hidden")
+print("- T=1:  top class dominates (~0.55); dark knowledge hidden")
 print("- T=4:  non-target classes visible; dark knowledge revealed (sweet spot)")
 print("- T=32: distribution flattens toward uniform; signal lost")
 print("- Use T=2 to 10 for distillation.")
@@ -100,8 +98,6 @@ print("- Use T=2 to 10 for distillation.")
 <Callout type="warning">
 **Misconception.** "More temperature is always better." False. **Too-high temperature flattens the distribution into uniformity**, at $T \to \infty$, every class gets equal probability, which carries no information at all. The dark-knowledge story has a sweet spot. Below $T = 2$ the distribution stays too peaked and the tail signal is too small; above $T = 10$ the distribution loses too much of the teacher's confidence structure. Typical recipes use $T = 2$ to $T = 10$.
 </Callout>
-
-The next section turns soft labels and temperature scaling into the actual distillation loss.
 
 ## The distillation loss
 
@@ -198,8 +194,6 @@ print("- T=4 is a common starting point for distillation.")
 The $T^2$ multiplier in the soft loss is not a heuristic, it is the mathematically correct factor to compensate for the $1/T^2$ shrinkage of softmax gradients at high temperature. **Don't forget it.** Many tutorials omit it or describe it as an arbitrary scaling factor; readers come away thinking it is optional. It is not. Without it, the soft loss provides essentially no gradient signal at the $T = 4$ to $T = 8$ values used in practice.
 </Callout>
 
-The next section steps back to a more practical contrast: in production, most distillation skips the soft loss entirely.
-
 ## Hard vs soft distillation
 
 ### Two ways to use the teacher
@@ -263,7 +257,39 @@ print(f"Soft distillation is the theory; hard distillation is the practice.")
 Hard distillation is *not* "just data augmentation." Even though it uses standard SFT machinery, the *data source matters*. Teacher-generated data carries the teacher's behavioral patterns, tone, structure, reasoning style, formatting conventions, in ways that human-curated data does not. The student learns to imitate not just the answers but the *manner* of producing them. That is why a small model trained on teacher outputs ends up *behaving* like a smaller copy of the teacher, not like a generic instruction-following model that happens to know the right answers.
 </Callout>
 
-The next section turns from the training signal to the student itself, how to choose its architecture.
+## On-policy distillation and reverse KL
+
+### Off-policy vs on-policy: who generates the data
+
+Everything so far in this chapter is **off-policy distillation**: the teacher generates the training targets, either full distributions (soft distillation) or top-1 completions (hard distillation), and the student trains on that fixed corpus the same way it would on any other supervised dataset. The student never produces a token during training; it only ever imitates a dataset the teacher wrote.
+
+**On-policy distillation** flips this. The student generates a sequence itself, and the teacher scores the student's *own* output, comparing the teacher's next-token distribution to the student's at each position the student actually visited, rather than grading a corpus the teacher wrote. The student trains on the distribution of prefixes it actually produces, not on the teacher's distribution of prefixes.
+
+The distinction matters because of exposure bias. Off-policy training only ever shows the student teacher-quality prefixes. At inference time the student eventually makes a mistake the teacher never would have, and every following token is then conditioned on a prefix the student never saw during training, an error the training data gave it no way to recover from. On-policy distillation closes that gap by construction: the student is trained on exactly the self-generated prefixes it will encounter at inference time, and the teacher's role narrows to scoring how good each candidate continuation is. The cost is what you would expect: every training example now needs a full decode through the student plus a scoring pass through the teacher, instead of one teacher call whose output gets reused as static data.
+
+<Callout type="aside">
+**Self-distillation** is the limit case where the teacher isn't even a different network: a model's own predictions (or an earlier checkpoint's predictions) become the soft targets for training a same-architecture, same-size copy of itself. That sounds circular, there is no new capability entering the system, but the softened self-predictions still smooth out overconfident, noisy hard labels, and the result can measurably outperform training on hard labels directly. Furlanello et al. (2018), "Born-Again Neural Networks" ([arxiv.org/abs/1805.04770](https://arxiv.org/abs/1805.04770)), showed that a student with the *identical* architecture as its teacher can outperform the teacher it was distilled from. Self-distillation is used less for compression and more as a regularizer: with no size reduction, the entire value is in the softened, self-consistent training signal.
+</Callout>
+
+### Reverse KL and MiniLLM: mode-seeking vs mode-covering
+
+<EqRef id="16.distill" /> uses $\KL(\sigma(z_T/T) \,\|\, \sigma(z_S/T))$: divergence *from* the teacher *to* the student, teacher first. That ordering isn't incidental. Forward and reverse KL optimize for different things, and the difference is sharpest exactly where the teacher's distribution is multimodal, the normal case for language generation, where many different continuations are all reasonable.
+
+**Forward KL**, $\KL(p_T \,\|\, p_S)$, is **mode-covering**. The loss integrates $p_T \log(p_T / p_S)$, so any region where the teacher assigns real probability but the student assigns near-zero probability sends the loss toward infinity. The student is pushed to place at least some mass everywhere the teacher does, including the teacher's low-probability tail, which is exactly the "match the teacher's shape even on rare classes" behavior Exercise 2 points at.
+
+**Reverse KL**, $\KL(p_S \,\|\, p_T)$, is **mode-seeking**:
+
+<Equation label="16.reverse-kl">
+$$\KL(p_S \,\|\, p_T) = \sum_i p_S(i) \log \frac{p_S(i)}{p_T(i)}$$
+</Equation>
+
+Now the expectation runs over the *student's* distribution. Placing mass where the teacher assigns near-zero probability is what gets punished this time, the $\log(p_S / p_T)$ term explodes as $p_T \to 0$, so the student is rewarded for concentrating its mass on a subset of the teacher's high-density modes rather than spreading thin across all of them. A capacity-limited student typically does better committing honestly to the modes it can actually produce well than half-covering everything the teacher can do.
+
+**MiniLLM** (Gu et al. 2024, [arxiv.org/abs/2306.08543](https://arxiv.org/abs/2306.08543)) is the LLM-scale version of this idea, and its title states both halves of it directly: *"On-Policy Distillation of Large Language Models."* The two concepts in this section are linked, not coincidental neighbors: reverse KL's gradient is an expectation under the *student's* distribution, so estimating it requires sampling from the student, i.e., on-policy generation. MiniLLM trains the student to sample a completion, scores that completion against the teacher with reverse KL, and updates the student via a policy-gradient-style objective (with variance-reduction and length-normalization terms to keep training stable). The reported effect matches the mode-seeking prediction: MiniLLM students hallucinate less and are better calibrated than forward-KL-trained students of the same size, a smaller, more consistent set of behaviors executed well rather than a wide, thin imitation of everything the teacher can do.
+
+<Callout type="warning">
+**Misconception.** "On-policy and off-policy distillation are the same idea with different names." False. **They differ in who generates the sequences being trained on.** Off-policy: the teacher generates, the student imitates a fixed corpus. On-policy: the student generates, the teacher scores the student's own trajectories. Almost every production hard-distillation recipe in this chapter, R1-Distill, Phi, Orca, is off-policy. On-policy training is more expensive per example but directly targets the exposure-bias gap that off-policy corpora cannot close.
+</Callout>
 
 ## Choosing the student architecture
 
@@ -283,8 +309,6 @@ When teacher and student architectures diverge, as in Phi-mini or R1-Distill, no
 **Misconception.** "The student needs the same architecture as the teacher." False. **Students can differ in depth, width, vocabulary, even tokenizer.** What matters is that the student's *output interface* aligns with the teacher's in the way the distillation method requires. For soft distillation, that means a shared vocabulary so that the softmax is over the same classes. For hard distillation, even that constraint goes away, the student can have a completely different tokenizer and still train normally on teacher-generated text.
 </Callout>
 
-The next section covers a richer family of distillation signals, matching not just outputs but intermediate representations.
-
 ## Feature and attention distillation
 
 ### Beyond output matching
@@ -293,6 +317,53 @@ The Hinton 2015 loss matches the teacher's final logits. The student sees the te
 
 The intuition is that intermediate representations encode rich structure: in encoder models, BERT's middle layers learn syntactic and semantic features that the final logits compress away; in decoders, the attention pattern at each layer encodes the model's hypothesis about which prior tokens matter. A student that matches only the final output has to rediscover all of this internal structure on its own; a student that matches features inherits it directly. On the BERT-era benchmarks where feature distillation was developed, the gains over output-only distillation were real and measurable, TinyBERT outperformed DistilBERT at smaller sizes by combining attention and hidden-state matching.
 
+Mechanically, attention distillation is an auxiliary loss added on top of the response distillation loss, not a replacement for it. Pick a layer-mapping strategy (TinyBERT maps each student layer to a fixed teacher layer, e.g. student layer $l$ to teacher layer $3l$), take the raw attention scores at each mapped layer pair, softmax them into attention probability maps, and penalize the MSE between the two maps. The cell below sketches the loss on toy attention scores; a "trained" student whose attention scores have converged toward the teacher's produces a far smaller loss than a randomly initialized one.
+
+<RunnableCode client:visible>
+```python
+import numpy as np
+
+def softmax_rows(scores):
+    """Row-wise softmax: turns raw attention scores into attention probabilities."""
+    scores = scores - scores.max(axis=-1, keepdims=True)
+    exp = np.exp(scores)
+    return exp / exp.sum(axis=-1, keepdims=True)
+
+def attention_distillation_loss(student_scores, teacher_scores):
+    """
+    Attention distillation loss (TinyBERT-style): MSE between attention
+    probability maps, averaged over heads and mapped layers.
+
+    student_scores, teacher_scores: (layers, heads, seq, seq) raw attention
+    logits (pre-softmax). Layers must already be paired via a layer-mapping
+    strategy (e.g. student layer l <-> teacher layer 3l) and head counts
+    must match between the paired layers.
+    """
+    p_teacher = softmax_rows(teacher_scores)
+    p_student = softmax_rows(student_scores)
+    return ((p_teacher - p_student) ** 2).mean()
+
+# Toy setup: 2 mapped layers, 4 heads, sequence length 6
+np.random.seed(0)
+layers, heads, seq = 2, 4, 6
+
+teacher_scores = np.random.normal(0, 2, (layers, heads, seq, seq))
+# A randomly initialized student, attention maps unrelated to the teacher's
+student_scores_random = np.random.normal(0, 2, (layers, heads, seq, seq))
+# A "trained" student whose attention scores have moved close to the teacher's
+student_scores_trained = teacher_scores + np.random.normal(0, 0.1, (layers, heads, seq, seq))
+
+loss_random = attention_distillation_loss(student_scores_random, teacher_scores)
+loss_trained = attention_distillation_loss(student_scores_trained, teacher_scores)
+
+print(f"Attention MSE, random-init student: {loss_random:.5f}")
+print(f"Attention MSE, distilled student:   {loss_trained:.5f}")
+print("\nThe distilled student's attention maps track the teacher's row-by-row;")
+print("the random student's don't. This auxiliary loss is added to the response")
+print("distillation loss during training; it never appears alone in practice.")
+```
+</RunnableCode>
+
 ### Why most modern recipes skip it
 
 So why isn't every recipe doing this? Three reasons. First, **engineering complexity**: feature distillation requires the teacher and student forward passes to be synchronized layer-by-layer, with the student model exposing intermediate activations for comparison against teacher activations after a learned projection. The memory cost is roughly doubled because both models have to live in HBM simultaneously, with their activation tapes from the synchronized forward pass. Second, **architecture constraints**: feature matching works best when teacher and student layer structures are aligned in a natural way. It does not transfer cleanly to heterogeneous architectures, and modern teachers and students often have completely different shapes. Third, and most decisively, **diminishing returns at scale**: when both teacher and student are already strong, the marginal benefit of feature matching is small relative to the cost of generating more synthetic data and training longer. Hard distillation via teacher-generated data scales better, both operationally and statistically.
@@ -300,10 +371,8 @@ So why isn't every recipe doing this? Three reasons. First, **engineering comple
 The result is that feature and attention distillation peaked in the BERT era, DistilBERT, TinyBERT, MobileBERT, all $2019$–$2020$, and have largely been displaced in the LLM era by simpler output-level distillation and, more often, hard distillation via synthetic data. They are still worth understanding because the underlying intuition (intermediate representations carry useful structure) shows up elsewhere, in linear-probe interpretability, in mid-layer monitoring for safety, in cross-architecture transfer. They are not, however, where to invest engineering effort for a new distillation run today.
 
 <Callout type="note">
-Feature and attention distillation were central in the encoder era. They are **less common in the modern LLM era** because (1) hard distillation via synthetic data scales better, (2) modern teachers and students often have incompatible architectures, and (3) the engineering cost outweighs the benefit at frontier scale. **Worth knowing the technique; not worth implementing for most use cases.** If you find yourself reaching for it, ask first whether more teacher-generated data with standard SFT would solve the same problem.
+Feature and attention distillation were central in the encoder era. They are **less common in the modern LLM era** because (1) hard distillation via synthetic data scales better, (2) modern teachers and students often have incompatible architectures, and (3) the engineering cost outweighs the benefit at frontier scale. Worth knowing the technique; not worth implementing for most use cases. If you find yourself reaching for it, ask first whether more teacher-generated data with standard SFT would solve the same problem.
 </Callout>
-
-The next section walks through the modern recipes, how the techniques of the previous sections combine into the specific systems that ship.
 
 ## Modern recipes
 
@@ -311,7 +380,7 @@ The next section walks through the modern recipes, how the techniques of the pre
 
 The canonical recipe for transformer distillation is **DistilBERT** (Sanh et al. 2019). The student is a $6$-layer transformer distilled from a $12$-layer BERT teacher. The loss is a triple objective, masked-language-modeling loss, soft distillation loss on the teacher's predictions, and a cosine-similarity loss between teacher and student hidden states. The student is initialized from alternating teacher layers, which gives it a strong starting point. The headline result, $40$% smaller, $60$% faster, $97$% of BERT's GLUE score, set the template that essentially every later encoder distillation paper iterated on.
 
-**TinyBERT** (Jiao et al. 2019) added attention distillation and hidden-state matching on top of DistilBERT's recipe, with a two-stage process: general distillation on the pre-training corpus, then task-specific distillation on labeled downstream data. The result was smaller and stronger than DistilBERT on many GLUE tasks. **MobileBERT** (Sun et al. 2020) took a different direction: keep the same depth as BERT-LARGE but use a *bottleneck* architecture that is much narrower inside each block. Designed for mobile inference, MobileBERT achieved roughly $4\times$ smaller than BERT-base with comparable accuracy. Together these three define the BERT-era distillation lineage.
+**TinyBERT** (Jiao et al. 2019) added attention distillation and hidden-state matching on top of DistilBERT's recipe, with a two-stage process: general distillation on the pre-training corpus, then task-specific distillation on labeled downstream data. The result was smaller and stronger than DistilBERT on many GLUE tasks. **MobileBERT** (Sun et al. 2020) took a different direction: keep the same depth as BERT-LARGE but use a *bottleneck* architecture that is much narrower inside each block. Designed for mobile inference, MobileBERT achieved roughly $4\times$ smaller than BERT-base with comparable accuracy. **MiniLM** (Wang et al. 2020) distilled self-attention alone, matching the teacher's last-layer attention distributions and value-relation patterns rather than every layer's hidden states, which drops the requirement that student and teacher have the same number of layers. That relaxation made MiniLM's recipe easier to apply task-agnostically across different student depths than DistilBERT's or TinyBERT's layer-paired approach. Together these four define the BERT-era distillation lineage.
 
 ### LLM era: Phi and Gemma
 
@@ -323,17 +392,35 @@ The LLM-era recipes look different. **The Phi family** from Microsoft, Phi-1 ($1
 
 The most exciting recent thread is reasoning distillation. **Orca** (Mukherjee et al. 2023) distilled GPT-4's *reasoning traces*, not just its final answers, into smaller students. The key insight was that for tasks like math and coding, matching the teacher's chain-of-thought is what transfers the capability; matching only the final answer leaves the student without the intermediate reasoning steps that actually do the work. Orca set up the pattern that R1-Distill later scaled.
 
-**DeepSeek-R1-Distill** (DeepSeek, $2025$) is the most striking recent example. The frontier R1 model, trained with RLVR per Chapter 14, was distilled into students of size $1.5$B, $7$B, $8$B, $14$B, and $32$B. The headline: **R1-Distill-Qwen-32B matches o1-mini** on a range of math and coding benchmarks. The students inherit the teacher's CoT patterns and generate long, structured reasoning traces of their own on hard problems. This is the first clean demonstration at LLM scale that *reasoning*, not just knowledge or formatting, can be distilled into a much smaller student.
+**DeepSeek-R1-Distill** (DeepSeek, $2025$) is the most striking recent example. The frontier R1 model, trained with RLVR per Chapter 14, was distilled into students of size $1.5$B, $7$B, $8$B, $14$B, $32$B, and $70$B. The headline: **R1-Distill-Qwen-32B matches o1-mini** on a range of math and coding benchmarks. The students inherit the teacher's CoT patterns and generate long, structured reasoning traces of their own on hard problems. This is the first clean demonstration at LLM scale that *reasoning*, not just knowledge or formatting, can be distilled into a much smaller student.
 
 <WidgetFrame title="Distillation pipeline" caption="The end-to-end hard-distillation pipeline used by R1-Distill, Phi, and Orca. Teacher → diverse prompts → teacher generates responses → filter for quality → student SFT → deployable student. Click any stage for details on what happens, what's needed, and real-world examples. No soft labels; no KL divergence; just standard SFT on teacher-generated data.">
   <DistillationPipeline client:visible />
 </WidgetFrame>
 
 <Callout type="note">
-R1-Distill is the most exciting recent demonstration that **reasoning capabilities can be distilled**. The student does not need to discover chain-of-thought from scratch via RLVR, which is genuinely expensive and difficult to stabilize, it can inherit the capability from a teacher that already has it. **This dramatically lowers the cost of producing reasoning-capable models** and is one of the most important post-training developments of the last year. The caveats are real: the student still does not match the teacher on the hardest problems, and very-long-tail capabilities may not transfer perfectly. But the direction is genuinely new.
+R1-Distill is the most exciting recent demonstration that **reasoning capabilities can be distilled**. The student does not need to discover chain-of-thought from scratch via RLVR, which is genuinely expensive and difficult to stabilize, it can inherit the capability from a teacher that already has it. This dramatically lowers the cost of producing reasoning-capable models and is one of the most important post-training developments of the R1/o1 generation. The caveats are real: the student still does not match the teacher on the hardest problems, and very-long-tail capabilities may not transfer perfectly. But the direction is genuinely new.
 </Callout>
 
-The final section pulls the chapter, and Phase 11, together.
+Those caveats are worth taking seriously on their own.
+
+## The limits of distillation
+
+### The capacity floor
+
+A common misconception is that distillation transfers "all" of the teacher, that the small model which emerges is the large model's knowledge losslessly repackaged. It isn't. The student learns the behaviors it has the capacity to represent, and no distillation loss can force capability into a network that structurally lacks the parameters to encode it. Student capacity bounds what can be transferred, full stop.
+
+The R1-Distill lineup is the clearest evidence of this at LLM scale. The $14$B and $32$B students recover most of the teacher's reasoning-benchmark performance. The $1.5$B student improves substantially over an untrained $1.5$B baseline on the same benchmarks, but the gap to the frontier teacher on the hardest problems stays wide. As of the R1/o1 generation, the evidence suggests there is a **capacity floor** somewhere below roughly a billion parameters where multi-step chain-of-thought reasoning stops transferring reliably at all: there simply is not enough capacity to hold both broad world knowledge and long dependent reasoning chains at once. Trace data helps the student use the capacity it has more efficiently; it cannot substitute for parameters the student doesn't have.
+
+### Bigger teacher isn't always better
+
+A second, less intuitive limit: making the teacher stronger does not monotonically make the student better. Past some teacher–student capability gap, the student's distillation loss stops improving, sometimes it gets worse, because the teacher's outputs move too far from anything the student's architecture can represent. The soft targets are "correct" but effectively unreachable, and the gradient signal degrades toward noise instead of guiding the student anywhere useful. In practice this shows up as an optimal teacher size for a given student: a mid-sized teacher, not the largest one available, often distills into the best small student, because its behaviors sit close enough to the student's capacity to actually be learnable.
+
+The practical upshot is that a distillation recipe has to respect the student's capacity on both ends. Pick a teacher capable enough that transferring its behavior is worth the effort, but not so far beyond the student that the transfer becomes a stretch past what the student's parameter count can absorb, and budget for a floor, well below "the smallest model anyone would want to deploy," where response distillation on trace data stops being able to substitute for real capacity.
+
+<Callout type="warning">
+**Misconception.** "Student capacity is basically irrelevant, distillation transfers whatever data you give it." False. **Student capacity bounds what can be transferred.** A $1.5$B model given the exact same reasoning traces as a $32$B model does not reach the $32$B's performance; it reaches whatever its own capacity allows it to absorb from those traces. Better teachers and more data narrow the gap. They do not eliminate the capacity floor.
+</Callout>
 
 ## Exercises
 
@@ -379,7 +466,7 @@ logits = np.array([4.0, 1.2, 0.8, 0.5, 0.3, 0.1, -0.5, -1.0, -1.5, -2.0])
 # probs_t16 = softmax_with_temperature(logits, T=16)
 
 # Verify:
-# 1. At T=1, the top class should dominate (~0.9+)
+# 1. At T=1, the top class should dominate (~0.83)
 # 2. At T=4, top class should still win but less dominantly
 # 3. At T=16, distribution should be much more uniform
 # 4. Each distribution should sum to 1.0
@@ -391,6 +478,35 @@ logits = np.array([4.0, 1.2, 0.8, 0.5, 0.3, 0.1, -0.5, -1.0, -1.5, -2.0])
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Divide by $T$ before the usual stable softmax; everything else is unchanged.
+
+```python
+import numpy as np
+
+def softmax_with_temperature(logits, T=1.0):
+    logits = logits / T
+    logits = logits - logits.max()
+    exp = np.exp(logits)
+    return exp / exp.sum()
+
+logits = np.array([4.0, 1.2, 0.8, 0.5, 0.3, 0.1, -0.5, -1.0, -1.5, -2.0])
+
+probs_t1 = softmax_with_temperature(logits, T=1)
+probs_t4 = softmax_with_temperature(logits, T=4)
+probs_t16 = softmax_with_temperature(logits, T=16)
+
+print(f"At T=1:  top prob = {probs_t1.max():.3f}, sum = {probs_t1.sum():.3f}")
+print(f"At T=4:  top prob = {probs_t4.max():.3f}, sum = {probs_t4.sum():.3f}")
+print(f"At T=16: top prob = {probs_t16.max():.3f}, sum = {probs_t16.sum():.3f}")
+```
+
+Output: `T=1: top prob = 0.833`, `T=4: top prob = 0.237`, `T=16: top prob = 0.126`, each row summing to `1.000`. The top probability falls from 0.83 toward 1/10 = 0.1 as $T$ grows, confirming the sharpen-at-low-$T$/flatten-at-high-$T$ behavior.
+
+</details>
 
 ### Exercise 2 (medium): KL divergence
 
@@ -449,6 +565,34 @@ q = np.array([0.4, 0.4, 0.2])
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Sum $p_i (\log p_i - \log q_i)$ along the last axis, with an epsilon guard inside each log.
+
+```python
+import numpy as np
+
+def kl_divergence(p, q, eps=1e-9):
+    return (p * (np.log(p + eps) - np.log(q + eps))).sum(axis=-1)
+
+p = np.array([0.5, 0.3, 0.2])
+q = np.array([0.4, 0.4, 0.2])
+
+kl_pp = kl_divergence(p, p)
+kl_pq = kl_divergence(p, q)
+kl_qp = kl_divergence(q, p)
+
+print(f"KL(p || p) = {kl_pp:.6f} (should be ~0)")
+print(f"KL(p || q) = {kl_pq:.6f}")
+print(f"KL(q || p) = {kl_qp:.6f}")
+print(f"\\nAsymmetric: KL(p || q) != KL(q || p): {abs(kl_pq - kl_qp) > 1e-6}")
+```
+
+Output: `KL(p || p) = 0.000000`, `KL(p || q) = 0.025267`, `KL(q || p) = 0.025815`, asymmetric `True`. All three properties hold: self-KL is zero, both cross terms are positive, and the two directions differ.
+
+</details>
 
 ### Exercise 3 (medium): Full distillation loss
 
@@ -528,6 +672,63 @@ student_logits = np.random.normal(0, 1, (batch, classes))
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Soften both distributions at $T$, take their KL, scale by $T^2$ only when `use_T2` is set, and combine with the T=1 hard-label cross-entropy.
+
+```python
+import numpy as np
+
+def softmax_with_temperature(logits, T=1.0):
+    logits = logits / T
+    logits = logits - logits.max(axis=-1, keepdims=True)
+    exp = np.exp(logits)
+    return exp / exp.sum(axis=-1, keepdims=True)
+
+def kl_divergence(p, q, eps=1e-9):
+    return (p * (np.log(p + eps) - np.log(q + eps))).sum(axis=-1)
+
+def distillation_loss(student_logits, teacher_logits, true_labels, T=4.0, alpha=0.7, use_T2=True):
+    teacher_probs = softmax_with_temperature(teacher_logits, T)
+    student_probs = softmax_with_temperature(student_logits, T)
+    soft_kl = kl_divergence(teacher_probs, student_probs).mean()
+    L_soft = (T**2) * soft_kl if use_T2 else soft_kl
+
+    student_probs_1 = softmax_with_temperature(student_logits, T=1.0)
+    n = student_logits.shape[0]
+    L_hard = -np.log(student_probs_1[np.arange(n), true_labels] + 1e-9).mean()
+
+    total = (1 - alpha) * L_hard + alpha * L_soft
+    return total, L_hard, L_soft
+
+np.random.seed(0)
+batch, classes = 8, 10
+teacher_logits = np.random.normal(0, 2, (batch, classes))
+true_labels = np.random.randint(0, classes, batch)
+for i, c in enumerate(true_labels):
+    teacher_logits[i, c] += 5
+
+student_logits = np.random.normal(0, 1, (batch, classes))
+
+for T in [1, 4, 16]:
+    _, _, soft_with = distillation_loss(student_logits, teacher_logits, true_labels, T=T, alpha=0.7, use_T2=True)
+    _, _, soft_without = distillation_loss(student_logits, teacher_logits, true_labels, T=T, alpha=0.7, use_T2=False)
+    print(f"T={T:>3} | {soft_with:>17.4f} | {soft_without:>17.4f}")
+```
+
+Output:
+
+```
+T=  1 |            1.8828 |            1.8828
+T=  4 |            2.6355 |            0.1647
+T= 16 |            2.6180 |            0.0102
+```
+
+At $T=1$ the multiplier is a no-op ($1^2 = 1$), so the two columns match. By $T=16$, the no-$T^2$ soft loss has collapsed to 0.01 (softened distributions are close to uniform, so KL is tiny) while the $T^2$-scaled version stays around 2.6 — confirming the multiplier is what keeps the soft-loss gradient from vanishing at high temperature.
+
+</details>
 
 ### Exercise 4 (hard): Hard distillation pipeline simulation
 
@@ -625,6 +826,60 @@ filtered_count = 0
   packages={["numpy"]}
 />
 
+<details>
+<summary>Solution</summary>
+
+`filter_response` is a one-line threshold; the pipeline is a plain generate-then-filter loop.
+
+```python
+import random
+import numpy as np
+
+random.seed(42)
+np.random.seed(42)
+
+def mock_teacher_generate(prompt, skill=0.85):
+    quality = float(np.random.beta(skill * 10, (1 - skill) * 10))
+    length = random.randint(20, 200)
+    return {"text": f"[teacher response to: {prompt[:30]}] ({length} chars)", "quality": quality}
+
+def filter_response(response, threshold=0.5):
+    return response["quality"] >= threshold
+
+prompts = [
+    "Solve: 2x + 5 = 17",
+    "Explain photosynthesis in 3 sentences.",
+    "Write a Python function that reverses a string.",
+    "What's the capital of Japan?",
+    "Prove that the sum of two even numbers is even.",
+    "Describe the water cycle.",
+    "Write a haiku about autumn.",
+    "What causes earthquakes?",
+] * 20
+
+synthetic_data = []
+total_generated = 0
+filtered_count = 0
+
+for prompt in prompts:
+    response = mock_teacher_generate(prompt)
+    total_generated += 1
+    if filter_response(response, threshold=0.5):
+        filtered_count += 1
+        synthetic_data.append({"prompt": prompt, "response": response["text"]})
+
+student_training_examples = len(synthetic_data)
+
+print(f"Prompts in set:         {len(prompts)}")
+print(f"Teacher responses:      {total_generated}")
+print(f"Filtered (kept):        {filtered_count} ({100*filtered_count/total_generated:.0f}%)")
+print(f"Student training data:  {student_training_examples} examples")
+```
+
+Output: `160` prompts in, `160` teacher responses, `160` filtered (`100%`), `160` student training examples. With `skill=0.85`, the beta distribution (`Beta(8.5, 1.5)`) has mean 0.85 and standard deviation ≈0.11, so a threshold of 0.5 is over 3 standard deviations below the mean — at this seed every response clears it. Lowering `skill` or raising `threshold` would start rejecting examples and drop the survival rate below 100%.
+
+</details>
+
 ## When to use distillation
 
 ### Distillation vs PEFT vs full fine-tuning
@@ -635,8 +890,8 @@ The mental model: full FT is how you *build* a capable model; PEFT is how you *s
 
 ### The full production pipeline
 
-A typical modern recipe for producing a deployable small model runs through every stage of Phase 11. Pre-train a large base model (Ch 7–10). SFT it on a curated instruction dataset (Ch 13). Run preference optimization, DPO or RLHF, to teach it quality (Ch 14); add RLVR if reasoning is required. **Distill** the resulting large model into a smaller student via hard distillation on teacher-generated data (this chapter). Optionally PEFT the student for downstream task adaptation (Ch 15). That is the full Phase 11 pipeline, and some version of it is what every well-resourced post-training team runs. For frontier reasoning models, the o1, R1, Gemini Thinking pattern, RLVR sits in the preference-optimization slot, and R1-Distill demonstrates that the closing distillation step can preserve reasoning capability across an order-of-magnitude size reduction.
+A typical modern recipe for producing a deployable small model runs through every stage of Part V. Pre-train a large base model (Ch 7–10). SFT it on a curated instruction dataset (Ch 13). Run preference optimization, DPO or RLHF, to teach it quality (Ch 14); add RLVR if reasoning is required. **Distill** the resulting large model into a smaller student via hard distillation on teacher-generated data (this chapter). Optionally PEFT the student for downstream task adaptation (Ch 15). That is the full Part V pipeline, and some version of it is what every well-resourced post-training team runs. For frontier reasoning models, the o1, R1, Gemini Thinking pattern, RLVR sits in the preference-optimization slot, and R1-Distill demonstrates that the closing distillation step can preserve reasoning capability across an order-of-magnitude size reduction.
 
-Phase 11 is complete. Across four chapters we have covered the full post-training arc: supervised fine-tuning teaches the model *format* (Ch 13); preference optimization teaches it *quality* (Ch 14); parameter-efficient methods make all of this *affordable* (Ch 15); and distillation makes the result *deployable* at scale (this chapter). The full pipeline, pre-train → SFT → preference → PEFT → distill, is what every production team uses, in some form.
+Part V is complete. Across four chapters we have covered the full post-training arc: supervised fine-tuning teaches the model *format* (Ch 13); preference optimization teaches it *quality* (Ch 14); parameter-efficient methods make all of this *affordable* (Ch 15); and distillation makes the result *deployable* at scale (this chapter). The full pipeline, pre-train → SFT → preference → PEFT → distill, is what every production team uses, in some form.
 
-**Phase 12 begins next.** Where Phase 11 covered training, Phase 12 covers *inference*: how to serve these models efficiently. Chapter 17 covers inference optimization (KV cache, batching, speculative decoding). Chapter 18 covers quantization for inference, the complement to distillation that reduces *bits per parameter* rather than parameter *count*; the two are routinely combined for multiplicative compression. Chapter 19 covers sampling algorithms (top-$k$, top-$p$, beam search, constrained decoding) and the decoding-time controls that shape model behavior. After Phase 12, we move into capabilities, reasoning, tools, RAG, multimodal, the chapters that bring everything together.
+Where Part V covered training, Part VI covers *inference*: how to serve these models efficiently. Chapter 17 covers inference optimization (KV cache, batching, speculative decoding). Chapter 18 covers quantization for inference, the complement to distillation that reduces *bits per parameter* rather than parameter *count*; the two are routinely combined for multiplicative compression. Chapter 19 covers sampling algorithms (top-$k$, top-$p$, beam search, constrained decoding) and the decoding-time controls that shape model behavior. After Part VI, we move into capabilities, reasoning, tools, RAG, multimodal, the chapters that bring everything together.

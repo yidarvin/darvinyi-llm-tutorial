@@ -8,23 +8,23 @@ import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/conte
 import { RunnableCode } from '@components/code';
 import { MultiAgentTopologyExplorer, InterAgentConversationViewer } from '@components/widgets';
 
-Chapter 27 covered the agent loop. Chapter 28 covered the engineering $80\%$, tools, schemas, error handling, observability, scaffolding. By the end of Ch 28 you could build a production-grade single-agent system out of real code that survives real traffic. **This chapter asks the next question.** What if one agent isn't enough? **Multi-agent systems**, manager-worker decompositions, peer-to-peer collaborations, hierarchical teams, adversarial debates, are the natural next step. The $2023$ hype around AutoGPT and BabyAGI promised AGI through agent multiplicity; the $2024$–$2025$ reality has been more sober. **Production systems are still mostly single-agent.**
+Chapter 27 covered the agent loop. Chapter 28 covered the engineering $80\%$, tools, schemas, error handling, observability, scaffolding. By the end of Ch 28 you could build a production-grade single-agent system out of real code that survives real traffic. This chapter asks the next question: what if one agent isn't enough? **Multi-agent systems**, manager-worker decompositions, peer-to-peer collaborations, hierarchical teams, adversarial debates, are the natural next step. The $2023$ hype around AutoGPT and BabyAGI promised AGI through agent multiplicity; the $2024$–$2025$ reality has been more sober. Production systems are still mostly single-agent.
 
-The honest framing this chapter takes: multi-agent has genuine, important use cases, and is dramatically overused everywhere else. **$80\%$ of multi-agent designs** in the wild would work better as well-designed single-agent ReAct loops. **$20\%$** genuinely benefit, adversarial workflows where proposer-critic-judge improves quality, long-horizon collaborations with stable role boundaries, tasks that genuinely decompose into distinct expertise. **The chapter is a calibration tool**: respectful of multi-agent's contributions, skeptical of its hype, clear about when to reach for it and when not to.
+The honest framing this chapter takes: multi-agent has genuine, important use cases, and is dramatically overused everywhere else. $80\%$ of multi-agent designs in the wild would work better as well-designed single-agent ReAct loops. $20\%$ genuinely benefit, adversarial workflows where proposer-critic-judge improves quality, long-horizon collaborations with stable role boundaries, tasks that genuinely decompose into distinct expertise. The chapter is a calibration tool: respectful of multi-agent's contributions, skeptical of its hype, clear about when to reach for it and when not to.
 
-Eight sections. **When multi-agent is warranted.** **Three architectures**, manager-worker, peer-to-peer, hierarchical. **Communication patterns**: message passing, shared workspaces, hub-and-spoke. **Role specialization**, proposer-critic-judge, plan-execute-verify. **The 2025 framework landscape**, CrewAI, AutoGen, OpenAI Swarm, LangGraph, MetaGPT. **Generative-agent simulations**, Park 2023's Smallville and the patterns it pioneered. **The honest assessment**: when NOT to use multi-agent. **One chapter remains.** Ch 30 brings Phase 14's eval discipline back to bear on agent systems and closes the curriculum. **By the end you'll know how to build multi-agent systems, when they're worth building, and, equally important, when they aren't.**
+Seven sections: when multi-agent is warranted; three architectures (manager-worker, peer-to-peer, hierarchical); communication patterns (message passing, shared workspaces, hub-and-spoke, and the MCP/A2A protocols that standardize communication across system boundaries); role specialization (proposer-critic-judge, plan-execute-verify); the 2025 framework landscape (CrewAI, AutoGen, OpenAI Swarm, LangGraph, MetaGPT); generative-agent simulations (Park 2023's Smallville and the patterns it pioneered); and the honest assessment of when NOT to use multi-agent. By the end you'll know how to build multi-agent systems, when they're worth building, and, equally important, when they aren't.
 
 ## When multi-agent is actually warranted
 
 ### The default should be single-agent
 
-The default assumption should be **single-agent.** A well-designed single-agent setup, Ch 27 patterns wrapped in Ch 28 engineering, handles the vast majority of production tasks. **Multi-agent is the exception, not the rule.** Most multi-agent demos in the wild would work better as single-agent designs. The hard cases that genuinely require multi-agent exist, but they are narrower than the field's tooling and discourse imply.
+The default assumption should be **single-agent.** A well-designed single-agent setup, Ch 27 patterns wrapped in Ch 28 engineering, handles the vast majority of production tasks. Multi-agent is the exception, not the rule. Most multi-agent demos in the wild would work better as single-agent designs. The hard cases that genuinely require multi-agent exist, but they are narrower than the field's tooling and discourse imply.
 
-**The empirical picture, early $2025$.** Most production "agents" are single-agent ReAct loops with multiple tools. AutoGen, CrewAI, and MetaGPT have impressive demos and limited production traction relative to their GitHub stars. Multi-agent debate (Du et al. $2023$) shows measurable improvements on hard reasoning tasks, $5$–$15\%$ accuracy gains in some benchmarks. Generative-agent simulations (Park $2023$) are research demos with no widespread commercial deployment. **Claude Code, Cursor, GitHub Copilot Workspace, Devin, all fundamentally single-agent.** The shipping reality of agents in $2025$ is overwhelmingly single-agent with good tools.
+**The empirical picture, early $2025$.** Most production "agents" are single-agent ReAct loops with multiple tools. AutoGen, CrewAI, and MetaGPT have impressive demos and limited production traction relative to their GitHub stars. Multi-agent debate (Du et al. $2023$) shows measurable improvements on hard reasoning tasks, $5$–$15\%$ accuracy gains in some benchmarks. Generative-agent simulations (Park $2023$) are research demos with no widespread commercial deployment. Claude Code, Cursor, GitHub Copilot Workspace, and Devin are all fundamentally single-agent. The shipping reality of agents in $2025$ is overwhelmingly single-agent with good tools.
 
 ### When multi-agent earns its place
 
-**Multi-agent earns its place** in four narrow cases.
+Multi-agent earns its place in four narrow cases.
 
 **One. Genuine role specialization exists.** The task decomposes into truly distinct expertise needs, research, writing, code review, legal review, where different roles require different prompts, different tools, or different constraints. A single prompt managing all four roles would be unwieldy; the prompt itself becomes the bottleneck.
 
@@ -32,21 +32,19 @@ The default assumption should be **single-agent.** A well-designed single-agent 
 
 **Three. Long-horizon collaboration is required.** Days-long workflows with stable role boundaries. Memory and state belonging to specific roles. Persistent specialization across many tasks. The kind of workflow where a "team" makes sense organizationally.
 
-**Four. Parallelism is genuinely useful.** Subtasks that can truly run in parallel, research multiple topics, review multiple PRs. Speed gains from concurrent execution that justify orchestration overhead.
+**Four. Parallelism is genuinely useful.** Subtasks that can truly run in parallel, research multiple topics, review multiple PRs. Speed gains from concurrent execution that justify orchestration overhead. Anthropic's own multi-agent research system ([anthropic.com/news/multi-agent-research-system](https://www.anthropic.com/news/multi-agent-research-system), $2025$) is a shipped production example of exactly this case, an orchestrator dispatching independent research subtasks to parallel subagents. It doesn't rebut the single-agent default; it's a worked example of the $20\%$ where multi-agent earns its place.
 
 **The default to challenge**: *"I have a complex task; therefore I need multiple agents."* The instinct is wrong. Most "complex" tasks decompose into a single ReAct loop with the right tools. The honest first question is not *"how many agents do I need"* but *"is one agent with better tools enough?"* The answer is usually yes.
 
 <Callout type="aside">
-**The $80/20$ of multi-agent.** $80\%$ of multi-agent designs would work better as well-designed single-agent ReAct loops. $20\%$ of cases genuinely benefit from multi-agent. **Most "I want multi-agent" instincts** are actually "I want better single-agent prompting" or "I want better tool design." **This chapter is a calibration tool against multi-agent hype**, not a dismissal of multi-agent, but a corrective on when to reach for it.
+**The $80/20$ of multi-agent.** $80\%$ of multi-agent designs would work better as well-designed single-agent ReAct loops. $20\%$ of cases genuinely benefit from multi-agent. Most "I want multi-agent" instincts are actually "I want better single-agent prompting" or "I want better tool design." This chapter is a calibration tool against multi-agent hype, not a dismissal of multi-agent, but a corrective on when to reach for it.
 </Callout>
-
-Section 2 covers the architectures that show up when multi-agent IS the right call.
 
 ## Architectures
 
 ### Three primary architectures
 
-**Three primary architectures** appear in production.
+Three primary architectures appear in production.
 
 **One. Manager-worker (orchestrator-executor).** One manager agent receives the user task, decomposes it into subtasks, and assigns each subtask to a worker. Workers execute their assigned subtask and return results to the manager. The manager combines results into a final answer.
 
@@ -99,7 +97,7 @@ class Agent:
 
 
 def manager_brain(system_prompt, message):
-    if 'decompose' in system_prompt:
+    if 'decompose' in message:
         return ('Subtasks:\n1. researcher: Find population of Bhutan\n'
                 '2. researcher: Find area of Bhutan\n3. calculator: Compute density')
     return 'Final answer: Bhutan ~20.5 people/km^2.'
@@ -145,8 +143,6 @@ run("What's the population density of Bhutan?")
 ```
 </RunnableCode>
 
-Section 3 covers how agents talk to each other once you have more than one.
-
 ## Communication patterns
 
 ### Three communication patterns
@@ -155,7 +151,7 @@ How agents talk to each other is as important as the architecture above them. **
 
 **One. Direct message passing.** Agent A sends an explicit message to Agent B with sender, recipient, and content. The most flexible pattern; the easiest to reason about; the most LLM-call-expensive because every meaningful step is its own message round-trip.
 
-**Two. Shared workspace (blackboard).** All agents read and write to a shared state object. Agents pull what they need; they push their contributions. Lower per-message overhead because state replaces explicit messages; harder to reason about who is seeing what at any given moment. The pattern is not new, **Hoff and Anderson $1976$** described blackboard architectures for distributed problem solving before LLMs existed.
+**Two. Shared workspace (blackboard).** All agents read and write to a shared state object. Agents pull what they need; they push their contributions. Lower per-message overhead because state replaces explicit messages; harder to reason about who is seeing what at any given moment. The pattern is not new, the **Hearsay-II speech-understanding system** (Erman et al. $1980$) is the canonical origin of blackboard architectures for distributed problem solving, built in the $1970$s, decades before LLMs existed.
 
 **Three. Hub-and-spoke.** One central agent, the hub, coordinates communication. Other agents only talk to the hub, not to each other. Common in manager-worker architectures: the manager is the hub, workers are the spokes. The pattern simplifies routing at the cost of putting all the orchestration load on a single agent.
 
@@ -165,21 +161,71 @@ Four factors decide which pattern is right.
 
 **Number of agents.** More than four agents typically pushes toward a shared workspace; four or fewer can be handled with direct messaging without context bloat. **Privacy and scoping.** If agents need to be ignorant of each other's reasoning, for adversarial setups or for independence, direct messaging keeps contexts separate. **Determinism.** Shared workspaces are harder to make deterministic because the order of writes can affect downstream reads. **Debugging.** Message passing has a natural sequence, A said this, then B said that. Workspaces have snapshots, which require more tooling to render.
 
-**What the $2025$ frameworks chose.** AutoGen uses message passing with conversation logs as the primary primitive. CrewAI combines a shared workspace with sequential task execution, agents read the same state object and contribute in turn. LangGraph models the system as a graph with a shared state object, falling broadly into the shared-workspace pattern. OpenAI Swarm uses handoffs: agents transfer control to each other via function calls, a message-passing style with explicit role switching.
+**What the $2025$ frameworks chose.** AutoGen uses message passing with conversation logs as the primary primitive. CrewAI combines a shared workspace with sequential task execution, agents read the same state object and contribute in turn. LangGraph models the system as a graph with a shared state object, falling broadly into the shared-workspace pattern. OpenAI Swarm used handoffs: agents transfer control to each other via function calls, a message-passing style with explicit role switching. (Swarm itself is no longer the live reference; see the framework landscape section below for what replaced it.)
 
 <Callout type="note">
-Multi-agent communication patterns are not novel inventions of the LLM era. **The blackboard pattern is from $1976$**, pre-LLM distributed problem-solving systems where multiple specialized "experts" wrote to a shared state. **Message passing is older still.** The LLM era rediscovered these patterns and gave them new application; engineers from distributed-systems backgrounds will recognize most of them on sight.
+Multi-agent communication patterns are not novel inventions of the LLM era. The blackboard pattern dates to the $1970$s (Hearsay-II), pre-LLM distributed problem-solving systems where multiple specialized "experts" wrote to a shared state. Message passing is older still. The LLM era rediscovered these patterns and gave them new application; engineers from distributed-systems backgrounds will recognize most of them on sight.
 </Callout>
 
-Section 4 covers the most useful multi-agent pattern in practice: structured role specialization.
+### MCP and A2A: standardizing agent communication
+
+The three patterns above describe communication *within* a system you control. Two $2024$–$2025$ protocols standardize communication that crosses system boundaries, and confusing the two is common enough that the chapter should name and separate them directly.
+
+**MCP ([Model Context Protocol](https://modelcontextprotocol.io), Anthropic $2024$)** standardizes how an LLM connects to **tools and data sources**, not to other agents. An MCP server exposes a set of tools (and optionally resources and prompts) over a client-server protocol; any MCP-compatible client, Claude Desktop, an IDE, a custom agent harness, connects to any MCP server and uses its tools without bespoke integration code per pairing. MCP solves the tool-integration version of the $M \times N$ problem: without a shared protocol, $M$ agent frameworks each write custom glue for $N$ tools, $M \times N$ integrations. With MCP, each tool ships one server and each framework ships one client; $M + N$ integrations replace $M \times N$.
+
+**A2A (Agent2Agent protocol, Google $2025$)** standardizes a different problem: how one **agent** discovers and delegates to another **agent**, possibly built on a different framework, by a different vendor, running on different infrastructure. An A2A "agent card" advertises what an agent can do; a requesting agent sends a task to that card's endpoint and gets results back without either side needing to know the other's internals. Where MCP connects an LLM to tools, A2A connects an agent to other agents, closer in spirit to the manager-worker and peer-to-peer patterns above, but standardized across organizational boundaries instead of hand-rolled within one codebase.
+
+<Callout type="note">
+**"MCP is for multi-agent."** A common conflation, and backwards. MCP is a tool-exposure protocol: the agent on the other end of an MCP connection doesn't need to be part of a multi-agent system at all. A single ReAct loop with three MCP-exposed tools is exactly the single-agent default this chapter recommends; MCP didn't make it multi-agent. A2A is the protocol actually built for agent-to-agent communication. Keep the pairing straight: MCP is LLM-to-tool; A2A is agent-to-agent.
+</Callout>
+
+MCP adoption is real and growing; don't dismiss it as another framework-of-the-month. Anthropic, OpenAI, and Google's own agent tooling all shipped MCP clients within roughly a year of the spec's release, and the server ecosystem, GitHub, Slack, databases, filesystems, grew quickly alongside it. A2A is newer and its production adoption picture is far less settled as of this writing; treat specific adoption claims about A2A with more caution than the MCP claims above.
+
+A minimal MCP server, kept as a static reference. MCP needs a real client-server runtime, a stdio or HTTP+SSE transport, that a browser sandbox can't provide, so this block is for reading the shape, not running in place:
+
+```python
+# mcp_server_reference.py
+# Minimal MCP server exposing two tools. Static reference: running
+# this needs the `mcp` package and a connecting client over a real
+# transport (stdio or SSE) -- neither fits a browser sandbox.
+
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("weather-server")
+
+
+@mcp.tool()
+def get_weather(location: str) -> str:
+    """Get the current weather for a location.
+
+    Args:
+        location: City name, e.g. "Tokyo" or "San Francisco".
+    """
+    # A real implementation calls a weather API here.
+    return f"Weather for {location}: 18C, partly cloudy"
+
+
+@mcp.tool()
+def convert_temperature(value: float, to_unit: str) -> str:
+    """Convert a temperature between Celsius and Fahrenheit."""
+    if to_unit.lower() == "fahrenheit":
+        return f"{value * 9 / 5 + 32:.1f} F"
+    return f"{(value - 32) * 5 / 9:.1f} C"
+
+
+if __name__ == "__main__":
+    mcp.run()  # serves over stdio transport
+```
+
+Any MCP client that speaks the protocol, Claude Desktop, a custom agent loop, connects to this process, lists its two tools, and calls them exactly like the function-calling tools of Ch 21. The difference from Ch 21's tool-calling is where the tool definitions and execution live: behind a standard protocol in a separate process, instead of wired directly into the agent's own code.
 
 ## Role specialization
 
 ### Classic patterns
 
-**The most useful multi-agent pattern in practice** isn't general-purpose collaboration, it's **structured role specialization**, where each role has a clear, narrow responsibility and a fresh context.
+The most useful multi-agent pattern in practice isn't general-purpose collaboration, it's **structured role specialization**, where each role has a clear, narrow responsibility and a fresh context.
 
-**Proposer-critic-judge (Du et al. $2023$).** A **proposer** generates a candidate answer. A **critic** critiques the answer and identifies errors or weaknesses. A **judge** decides whether the critique is valid and produces the final answer. The pattern works because LLMs are often better critics than generators; separating the roles lets each operate in a focused mode without bleed-through from the other.
+**Proposer-critic-judge.** A **proposer** generates a candidate answer. A **critic** critiques the answer and identifies errors or weaknesses. A **judge** decides whether the critique is valid and produces the final answer. The pattern works because LLMs are often better critics than generators; separating the roles lets each operate in a focused mode without bleed-through from the other. It's a close cousin of multi-agent debate (Du et al. $2023$, several peer agents cross-critiquing over rounds), distinct in structure, a single critique-then-judge pass rather than iterated peer debate, but built on the same core intuition that critique improves quality.
 
 **Plan-execute-verify.** A **planner** generates a step-by-step plan. An **executor** runs each step using tools. A **verifier** checks that steps were completed correctly. Planning and execution have different cognitive demands; verification benefits from a fresh perspective that hasn't been entangled with either.
 
@@ -245,15 +291,14 @@ for q in ['Capital of Australia', 'Square root of 144', 'Fastest land animal']:
 # - Each role has a different cognitive task (generate / evaluate / synthesize)
 # - Could be the same LLM with different system prompts (cheap multi-agent)
 # - Or three separate LLM calls in sequence (expensive multi-agent)
-# - Du et al. 2023 showed measurable accuracy improvements with this pattern
+# - Closely related to multi-agent debate (Du et al. 2023), which showed
+# - measurable accuracy improvements from cross-critiquing over rounds
 ```
 </RunnableCode>
 
 <Callout type="warning">
-**"More agents = better results."** False. **More agents = more cost, more latency, more failure modes, and rarely more quality.** A five-agent crew with similar prompts is typically worse than one well-prompted agent. **The quality benefit comes from genuine role differentiation, not from agent count.** Adding agents because the task feels hard is the multi-agent equivalent of adding cores to a single-threaded program, it doesn't help if the work isn't actually decomposable.
+**"More agents = better results."** False. More agents means more cost, more latency, more failure modes, and rarely more quality. A five-agent crew with similar prompts is typically worse than one well-prompted agent. The quality benefit comes from genuine role differentiation, not from agent count. Adding agents because the task feels hard is the multi-agent equivalent of adding cores to a single-threaded program, it doesn't help if the work isn't actually decomposable.
 </Callout>
-
-Section 5 surveys the frameworks that wrap all of this up.
 
 ## The 2025 framework landscape
 
@@ -263,9 +308,9 @@ Five frameworks dominate the multi-agent landscape as of early $2025$. Each has 
 
 **CrewAI.** Define agents by role, goal, and backstory; combine them into "crews" that execute sequentially or hierarchically with tasks assigned by a manager agent. **Strengths**: easy onboarding, expressive role definitions, fast prototyping. **Weaknesses**: opinionated structure that pushes everything toward the role-based model; deviating is harder than it looks. **Production traction**: moderate; popular for prototypes and demos.
 
-**AutoGen (Microsoft).** Agents communicate by exchanging messages; conversation is the primary primitive. Supports group chats, nested chats, and human-in-the-loop options. **Strengths**: flexible, supports many architectures, tight Microsoft ecosystem integration. **Weaknesses**: verbose configuration; conversation logs can sprawl into thousands of turns and become hard to debug. **Production traction**: moderate; common in Microsoft-aligned shops.
+**AutoGen (Microsoft; Wu et al. $2023$, [arxiv.org/abs/2308.08155](https://arxiv.org/abs/2308.08155)).** Agents communicate by exchanging messages; conversation is the primary primitive. Supports group chats, nested chats, and human-in-the-loop options. **Strengths**: flexible, supports many architectures, tight Microsoft ecosystem integration. **Weaknesses**: verbose configuration; conversation logs can sprawl into thousands of turns and become hard to debug. **Production traction**: moderate; common in Microsoft-aligned shops.
 
-**OpenAI Swarm (experimental).** Lightweight handoffs, agents transfer control to each other via function calls. Routing is the orchestration primitive. **Strengths**: minimal abstractions, close to the bare metal, easy to learn from. **Weaknesses**: explicitly marked experimental, smaller community, fewer production patterns. **Production traction**: limited; popular as a learning tool more than a deployment target.
+**OpenAI Swarm (superseded).** Lightweight handoffs, agents transfer control to each other via function calls, with routing as the orchestration primitive. That design lives on, but not as Swarm: OpenAI shipped the **Agents SDK** in March $2025$ as, in its own words, "a production-ready evolution of Swarm," adding built-in tracing, guardrails, and Responses API integration. The Swarm GitHub README now states plainly that Swarm is replaced by the Agents SDK, and the repository has not taken active development since. **Strengths**: the handoff pattern remains a clean thing to learn from. **Weaknesses**: no longer maintained, no production support, no path forward that doesn't mean migrating. **Production traction**: none, direct new work to the Agents SDK instead. As of $2026$-$07$-$13$ this is where things stand; frameworks in this space keep getting superseded on a roughly annual cycle, so check current status before committing to any of them.
 
 **LangGraph (LangChain).** Explicit graph of agents and nodes with shared state. Graph traversal is the execution model; cycles are supported for iterative workflows. **Strengths**: explicit control flow, persistence, mature state management. **Weaknesses**: steep learning curve, verbose for simple cases. **Production traction**: high; the default choice for teams already invested in LangChain and for complex workflows that need explicit graph semantics.
 
@@ -278,10 +323,8 @@ Most production multi-agent systems are not pure framework adoptions, they are b
 **Team familiarity**: stick with what your team already knows; the framework is rarely the bottleneck. **Complexity needs**, LangGraph for complex graphs, CrewAI for role-based crews, AutoGen for conversation-driven flows. **Production maturity**, LangGraph and AutoGen have the most production-tested code. **Lock-in concern**, write framework-agnostic role logic (prompts, tool definitions, evaluation harnesses) and let the framework be plumbing. The roles you design should outlive any framework switch.
 
 <Callout type="note">
-**"Pick the framework with the most stars."** Misleading. **Star counts measure curiosity, not production utility.** CrewAI has many stars; production deployments are moderate. **Choose based on team familiarity, complexity needs, and production track record**, not popularity. The framework graveyard is full of high-star projects.
+**"Pick the framework with the most stars."** Misleading. Star counts measure curiosity, not production utility. CrewAI has many stars; production deployments are moderate. Choose based on team familiarity, complexity needs, and production track record, not popularity. The framework graveyard is full of high-star projects.
 </Callout>
-
-Section 6 covers the most-cited multi-agent paper of the era, and what it taught the field.
 
 ## Generative-agent simulations
 
@@ -291,7 +334,7 @@ Section 6 covers the most-cited multi-agent paper of the era, and what it taught
 
 The architecture has four parts. **Memory stream**: each agent records every observation as a memory record. **Retrieval**, agents retrieve relevant memories when deciding what to do, scored on recency, importance, and relevance. **Reflection**, periodically, agents synthesize lower-level memories into higher-level insights ("I've spent a lot of time with Mei this week, we're becoming friends"). **Planning**, agents create daily plans and refine them in response to new observations.
 
-What Smallville demonstrated. LLMs plus memory plus reflection can produce coherent multi-day behavior. Emergent social dynamics arise from individual-level reasoning rather than top-down scripting. **The complexity of social behavior comes from interaction, not from any one agent.**
+What Smallville demonstrated. LLMs plus memory plus reflection can produce coherent multi-day behavior. Emergent social dynamics arise from individual-level reasoning rather than top-down scripting. The complexity of social behavior comes from interaction, not from any one agent.
 
 ### Beyond Smallville
 
@@ -299,23 +342,21 @@ Several $2024$–$2025$ research projects extended the Smallville pattern. Game 
 
 ### Production reality
 
-The honest picture as of early $2025$. **Generative-agent simulations remain research demos.** No widespread commercial deployment has followed Park $2023$. The patterns it pioneered, memory, reflection, planning, have **influenced production single-agent design** far more than they have driven standalone multi-agent products.
+The honest picture as of early $2025$: generative-agent simulations remain research demos. No widespread commercial deployment has followed Park $2023$. The patterns it pioneered, memory, reflection, planning, have influenced production single-agent design far more than they have driven standalone multi-agent products.
 
 Why the simulations stay in research. Cost per simulated agent-day is significant. Failure modes are emergent and hard to debug. Use cases that justify the cost are narrow, game studios want more control than emergent behavior provides; productivity tools rarely need persistent simulated characters.
 
 <Callout type="note">
-**"Generative-agent simulations will replace game NPCs."** Speculative. **Park $2023$ is impressive research**; production game deployments remain limited. Cost per simulated character-hour is high; failure modes are unpredictable; designers want more control than emergent behavior provides. $2024$–$2025$ saw some commercial experiments; **widespread adoption remains in the future**.
+**"Generative-agent simulations will replace game NPCs."** Speculative. Park $2023$ is impressive research; production game deployments remain limited. Cost per simulated character-hour is high; failure modes are unpredictable; designers want more control than emergent behavior provides. $2024$–$2025$ saw some commercial experiments; widespread adoption remains in the future.
 </Callout>
-
-Section 7 is the chapter's centerpiece, when NOT to use multi-agent.
 
 ## The honest assessment: when NOT to use multi-agent
 
 ### Five anti-patterns
 
-This is the most important section of the chapter. Multi-agent is genuinely useful in narrow cases, and dramatically overused everywhere else. Five anti-patterns show up again and again.
+This is the most important section of the chapter. Multi-agent is genuinely useful in narrow cases, and dramatically overused everywhere else. Cognition AI's **"Don't Build Multi-Agents"** post ([cognition.ai/blog/dont-build-multi-agents](https://cognition.ai/blog/dont-build-multi-agents), $2025$) made this case sharply, arguing that fragmented context across sub-agents, not agent count by itself, is the mechanism behind most multi-agent failures: a sub-agent that never saw the full picture makes a locally-reasonable decision that's globally wrong, and no amount of aggregation fixes a decision made on incomplete context. The argument deserves engagement, not dismissal. Five anti-patterns show up again and again, and each one is a variant of that same context-fragmentation failure.
 
-**One. A single agent with the right tools would work.** "I need an agent to search, summarize, and report" is a single ReAct loop with three tools. "I need an agent to plan and execute" is a single ReAct loop; the LLM is good at both within one prompt. "I need an agent that's careful" calls for adding a self-critique step within the same loop, not a separate critic agent. **Most multi-agent designs in this category are over-engineering.**
+**One. A single agent with the right tools would work.** "I need an agent to search, summarize, and report" is a single ReAct loop with three tools. "I need an agent to plan and execute" is a single ReAct loop; the LLM is good at both within one prompt. "I need an agent that's careful" calls for adding a self-critique step within the same loop, not a separate critic agent. Most multi-agent designs in this category are over-engineering.
 
 **Two. The agents would just call the same LLM with different names.** Three agents that all use Claude with similar prompts and similar tools is wasted complexity. The benefit of multi-agent comes from genuinely different roles, different prompts, different tools, different constraints, not from giving the same agent three distinct names.
 
@@ -323,7 +364,7 @@ This is the most important section of the chapter. Multi-agent is genuinely usef
 
 **Four. Debugging matters and the system isn't critical.** Multi-agent traces are harder to read than single-agent traces. The cognitive overhead of "which agent did what when, and why" exceeds the benefit in most cases. Single-agent observability tooling (Ch 28) is already non-trivial; multi-agent versions amplify the problem.
 
-**Five. The team is small and the system needs to ship.** Multi-agent complexity slows development. Iteration cycles are longer; quality regressions are harder to attribute to a specific role or message. **If you have three engineers and one quarter, ship a single-agent system.**
+**Five. The team is small and the system needs to ship.** Multi-agent complexity slows development. Iteration cycles are longer; quality regressions are harder to attribute to a specific role or message. If you have three engineers and one quarter, ship a single-agent system.
 
 ### Single-agent alternatives that often win
 
@@ -376,12 +417,12 @@ print(f"\nMulti-agent earns its place ONLY when roles are genuinely distinct.")
 ```
 </RunnableCode>
 
-**The $80/20$ again.** $80\%$ of multi-agent designs in the wild would work better as single-agent ReAct loops. $20\%$ of cases genuinely benefit, usually adversarial workflows, role specialization, or genuine parallelism. **Most "I want multi-agent" instincts are actually "I want better single-agent prompting."**
+**The $80/20$ again.** $80\%$ of multi-agent designs in the wild would work better as single-agent ReAct loops. $20\%$ of cases genuinely benefit, usually adversarial workflows, role specialization, or genuine parallelism. Most "I want multi-agent" instincts are actually "I want better single-agent prompting."
 
 **When multi-agent IS worth it.** Adversarial workflows where the judge truly benefits from a separate context (debate, code review with an independent reviewer). Genuinely parallel tasks with no inter-dependencies (research $N$ topics, review $N$ PRs). Long-horizon work with stable, distinct expertise (legal + medical + engineering review). Cases where the role count is genuinely greater than two and the roles genuinely don't overlap.
 
 <Callout type="warning">
-**"Multi-agent enables emergent intelligence."** Speculative and largely unsubstantiated. **No widely-replicated evidence** that multi-agent setups produce capabilities qualitatively beyond their constituent agents. Generative-agent simulations produce *believable* behavior; "intelligence beyond constituents" is mostly anthropomorphic interpretation. **Be cautious about emergence claims**; the prior should be skeptical, and the burden of proof is on the claim.
+**"Multi-agent enables emergent intelligence."** Speculative and largely unsubstantiated. No widely-replicated evidence shows multi-agent setups producing capabilities qualitatively beyond their constituent agents. Generative-agent simulations produce *believable* behavior; "intelligence beyond constituents" is mostly anthropomorphic interpretation. Be cautious about emergence claims; the prior should be skeptical, and the burden of proof is on the claim.
 </Callout>
 
 ## Exercises
@@ -482,6 +523,30 @@ def classify(task):
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Key strings from the task description drive the branch, checked in order from most specific signal to most generic; the order matters because "review" and "verify" outrank a generic single-agent default.
+
+```python
+def classify(task):
+    desc = task['description'].lower()
+
+    if 'in parallel' in desc or 'compare' in desc:
+        return ('multi-agent: manager-worker', 'Genuinely parallel independent subtasks.')
+    if 'verify' in desc or 'prove' in desc or 'review' in desc:
+        return ('multi-agent: proposer-critic-judge', 'Verifiable correctness signal; LLM is a better critic than generator.')
+    if 'debate' in desc or 'discuss' in desc or 'argue' in desc:
+        return ('multi-agent: peer-to-peer', 'Adversarial/discursive dynamics.')
+    if 'summarize' in desc or 'what is' in desc or 'lookup' in desc:
+        return ('single-agent', 'Single fact lookup or single-pass summarization.')
+    return ('single-agent', 'Default: no clear multi-agent signal.')
+```
+
+Output: task_1 -> single-agent, task_2 -> multi-agent: proposer-critic-judge (the "review" signal fires; the exercise's own comment notes this one could go either way), task_3 -> multi-agent: proposer-critic-judge, task_4 -> single-agent, task_5 -> multi-agent: manager-worker. Four of five land exactly on the annotated answer; task_2 is the deliberately ambiguous one.
+
+</details>
 
 ### Exercise 2 (medium): Proposer-critic-judge implementation
 
@@ -584,10 +649,31 @@ def proposer_critic_judge(question):
 # # - Same LLM, three modes: single-agent variant of the same pattern
 # # - True multi-agent: three different model instances or three different LLMs entirely
 # # - The sqrt(225) example: proposer is wrong; critic catches it; judge fixes it
-# # - This is the pattern Du et al. 2023 used to achieve measurable accuracy gains
+# # - A close cousin of multi-agent debate (Du et al. 2023), built on the same
+# # - core intuition: critique improves quality
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Three sequential calls, each feeding the prior stage's output into the next role's prompt as context.
+
+```python
+def proposer_critic_judge(question):
+    proposal = mock_llm(PROPOSER_PROMPT, question)
+    critique = mock_llm(CRITIC_PROMPT, f"Question: {question}\nProposed solution: {proposal}")
+    verdict = mock_llm(JUDGE_PROMPT, f"Question: {question}\nProposer: {proposal}\nCritic: {critique}")
+    print(f"  Proposer: {proposal}")
+    print(f"  Critic:   {critique}")
+    print(f"  Judge:    {verdict}")
+    return verdict
+```
+
+For `17 * 23` and `sum of 1 to 10`, the critic finds no errors and the judge accepts the proposer's answer verbatim (391 and 55). For `sqrt(225)`, the proposer's own reasoning shows `15 * 15 = 225` but then answers 14, a self-contradiction; the critic catches it and the judge outputs "Final answer: 15." That's the pattern working as designed: the critic doesn't need to solve the problem itself, just verify the proposer's own stated reasoning against its own conclusion.
+
+</details>
 
 ### Exercise 3 (medium): Anti-pattern audit and refactor
 
@@ -621,12 +707,14 @@ Output: 'APPROVE' or 'REJECT' with a one-line reason."""
 
 def mock_llm(system_prompt, message):
     """Mock LLM: same input always produces same output (a key insight of the degenerate case)."""
+    if 'author defending' in system_prompt:
+        return "Implemented feature X with comprehensive tests."
+    if 'critical code reviewer' in system_prompt:
+        return "REJECT: no test for empty or whitespace-only passwords; validation logic doesn't handle that edge case."
     if 'code reviewer' in system_prompt:
         return "APPROVE - The changes look reasonable; I see no issues."
-    if 'pr author' in system_prompt:
-        return "Implemented feature X with comprehensive tests."
     if 'tech lead' in system_prompt:
-        return "Approved. The implementation is sound; reviewer's no-issues finding is consistent with my own assessment."
+        return "BLOCK. The reviewer's edge-case finding is real; the author's tests don't cover it yet."
     return ""
 
 
@@ -701,6 +789,36 @@ def fix_proposer_critic_judge(pr_content):
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Fix A is a single `mock_llm` call; Fix B chains author -> reviewer -> tech lead, each stage's output feeding the next prompt as context.
+
+```python
+def fix_single_agent(pr_content):
+    print("\n=== FIX A: Single-agent (one reviewer) ===")
+    output = mock_llm(REVIEWER_PROMPT, pr_content)
+    print(f"  Reviewer: {output}")
+    print(f"  Cost: ${0.01:.2f}")
+    return output
+
+
+def fix_proposer_critic_judge(pr_content):
+    print("\n=== FIX B: Proposer-critic-judge (three DISTINCT roles) ===")
+    author_defense = mock_llm(AUTHOR_PROMPT, pr_content)
+    review = mock_llm(REVIEWER_DETAILED_PROMPT, f"PR: {pr_content}\nAuthor: {author_defense}")
+    decision = mock_llm(TECH_LEAD_PROMPT, f"PR: {pr_content}\nAuthor: {author_defense}\nReview: {review}")
+    print(f"  Author:    {author_defense}")
+    print(f"  Reviewer:  {review}")
+    print(f"  Tech lead: {decision}")
+    print(f"  Cost: ${3 * 0.01:.2f}")
+    return decision
+```
+
+The degenerate baseline: 3 identical "APPROVE - The changes look reasonable" outputs, 1 unique output out of 3 calls, $0.03 spent for what $0.01 would buy. Fix A reproduces that same single "APPROVE" verdict for $0.01: no quality lost by dropping to one call. Fix B, with genuinely distinct prompts, produces three different outputs: the author defends the change, the detailed reviewer catches a real gap ("no test for empty or whitespace-only passwords"), and the tech lead outputs "BLOCK" based on that finding. Same $0.03 as the degenerate design, but now the spend buys a different, more scrutinized answer, the point being that the cost of multi-agent is only justified when the roles actually diverge.
+
+</details>
 
 ### Exercise 4 (hard): Framework selection by scenario
 
@@ -800,9 +918,33 @@ def recommend(scenario):
   packages={[]}
 />
 
-## One chapter remains
+<details>
+<summary>Solution</summary>
 
-### Phase 15 status
+Each scenario has one dominant signal, fast-shipping single-role, sequential handoffs across distinct roles, heavy state/retry, or debate/group-chat, checked in that priority order.
+
+```python
+def recommend(scenario):
+    desc = scenario['description'].lower()
+
+    if 'ship in 2 weeks' in desc or ('single role' in desc and 'escalate' in desc):
+        return ('Custom', 'single-agent', "One role, simple task, fast shipping: a framework adds overhead without benefit.")
+    if 'distinct roles' in desc and ('handoff' in desc or 'handoffs' in desc):
+        return ('CrewAI', 'manager-worker', "Multiple distinct roles with sequential handoffs is CrewAI's sweet spot.")
+    if 'heavy state' in desc or 'rollback' in desc or 'retry' in desc:
+        return ('LangGraph', 'single-agent', "Heavy state, cycles, and retry semantics fit LangGraph's graph model; a single agent traversing a complex graph is a common production pattern.")
+    if 'debate' in desc or 'group chat' in desc or 'consensus' in desc:
+        return ('AutoGen', 'peer-to-peer', "Group chat and debate dynamics are AutoGen's primary primitive; experimental, not production.")
+    return ('Custom', 'single-agent', "Default: no strong signal for a framework or multi-agent architecture.")
+```
+
+Results: scenario_1 -> Custom + single-agent (ship fast, no framework needed); scenario_2 -> CrewAI + manager-worker (5 sequential roles is CrewAI's exact use case); scenario_3 -> LangGraph + single-agent (the state and retry complexity lives in the graph, not in multiple agents); scenario_4 -> AutoGen + peer-to-peer (group-chat debate is AutoGen's primitive). All four match the hint table's recommendations.
+
+</details>
+
+## Where multi-agent fits in Part IX
+
+### Part IX chapter status
 
 | Chapter | Topic | Status |
 |---------|-------|--------|
@@ -813,14 +955,14 @@ def recommend(scenario):
 
 ### Ch 30 closes the curriculum
 
-**Ch 30** brings everything full-circle. **Phase 14's evaluation discipline** (Ch 26) applied to agent systems, how to evaluate agents quantitatively; the production benchmarks (SWE-bench, GAIA, OSWorld, $\tau$-bench, BrowseComp); production framework summary (LangSmith, Helicone, Braintrust); deployment patterns; **and the curriculum's close.**
+Ch 30 brings everything full-circle: Part VIII's evaluation discipline (Ch 26) applied to agent systems, how to evaluate agents quantitatively; the production benchmarks (SWE-bench, GAIA, OSWorld, $\tau$-bench, BrowseComp); production framework summary (LangSmith, Helicone, Braintrust); deployment patterns; and the curriculum's close.
 
-The trajectory is short to state. **Ch 27 conceptual** → **Ch 28 engineering** → **Ch 29 composition** (you are here) → **Ch 30 evaluation**. Each chapter builds on the prior; each delivers a layer of the stack the next one composes on top of. The curriculum closes by bringing eval discipline back to bear on the agent systems we've built, and on every other system the book has taught.
+The trajectory is short to state. Ch 27 conceptual → Ch 28 engineering → Ch 29 composition (you are here) → Ch 30 evaluation. Each chapter builds on the prior; each delivers a layer of the stack the next one composes on top of. The curriculum closes by bringing eval discipline back to bear on the agent systems we've built, and on every other system the book has taught.
 
-After Ch 30 the reader has the full stack. **From numpy primitives in Ch 1 through transformer internals (Ch 4-6), pretraining (Ch 7-10), alternative architectures (Ch 11-12), post-training (Ch 13-16), inference (Ch 17-19), modern capabilities (Ch 20-23), safety and interpretability and evaluation (Ch 24-26), and agent systems (Ch 27-30), every layer covered, every layer with its own working code.**
+After Ch 30 the reader has the full stack: numpy primitives in Ch 1 through transformer internals (Ch 4-6), pretraining (Ch 7-10), alternative architectures (Ch 11-12), post-training (Ch 13-16), inference (Ch 17-19), modern capabilities (Ch 20-23), safety and interpretability and evaluation (Ch 24-26), and agent systems (Ch 27-30), every layer covered, every layer with its own working code.
 
-Multi-agent is real. **Adversarial workflows improve quality** when the LLM is unreliable as a judge of its own work. **Role specialization helps** when tasks genuinely decompose into distinct expertise. **Long-horizon collaboration** earns its keep when stable role boundaries persist across many tasks. The $2025$ framework landscape, CrewAI, AutoGen, OpenAI Swarm, LangGraph, MetaGPT, has produced useful tools for the cases that warrant them. **Generative-agent simulations** (Park $2023$) demonstrated that memory plus reflection plus planning can produce coherent multi-day behavior.
+Multi-agent is real. Adversarial workflows improve quality when the LLM is unreliable as a judge of its own work. Role specialization helps when tasks genuinely decompose into distinct expertise. Long-horizon collaboration earns its keep when stable role boundaries persist across many tasks. The $2025$ framework landscape, CrewAI, AutoGen, OpenAI Swarm, LangGraph, MetaGPT, has produced useful tools for the cases that warrant them. Generative-agent simulations (Park $2023$) demonstrated that memory plus reflection plus planning can produce coherent multi-day behavior.
 
-Multi-agent is also overhyped. **$80\%$ of multi-agent designs** in the wild would work better as well-designed single-agent ReAct loops. **The "more agents = better" reflex is wrong**; the benefit comes from genuine role differentiation, not from agent count. **The "AGI via multi-agent" framing of $2023$** aged poorly; **the "emergent intelligence" framing of $2024$** has no replicated evidence. **The honest default is single-agent**; multi-agent is the exception.
+Multi-agent is also overhyped. $80\%$ of multi-agent designs in the wild would work better as well-designed single-agent ReAct loops. The "more agents = better" reflex is wrong; the benefit comes from genuine role differentiation, not from agent count. The "AGI via multi-agent" framing of $2023$ aged poorly; the "emergent intelligence" framing of $2024$ has no replicated evidence. The honest default is single-agent; multi-agent is the exception.
 
-**One chapter remains.** Ch 30 evaluates agent systems, brings Phase 14's evaluation discipline back to bear on Phase 15's composition arc, and closes the curriculum. **One chapter from the end.**
+Ch 30 evaluates agent systems, brings Part VIII's evaluation discipline back to bear on Part IX's composition arc, and closes the curriculum.

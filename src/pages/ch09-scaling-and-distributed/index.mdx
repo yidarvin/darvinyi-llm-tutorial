@@ -72,15 +72,17 @@ Plug in Chinchilla's fitted $\alpha, \beta$: $a \approx 0.28/(0.34 + 0.28) \appr
 
 ### The 20-tokens-per-parameter rule
 
-For compute budgets in the range that pre-2022 labs cared about, the compute-optimal ratio works out to $D_{\text{opt}} / N_{\text{opt}} \approx 20$, **about $20$ training tokens per parameter**. This is the simple rule of thumb that everyone remembers from Chinchilla. Want to train a $7$B-parameter model compute-optimally? Use $\sim 140$B training tokens. Want $70$B? Use $\sim 1.4$T tokens, which is exactly what Chinchilla did.
+The headline result everyone remembers from Chinchilla is $D_{\text{opt}} / N_{\text{opt}} \approx 20$, **about $20$ training tokens per parameter**. It is exactly the ratio the Chinchilla model itself used: $70$B parameters, $1.4$T tokens. Want to train a $7$B-parameter model compute-optimally by this rule? Use $\sim 140$B training tokens.
 
-Practical use: given a compute budget $C$, plug into the compute-optimal formulas to get $N_{\text{opt}}$ and $D_{\text{opt}}$. Use those as the *starting* allocation; tune from there based on what your downstream evaluation actually cares about. The Chinchilla ratio is a *guide*, not a contract, and as the Llama-3 example below will show, modern practice often intentionally departs from it.
+Worth being precise about where "$20$" comes from. It is the result of Hoffmann et al.'s empirical iso-FLOP curves (training a grid of models at fixed compute and reading off the loss-minimizing size directly), not a number produced by solving the parametric equation above with its fitted constants. Plugging $E, A, B, \alpha, \beta$ into the constrained minimization instead gives a ratio that is compute-dependent and, at Chinchilla's own training budget, noticeably above $20$, drifting from roughly $60$ at $C = 10^{22}$ to over $100$ at $C = 10^{25}$. The two Chinchilla-paper analyses (the parametric fit and the iso-FLOP profiles) agree on the qualitative story, N and D should scale together, but do not reproduce the same numeric ratio from the fitted constants alone. "$\sim 20$ tokens per parameter" is the empirical rule of thumb; treat it as that, not as an algebraic consequence of <EqRef id="9.chinchilla" />.
+
+Practical use: given a compute budget $C$, the $\sim 20$-tokens-per-parameter rule of thumb is a reasonable starting allocation. Tune from there based on what your downstream evaluation actually cares about. The Chinchilla ratio is a *guide*, not a contract, and as the Llama-3 example below will show, modern practice often intentionally departs from it.
 
 <WidgetFrame title="Scaling law calculator" caption="The Chinchilla loss curve along the iso-compute constraint. Adjust your compute budget; the curve rescales. Three strategy points highlight the trade-off: Kaplan (overlarge model, undertrained), Chinchilla (optimal balance), Llama-3 style (over-trained smaller model for inference economics). Click any strategy card to focus it.">
   <ScalingLawCalculator client:visible />
 </WidgetFrame>
 
-The numerical version is short, the Chinchilla loss function and the compute-optimal allocation are each a few lines of numpy. Running it across a range of compute budgets makes the "$\sim 20$ tokens per parameter" pattern visible across orders of magnitude.
+The numerical version is short: the Chinchilla loss function is a few lines of numpy, and the compute-optimal allocation falls out of a brute-force sweep along the $6ND = C$ constraint. Running it across a range of compute budgets shows the true optimal ratio implied by this parametric fit, and that ratio rises with compute rather than sitting fixed at $20$.
 
 <RunnableCode
   client:visible
@@ -95,15 +97,18 @@ def chinchilla_loss(N, D):
     return E + A / (N ** ALPHA) + B / (D ** BETA)
 
 def compute_optimal(C):
-    """Given compute budget C (FLOPs), return (N_opt, D_opt, predicted_loss)."""
-    a = BETA / (ALPHA + BETA)
-    # Approximate fit constants for the proportionality.
-    k_N, k_D = 0.6, 1.7
-    N_opt = k_N * (C / 6) ** a
-    D_opt = k_D * (C / 6) ** (1 - a)
-    return N_opt, D_opt, chinchilla_loss(N_opt, D_opt)
+    """Given compute budget C (FLOPs), brute-force search the D/N ratio r that
+    minimizes loss along 6*N*D = C. Returns (N_opt, D_opt, predicted_loss)."""
+    ratios = np.logspace(-1, 3.3, 2000)     # candidate tokens-per-parameter ratios
+    N = np.sqrt(C / (6 * ratios))
+    D = ratios * N
+    losses = chinchilla_loss(N, D)
+    i = np.argmin(losses)
+    return N[i], D[i], losses[i]
 
-# Walk through several compute budgets: note the D/N ratio sits near 20.
+# Walk through several compute budgets: the optimal D/N ratio drifts upward with
+# compute, and sits well above the famous "~20 tokens per parameter" rule of
+# thumb (which comes from Chinchilla's iso-FLOP experiments, not this equation).
 print(f"{'Compute (FLOPs)':>18} {'N (params)':>15} {'D (tokens)':>15} {'D/N':>8} {'Loss':>7}")
 print("-" * 70)
 for C in [1e22, 1e23, 6e23, 1e24, 3e25]:
@@ -210,7 +215,7 @@ If DP cannot break the per-GPU memory ceiling, the next step is to actually spli
 
 Tensor parallelism splits **individual layer operations** across GPUs. Each GPU holds a *slice* of a layer's parameters and computes a *slice* of that layer's output. The pioneering recipe is Megatron-LM (Shoeybi et al. 2019, [arxiv.org/abs/1909.08053](https://arxiv.org/abs/1909.08053)), which works out specific dimension choices for the transformer's FFN and attention so that communication between GPUs is required only at carefully chosen points.
 
-For the FFN, the recipe is a column-then-row split. The first linear projects $d \to 4d$, Megatron splits this *along the output (column) dimension*, so each TP rank computes its own slice of the $4d$-dimensional hidden activations independently, with no communication needed. The activation function (GELU or SwiGLU) is element-wise and stays local. The second linear projects $4d \to d$, Megatron splits this *along the input (row) dimension*, so each rank multiplies its own activation slice by its own weight slice, producing a partial sum. A single all-reduce across TP ranks then combines the partial sums into the final FFN output. Two big linear operations; one communication point.
+For the FFN, the recipe is a column-then-row split. The first linear projects $d \to 4d$, Megatron splits this *along the output (column) dimension*, so each TP rank computes its own slice of the $4d$-dimensional hidden activations independently, with no communication needed. The nonlinearity, GELU (element-wise) or the gated SwiGLU variant, is applied within each rank's own activation slice and needs no communication. The second linear projects $4d \to d$, Megatron splits this *along the input (row) dimension*, so each rank multiplies its own activation slice by its own weight slice, producing a partial sum. A single all-reduce across TP ranks then combines the partial sums into the final FFN output. Two big linear operations; one communication point.
 
 For attention, the recipe is similar: QKV projections split along the head dimension (different attention heads on different GPUs), each rank computes attention independently on its heads, the output projection splits along the input dimension, and a single all-reduce across TP ranks at the end of attention recovers the full output. Each transformer block ends up with two all-reduces, one for attention, one for FFN.
 
@@ -218,7 +223,7 @@ The communication cost per block is two all-reduces of the *activation*, proport
 
 ### Pipeline parallelism (GPipe)
 
-Pipeline parallelism splits the model **between layers**, not within them. Different layers live on different GPUs. GPU $0$ holds layers $1$ through $4$; GPU $1$ holds layers $5$ through $8$; and so on, dividing an $N$-layer model into pipeline stages. The pioneering paper is GPipe (Huang et al. 2019, [arxiv.org/abs/1811.06965](https://arxiv.org/abs/1811.06965)).
+Pipeline parallelism splits the model **between layers**, not within them. Different layers live on different GPUs. GPU $0$ holds layers $1$ through $4$; GPU $1$ holds layers $5$ through $8$; and so on, dividing an $n_{\text{layers}}$-layer model into pipeline stages. The pioneering paper is GPipe (Huang et al. 2018, [arxiv.org/abs/1811.06965](https://arxiv.org/abs/1811.06965)).
 
 The forward pass flows down the pipeline: a batch enters GPU $0$, its layer-$1$-through-$4$ activations are computed, the result is sent to GPU $1$, which runs layers $5$ through $8$, and so on. The backward pass flows in reverse. Communication happens *only at the stage boundaries*, one activation send between consecutive GPUs per stage transition. That is dramatically less communication than TP. PP is bandwidth-friendly and runs comfortably *across* nodes over InfiniBand.
 
@@ -395,6 +400,28 @@ def chinchilla_loss(N, D):
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+Just sum the three terms directly:
+
+```python
+E, A, B = 1.69, 406.0, 410.0
+ALPHA, BETA = 0.34, 0.28
+
+def chinchilla_loss(N, D):
+    return E + A / N ** ALPHA + B / D ** BETA
+
+chinchilla_loss(175e9, 300e9)   # GPT-3: 2.002
+chinchilla_loss(70e9, 1.4e12)   # Chinchilla: 1.936 -- lower despite 2.5x fewer params
+```
+
+Monotonicity in $N$ (D = 1T fixed): 2.2226, 2.0306, 1.9429, 1.9027 for $N$ = 1e9...1e12 -- strictly decreasing.
+Monotonicity in $D$ (N = 7B fixed): 3.1107, 2.5223, 2.2135, 2.0514 for $D$ = 1e9...1e12 -- strictly decreasing.
+At $N = D = 10^{18}$, loss = 1.6940, matching $E = 1.69$ to four decimal places.
+
+</details>
+
 ### Exercise 2 (medium): Compute-optimal allocation
 
 Given a compute budget $C$ (in FLOPs), find the model size $N$ and dataset size $D$ that minimize the Chinchilla loss subject to $6ND = C$. Use a brute-force search along the iso-compute curve.
@@ -402,7 +429,7 @@ Given a compute budget $C$ (in FLOPs), find the model size $N$ and dataset size 
 <details>
 <summary>Hint</summary>
 
-Parameterize the constraint by the tokens-per-parameter ratio $r = D/N$. From $6ND = C$ and $D = rN$, you get $N = \sqrt{C / (6r)}$ and $D = r \cdot N$. Sweep $r$ over a wide range (log scale; say 0.1 to 2000) and pick the $r$ that minimizes the loss. The optimum should be near $r = 20$ regardless of $C$, this is the "20 tokens per parameter" rule.
+Parameterize the constraint by the tokens-per-parameter ratio $r = D/N$. From $6ND = C$ and $D = rN$, you get $N = \sqrt{C / (6r)}$ and $D = r \cdot N$. Sweep $r$ over a wide range (log scale; say 0.1 to 2000) and pick the $r$ that minimizes the loss. With these fitted constants, the optimum is *not* fixed at $r = 20$: it drifts with $C$, from roughly $60$ at $C = 10^{22}$ to over $120$ at $C = 10^{25}$. That's higher than the famous "20 tokens per parameter" rule of thumb, which comes from Chinchilla's separate iso-FLOP experiments rather than from this parametric equation directly (see the note in Section 3 above). Your brute-force search here should reproduce the drifting, above-20 values, not a fixed 20.
 
 </details>
 
@@ -438,10 +465,47 @@ def compute_optimal(C, ratios=None):
 # for C in [1e22, 1e23, 6e23, 1e24, 1e25]:
 #     N, D, r, L = compute_optimal(C)
 #     print(f"{C:>16.1e} {N:>12.2e} {D:>12.2e} {r:>6.1f} {L:>7.3f}")
-# # Verify: D/N should be near 20 regardless of C (the Chinchilla "rule of thumb")
+# # Verify: D/N should drift upward with C (roughly 60 -> 120+ across this
+# # range), not sit at a fixed 20 -- the "20 tokens per parameter" rule of
+# # thumb is Chinchilla's empirical iso-FLOP result, not this equation's optimum.
 `}
   packages={["numpy"]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Loop over ratios, compute $N$ and $D$ from the constraint, track the minimum-loss triple:
+
+```python
+import numpy as np
+
+def compute_optimal(C, ratios=None):
+    if ratios is None:
+        ratios = np.logspace(-1, 3.3, 200)
+    best = None
+    for r in ratios:
+        N = np.sqrt(C / (6 * r))
+        D = r * N
+        loss = chinchilla_loss(N, D)
+        if best is None or loss < best[3]:
+            best = (N, D, r, loss)
+    return best
+```
+
+Results:
+
+| Compute | N_opt | D_opt | D/N | Loss |
+|---|---|---|---|---|
+| 1.0e22 | 5.21e9 | 3.20e11 | 61.3 | 2.138 |
+| 1.0e23 | 1.46e10 | 1.14e12 | 78.6 | 2.005 |
+| 6.0e23 | 3.31e10 | 3.02e12 | 91.3 | 1.929 |
+| 1.0e24 | 4.17e10 | 4.00e12 | 95.9 | 1.911 |
+| 1.0e25 | 1.16e11 | 1.43e13 | 123.0 | 1.845 |
+
+The ratio drifts from 61 to 123 as $C$ grows two orders of magnitude -- it never sits at 20. This parametric equation's own optimum is well above the "20 tokens per parameter" rule of thumb, which is a separate empirical finding from Chinchilla's iso-FLOP sweeps, not a consequence of this fitted formula.
+
+</details>
 
 ### Exercise 3 (medium): Parallelism memory footprint
 
@@ -450,21 +514,20 @@ For each of DP, TP, PP, and FSDP, compute the memory per GPU for a given model s
 <details>
 <summary>Hint</summary>
 
-For a model of $N$ parameters trained with mixed precision + AdamW:
+For a model of $N$ parameters trained in BF16 with AdamW (matching Section 1's accounting: $\sim 14$ GB params + $\sim 14$ GB gradients + $\sim 56$ GB FP32 optimizer state for a $7$B model):
 
-- **Parameters**: FP16 (2 bytes/param) = $2N$ bytes
-- **Master weights**: FP32 (4 bytes/param) = $4N$ bytes
-- **Gradients**: FP32 (4 bytes/param) = $4N$ bytes
+- **Parameters**: BF16 (2 bytes/param) = $2N$ bytes
+- **Gradients**: BF16 (2 bytes/param) = $2N$ bytes
 - **Optimizer state**: AdamW stores $m, v$ in FP32 = $8N$ bytes total
 - **Activations**: depends on batch size; ignore for this exercise
 
-Total: $2N + 4N + 4N + 8N = 18N$ bytes per GPU under vanilla DP.
+Total: $2N + 2N + 8N = 12N$ bytes per GPU under vanilla DP. (This is the same $12$ bytes/param used throughout the chapter body, e.g. the $\sim 84$ GB figure for a $7$B model and the $\sim 11$ GB post-FSDP figure.)
 
 For each strategy, divide the appropriate state by the number of GPUs:
-- **DP**: nothing sharded → $18N$ bytes/GPU regardless of GPU count
-- **TP**: params + grads + optimizer state divided by TP-rank → $18N / \text{TP-rank}$ bytes/GPU
-- **PP**: params + grads + optimizer state divided by PP-rank → $18N / \text{PP-rank}$ bytes/GPU
-- **FSDP**: same as TP/PP for state, divided by DP-rank → $18N / \text{DP-rank}$ bytes/GPU
+- **DP**: nothing sharded → $12N$ bytes/GPU regardless of GPU count
+- **TP**: params + grads + optimizer state divided by TP-rank → $12N / \text{TP-rank}$ bytes/GPU
+- **PP**: params + grads + optimizer state divided by PP-rank → $12N / \text{PP-rank}$ bytes/GPU
+- **FSDP**: same as TP/PP for state, divided by DP-rank → $12N / \text{DP-rank}$ bytes/GPU
 
 </details>
 
@@ -476,20 +539,19 @@ For each strategy, divide the appropriate state by the number of GPUs:
     
     strategy: 'dp' | 'tp' | 'pp' | 'fsdp'
     
-    Mixed-precision + AdamW accounting:
-      params (FP16):       2N bytes
-      master weights:      4N bytes  
-      gradients (FP32):    4N bytes
-      optimizer state:     8N bytes (m + v)
-      Total:               18N bytes (vanilla DP)
+    Mixed-precision (BF16) + AdamW accounting (matches Section 1's ~84 GB / ~11 GB figures):
+      params (BF16):        2N bytes
+      gradients (BF16):     2N bytes
+      optimizer state:      8N bytes (m + v, FP32)
+      Total:                12N bytes (vanilla DP)
     """
-    BYTES_PER_PARAM_FULL = 18   # 2 + 4 + 4 + 8
+    BYTES_PER_PARAM_FULL = 12   # 2 + 2 + 8
 
     # TODO: for each strategy, return the per-GPU memory in bytes
-    # 'dp':   full 18N (nothing sharded)
-    # 'tp':   18N / num_gpus
-    # 'pp':   18N / num_gpus
-    # 'fsdp': 18N / num_gpus
+    # 'dp':   full 12N (nothing sharded)
+    # 'tp':   12N / num_gpus
+    # 'pp':   12N / num_gpus
+    # 'fsdp': 12N / num_gpus
     pass
 
 # Test: 7B model on 8 GPUs (a typical training setup)
@@ -503,7 +565,8 @@ For each strategy, divide the appropriate state by the number of GPUs:
 # for strat in ['dp', 'tp', 'pp', 'fsdp']:
 #     mem = memory_per_gpu(7e9, strat, 64)
 #     print(f"  {strat.upper():<6} per-GPU: {mem/1e9:>5.1f} GB")
-# # Verify: FSDP at 64 GPUs uses 1/8 the memory of DP at 64 GPUs
+# # Verify: FSDP at 64 GPUs uses 1/64 the memory of DP at 64 GPUs (DP doesn't
+# # shard, so its per-GPU memory is unchanged from the 8-GPU case above)
 
 # Bonus: would a 70B model fit on 8 GPUs?
 # print("\\n=== 70B model, 8 GPUs ===")
@@ -515,6 +578,27 @@ For each strategy, divide the appropriate state by the number of GPUs:
   packages={[]}
 />
 
+<details>
+<summary>Solution</summary>
+
+DP doesn't shard anything; TP, PP, and FSDP each divide the full $12N$ bytes by GPU count:
+
+```python
+def memory_per_gpu(model_params, strategy, num_gpus):
+    BYTES_PER_PARAM_FULL = 12
+    N = model_params
+    if strategy == 'dp':
+        return BYTES_PER_PARAM_FULL * N
+    else:  # 'tp', 'pp', 'fsdp'
+        return BYTES_PER_PARAM_FULL * N / num_gpus
+```
+
+7B model, 8 GPUs: DP 84.0 GB, TP/PP/FSDP 10.5 GB each.
+7B model, 64 GPUs: DP still 84.0 GB (unsharded), TP/PP/FSDP 1.3 GB each -- FSDP at 64 GPUs uses exactly 1/8 the memory it used at 8 GPUs, matching the 8x increase in GPU count.
+70B model, 8 GPUs: DP 840.0 GB (exceeds 80GB), and even sharded strategies hit 105.0 GB per GPU -- still exceeds an 80GB card, so this setup needs more than 8 GPUs regardless of strategy.
+
+</details>
+
 ### Exercise 4 (hard): Communication cost in 3D parallelism
 
 Estimate per-step communication cost for a 3D-parallel training setup. Inputs: model size, DP-rank, TP-rank, PP-rank, network bandwidth (TB/s). Outputs: communication time per step.
@@ -524,7 +608,7 @@ Estimate per-step communication cost for a 3D-parallel training setup. Inputs: m
 
 Each parallelism dimension has its own communication pattern:
 
-- **DP all-reduce**: once per step; volume ≈ $2 \cdot \text{model\_size} / \text{DP-rank}$ bytes (per GPU). For Ring all-reduce on $n$ GPUs: $2(n-1)/n \cdot \text{model\_size}$.
+- **DP all-reduce**: once per step; volume ≈ $2 \cdot \text{model\_size}$ bytes (per GPU), via Ring all-reduce on $n$ DP ranks: $2(n-1)/n \cdot \text{model\_size} \approx 2 \cdot \text{model\_size}$ for large $n$ (independent of DP-rank, per Section 5). Under 3D parallelism each DP rank only holds $\text{model\_size} / \text{TP-rank}$ parameters to begin with, so the simplified scaffold below, which skips that division, overcounts DP communication by a factor of TP-rank and should be read as an upper bound.
 - **TP all-reduce**: per layer; volume ≈ $\text{activation\_size}$ bytes per layer. Activation size depends on hidden dim, batch size, seq len.
 - **PP peer-to-peer**: at stage boundaries; volume ≈ $\text{activation\_size}$ bytes per micro-batch boundary.
 - **FSDP all-gather + reduce-scatter**: per layer; volume ≈ $2 \cdot \text{model\_size} / \text{DP-rank}$ bytes total (similar to DP but communicated piecewise).
@@ -557,6 +641,10 @@ For this exercise, use a simplified model: just account for DP and TP costs (PP 
     # TODO: compute DP all-reduce volume
     # Ring all-reduce cost: 2 * (n - 1) / n * data_size; for large n ≈ 2 * data_size
     # dp_volume = 2 * (2 * model_params)  # 2 bytes per param (FP16 grads), all-reduce factor 2
+    # NOTE: this simplified toy formula ignores that each DP rank already holds only
+    # model_params / tp_rank parameters under 3D parallelism (TP shards the model).
+    # It therefore overcounts DP communication by a factor of tp_rank -- treat the
+    # result as an upper bound, or divide model_params by tp_rank for a tighter estimate.
     pass
 
     # TODO: compute TP all-reduce volume per layer
@@ -590,5 +678,32 @@ For this exercise, use a simplified model: just account for DP and TP costs (PP 
 `}
   packages={[]}
 />
+
+<details>
+<summary>Solution</summary>
+
+Sum the DP gradient all-reduce volume and the per-layer TP activation all-reduce volume, then divide by bandwidth:
+
+```python
+def communication_time_per_step(
+    model_params, dp_rank, tp_rank, num_layers,
+    seq_len, batch_size, d_model, bandwidth_tb_s,
+):
+    bandwidth_bytes_s = bandwidth_tb_s * 1e12
+
+    dp_volume = 2 * (2 * model_params)  # FP16 grads, all-reduce factor 2
+
+    tp_per_layer = 2 * (2 * batch_size * seq_len * d_model)  # FP16 activations
+    tp_volume = num_layers * tp_per_layer
+
+    total_volume = dp_volume + tp_volume
+    return total_volume / bandwidth_bytes_s
+```
+
+For the 70B-class config (80 layers, seq_len 2048, batch 4, d_model 8192): NVLink (0.6 TB/s) gives 502.46 ms/step, InfiniBand (0.025 TB/s) gives 12058.99 ms/step -- a 24x slowdown from the bandwidth drop alone. This is why tensor parallelism, which needs an all-reduce every layer, stays confined to the NVLink domain within a node, while DP's once-per-step all-reduce can tolerate the slower cross-node InfiniBand links.
+
+Note this scaffold's `dp_volume` uses the full `model_params` rather than `model_params / tp_rank`, so it's an upper bound on DP communication (see the hint) -- the qualitative conclusion (NVLink >> InfiniBand for TP-heavy setups) holds either way.
+
+</details>
 
 The full pre-training story is Chapters 7 through 10: data, training loop, scaling and parallelism, infrastructure. After this chapter, the reader has the conceptual core. After Chapter 10, the reader has the practical depth. After both, the tutorial moves on to post-training (supervised fine-tuning, alignment) in Chapter 13 and onward, and inference (KV caching, quantization, decoding) in Chapter 17 and onward.
