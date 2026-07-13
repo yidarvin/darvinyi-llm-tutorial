@@ -229,7 +229,7 @@ We do not optimize for randomized reading order. A reader landing on Chapter 17 
 - **Not a video course.** All content is text + math + code + interactive components. No embedded video.
 - **Not Markdown-only.** MDX is the authoring format; React components are first-class.
 - **Not a vendor-neutral textbook.** Where Anthropic's tools (Claude, MCP) are the cleanest example for a concept, we use them. Where another vendor's tool is cleaner, we use that. The tutorial is intellectually independent of any single company; it's not artificially balanced.
-- **Not a place for the author's biography.** Darvin Yi's name appears in the byline and footer. That's it.
+- **Not a place for the author's biography.** Darvin Yi's name appears in the byline and footer, alongside a single one-line author affiliation. No further biographical detail.
 
 ---
 
@@ -248,7 +248,7 @@ We do not optimize for randomized reading order. A reader landing on Chapter 17 
 
 - Title: **"LLM Tutorial"**
 - Subtitle: **"From numpy to agents"**
-- Author byline: **"Darvin Yi"** — no affiliations on the public site
+- Author byline: **"Darvin Yi"** — includes a single one-line author affiliation on the public site
 - Footer attribution: links to `darvinyi.com`, `textbook.darvinyi.com`, and the GitHub repo
 
 When referencing the tutorial inside its own content, just write *"this tutorial"* or call it by chapter (*"Chapter 4 covers attention from first principles"*). Don't use the title in body prose.
