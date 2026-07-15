@@ -47,8 +47,13 @@ client chunk is the 361.5 KB raw / 122.3 KB gzip CodeMirror editor bundle, which
 
 ## Ordered backlog
 
-1. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
-   `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
+No active remediation work remains. The 2026-07-15 maintenance pass rechecked volatile hardware, voice, and
+agent-platform claims against primary provider material; a GPT-5.6 Sol reviewer reconciled the live book against
+`docs/CONTENT_CRITIQUE.md`; and the resulting source, prose, and runnable-output corrections passed every
+acceptance gate. Treat `docs/CONTENT_CRITIQUE.md` as a historical audit, not an active queue.
+
+Future work is event-driven maintenance: recheck a claim when a provider materially changes the referenced
+product or API, and run the relevant narrow validation before the full acceptance gate.
 
 Editorial follow-up is complete. Reader search uses the generated MiniSearch section index across all 30 chapters; the obsolete, unused Pagefind build step was removed without reducing coverage.
 
