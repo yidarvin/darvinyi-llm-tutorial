@@ -36,17 +36,18 @@ intentional starter exercises, and keeps three PyTorch-only references visibly s
 broken in-browser Run button. Widget checks protect the optimizer, scaling-law, and MoE calculations that
 previously had high-impact numeric regressions.
 
+The development-only React hook warning was traced to server-rendering the closed search dialog. The dialog
+has no reader-visible server output, so it now uses Astro's `client:only="react"` directive; repeated local
+requests no longer emit the warning, and the hydrated dialog still opens from the search control.
+
 ## Ordered backlog
 
-1. **Development-runtime warning investigation.** Reproduce and explain the React "invalid hook call" warning
-   observed while rendering Chapter 1 in Astro's development server. Either eliminate it or document a
-   reproducible framework-level cause; do not treat the clean production build as a substitute for that evidence.
-2. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
+1. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
    explicit names to the widgets identified in `docs/A11Y_AUDIT.md`, and a public accessibility statement.
-3. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
+2. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
    `docs/PROSE_CLEANUP_LOG.md`; measure large client chunks before code-splitting; scope Pagefind indexing if
    that preserves all reader-visible search content.
-4. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
+3. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
    `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
 
 ## Acceptance gates
