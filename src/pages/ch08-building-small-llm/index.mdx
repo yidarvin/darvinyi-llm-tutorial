@@ -462,6 +462,8 @@ A trained reader has, after reading the prose so far, an architecture from Chapt
 
 <RunnableCode
   client:visible
+  runnable={false}
+  readonly
   defaultCode={`# A simplified nanoGPT-style training loop.
 # Assumes:  model       : any GPT-style decoder-only transformer
 #           train_data  : provides .get_batch() -> (x, y) of shape (B, T)
@@ -976,6 +978,8 @@ The expected outcome: starting loss around 3.0 (random baseline for the small vo
 
 <RunnableCode
   client:visible
+  runnable={false}
+  readonly
   defaultCode={`import math
 import torch
 import torch.nn as nn

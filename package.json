@@ -9,8 +9,10 @@
     "subset:fonts": "node scripts/subset-fonts.mjs",
     "check:workflow": "node scripts/check-active-workflow.mjs",
     "check:content": "node scripts/check-content-integrity.mjs",
+    "check:runnables": "node scripts/check-runnable-code.mjs",
+    "check:widgets": "node scripts/check-widget-data.mjs",
     "predev": "npm run build:search-index",
-    "prebuild": "npm run check:workflow && npm run check:content && npm run build:search-index && npm run build:og-cards",
+    "prebuild": "npm run check:workflow && npm run check:content && npm run check:runnables && npm run check:widgets && npm run build:search-index && npm run build:og-cards",
     "dev": "astro dev",
     "build": "astro build && pagefind --site dist",
     "preview": "astro preview",
@@ -57,6 +59,7 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "pagefind": "^1.1.0",
+    "pyodide": "^0.26.4",
     "typescript": "^5.6.0",
     "wawoff2": "^2.0.1"
   }

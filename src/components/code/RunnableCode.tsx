@@ -62,6 +62,10 @@ export interface RunnableCodeProps {
   outputHeight?: number;
   title?: string;
   readonly?: boolean;
+  /** Keep a reference implementation visible without presenting a Run button
+   * for code that requires a local runtime unavailable in Pyodide (for
+   * example, CUDA-backed PyTorch). */
+  runnable?: boolean;
 }
 
 type Status = 'idle' | 'loading' | 'running' | 'done' | 'error';
@@ -74,6 +78,7 @@ export default function RunnableCode({
   outputHeight = 120,
   title,
   readonly = false,
+  runnable = true,
 }: RunnableCodeProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const childrenRef = useRef<HTMLDivElement>(null);
@@ -241,28 +246,36 @@ export default function RunnableCode({
       </div>
 
       <div className={styles.toolbar}>
-        <button
-          type="button"
-          onClick={handleRun}
-          disabled={isBusy}
-          className={styles.runButton}
-          aria-label={isBusy ? statusLabel[status] : 'Run code'}
-        >
-          {isBusy && <span className={styles.spinner} aria-hidden="true" />}
-          {statusLabel[status]}
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          disabled={isBusy}
-          className={styles.resetButton}
-          aria-label="Reset code to original"
-        >
-          Reset
-        </button>
-        {!readonly && (
-          <span className={styles.editableTag} aria-hidden="true">
-            Editable — click to modify
+        {runnable ? (
+          <>
+            <button
+              type="button"
+              onClick={handleRun}
+              disabled={isBusy}
+              className={styles.runButton}
+              aria-label={isBusy ? statusLabel[status] : 'Run code'}
+            >
+              {isBusy && <span className={styles.spinner} aria-hidden="true" />}
+              {statusLabel[status]}
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={isBusy}
+              className={styles.resetButton}
+              aria-label="Reset code to original"
+            >
+              Reset
+            </button>
+            {!readonly && (
+              <span className={styles.editableTag} aria-hidden="true">
+                Editable — click to modify
+              </span>
+            )}
+          </>
+        ) : (
+          <span className={styles.editableTag}>
+            Static reference: run in a local PyTorch environment
           </span>
         )}
       </div>

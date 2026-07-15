@@ -148,7 +148,7 @@ print(f"\nAfter training (B != 0), LoRA != base: {not np.allclose(out_trained, o
 
 The numpy version makes the mechanics explicit; production code wraps an existing `nn.Linear` instead of writing the forward pass out by hand. The pattern is a thin module that holds the frozen base layer plus its own trainable $A$ and $B$, and sums the two paths in `forward`, exactly as in <EqRef id="15.lora" />:
 
-<RunnableCode client:visible>
+<RunnableCode client:visible runnable={false} readonly>
 ```python
 import torch
 import torch.nn as nn

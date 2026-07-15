@@ -45,6 +45,8 @@ Run the narrowest relevant check first, then before delivery run:
 ```bash
 npm run check:workflow
 npm run check:content
+npm run check:runnables
+npm run check:widgets
 npm run typecheck
 npm run build
 ```

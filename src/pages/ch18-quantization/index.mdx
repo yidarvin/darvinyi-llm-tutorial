@@ -279,7 +279,7 @@ Notice the density: levels are tightly packed near zero (where most weights live
 
 The per-group scales themselves are a meaningful storage line item. FP32 scales at $G = 64$ cost about $0.5$ bits per weight; that is not enormous but it is bigger than the headline "four bits per weight" suggests. **Double quantization** (also from the QLoRA paper) takes the scales and quantizes *them*, grouping every $256$ scales into a super-group and quantizing the super-group to FP8 with its own (FP32) super-group scale. The math layers cleanly and the savings come out to roughly $0.3$ bits per weight. NF4 with double quantization lands at about $4.13$ bits per weight effective, a tiny overhead above the raw $4$-bit weights, with quality that is competitive with INT8 on most benchmarks.
 
-<RunnableCode client:visible>
+<RunnableCode client:visible packages={["numpy", "scipy"]}>
 ```python
 import numpy as np
 from scipy.stats import norm

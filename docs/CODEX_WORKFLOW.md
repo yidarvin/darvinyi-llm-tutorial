@@ -25,25 +25,28 @@ configuration and agents for an untrusted repository; until it is trusted, selec
 
 ## Current baseline
 
-The transition baseline passes `npm run check:workflow`, `npm run check:content`, `npm run typecheck`, and
-`npm run build` with no typecheck hints or known content-integrity failures. The deprecated browser-platform
-API was replaced, base-element CSS was hardened against Tailwind preflight, and an independent Sol review
-confirmed the transition changes. The old local queue runner was not usable because it had no queue file and
-is deliberately retired.
+The transition baseline passes `npm run check:workflow`, `npm run check:content`, `npm run check:runnables`,
+`npm run check:widgets`, `npm run typecheck`, and `npm run build` with no typecheck hints or known
+content-integrity failures. The deprecated browser-platform API was replaced, base-element CSS was hardened
+against Tailwind preflight, and an independent Sol review confirmed the transition changes. The old local
+queue runner was not usable because it had no queue file and is deliberately retired.
+
+The executable-content safety pass runs 114 demonstration blocks in Pyodide 0.26.4, compiles 120
+intentional starter exercises, and keeps three PyTorch-only references visibly static rather than exposing a
+broken in-browser Run button. Widget checks protect the optimizer, scaling-law, and MoE calculations that
+previously had high-impact numeric regressions.
 
 ## Ordered backlog
 
-1. **Executable-content safety.** Add a browser/Pyodide harness for runnable code and deterministic checks for
-   data-backed widget claims. Promote stable checks to CI.
-2. **Development-runtime warning investigation.** Reproduce and explain the React "invalid hook call" warning
+1. **Development-runtime warning investigation.** Reproduce and explain the React "invalid hook call" warning
    observed while rendering Chapter 1 in Astro's development server. Either eliminate it or document a
    reproducible framework-level cause; do not treat the clean production build as a substitute for that evidence.
-3. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
+2. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
    explicit names to the widgets identified in `docs/A11Y_AUDIT.md`, and a public accessibility statement.
-4. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
+3. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
    `docs/PROSE_CLEANUP_LOG.md`; measure large client chunks before code-splitting; scope Pagefind indexing if
    that preserves all reader-visible search content.
-5. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
+4. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
    `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
 
 ## Acceptance gates
@@ -53,6 +56,8 @@ Every work package must pass:
 ```bash
 npm run check:workflow
 npm run check:content
+npm run check:runnables
+npm run check:widgets
 npm run typecheck
 npm run build
 ```
