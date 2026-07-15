@@ -10,10 +10,11 @@ The audit drives three artifacts:
 2. Site-wide CSS at [src/styles/a11y.css](../src/styles/a11y.css) — universal focus indicators, forced-colors mode, heading scroll-margin, reduced-motion completion.
 3. The connective-tissue updates: the skip link is now a real component used by [BaseLayout.astro](../src/layouts/BaseLayout.astro), the search dialog now traps focus and announces result counts to assistive technology.
 
-Per-chapter widgets were not modified. The audit identifies gaps in
-widget aria-attribute coverage and lists them in the
-**Follow-ups** section at the end — they are not blockers for AA
-conformance, but they are tracked so the next a11y pass can pick them up.
+The follow-up widget work was completed on July 15, 2026. The audited
+widgets now carry explicit accessible names, relevant step-through
+interfaces announce status changes, and view selectors with tab-like
+behavior use the matching keyboard model. The public accessibility
+statement is available at `/accessibility/`.
 
 ---
 
@@ -69,8 +70,8 @@ Pass = ✅, Pass-with-caveats = 🟡, Follow-up = ⬜.
 
 | # | Criterion | Level | Status | Notes |
 |---|---|---|---|---|
-| 4.1.2 | Name, Role, Value | A | 🟡 | All site-chrome elements (nav, header, footer, sidebar, search, TOC) have explicit roles or rely on correct semantic HTML. 40 of 61 widget components carry explicit `aria-label` or `role` attributes; the remaining 21 expose accessible names through visible text on their controls. See **Follow-ups** for the list. |
-| 4.1.3 | Status Messages | AA | ✅ | Search results announced via the new `<LiveRegion>` (polite). Form-like state changes in widgets are reflected in the visible label of the active control, which screen readers re-read on focus. |
+| 4.1.2 | Name, Role, Value | A | ✅ | Site chrome uses semantic HTML and explicit labels where needed. All 61 audited widgets now carry an explicit accessible name or role; tab-like selectors expose their selected state and associated panel. |
+| 4.1.3 | Status Messages | AA | ✅ | Search results and the relevant step-through or benchmark-detail updates announce changes through polite live regions. |
 
 ---
 
@@ -114,8 +115,8 @@ representatives from each.
 
 | Category | Examples | Keyboard | Focus visible | ARIA | Status announce |
 |---|---|---|---|---|---|
-| Interactive explorers | `AgentBenchmarkExplorer`, `MultiAgentTopologyExplorer`, `BenchmarkHeatmap` | ✅ | ✅ via universal rule | 🟡 partial — buttons have visible text; structured `role="tablist"` missing on tab-like rows | Follow-up |
-| Step-through visualizers | `AgenticLoopVisualizer`, `InterAgentConversationViewer`, `AutogradGraph` | ✅ | ✅ | 🟡 step buttons rely on visible labels (`◀ Prev`, `Next ▶`); no `aria-live` on the body that changes | Follow-up |
+| Interactive explorers | `AgentBenchmarkExplorer`, `MultiAgentTopologyExplorer`, `BenchmarkHeatmap` | ✅ | ✅ via universal rule | ✅ named widget groups; tab-like selectors use `role="tablist"`, selected state, and keyboard navigation | ✅ |
+| Step-through visualizers | `AgenticLoopVisualizer`, `InterAgentConversationViewer`, `AutogradGraph` | ✅ | ✅ | ✅ named widget groups; relevant changing captions use polite live regions | ✅ |
 | Runnable code | `RunnableCode` | ✅ | ✅ | ✅ `role` on output region | Output area appears below the Run button; reader picks it up on next focus pass |
 | Static comparators | `TokenizerComparison`, `ChatTemplateComparison`, `ChunkingVisualizer` | ✅ (mostly form inputs) | ✅ | 🟡 mostly self-labelling via visible text | None needed (static) |
 
@@ -170,12 +171,10 @@ Ch 30 (Agent eval and frameworks).
 - **Related chapters footer**: Reads as "Related chapters" navigation list.
 - **Prev/next**: "Chapter navigation. Previous, link, …" — clear.
 
-No critical issues surfaced. The one rough edge: stepping through the
-`AgentBenchmarkExplorer` filter toggles, VoiceOver reads the visible
-label text correctly but does not announce the resulting change in the
-data display. This is the same gap flagged under widget audit
-"Status announce" — a per-widget `<LiveRegion>` would fix it; tracked as a
-follow-up.
+No critical issues surfaced. On July 15, 2026, the benchmark-detail title
+and the relevant step-through captions were updated with polite live
+regions so their changes are announced without requiring the reader to
+move focus away and back.
 
 ---
 
@@ -196,16 +195,13 @@ flag.)
 
 ---
 
-## Follow-ups
+## Follow-ups resolved on July 15, 2026
 
-Tracked here so the next a11y pass can pick them up. None block
-WCAG 2.2 AA conformance.
-
-1. **Per-widget LiveRegion**: Step-through visualizers (`AgenticLoopVisualizer`, `InterAgentConversationViewer`, etc.) would benefit from an `aria-live` region that announces the current step caption when the user advances. Currently the visible caption updates correctly; a screen reader gets it only on next focus pass.
-2. **Tablist semantics**: Where a widget has rows or buttons that select a view (e.g. the topology picker in `MultiAgentTopologyExplorer`), `role="tablist"` + `role="tab"` + `aria-selected` would make the keyboard model match what arrow-key tablists do elsewhere.
-3. **Widget aria-label coverage**: 21 of 61 widget components do not carry explicit `aria-label` / `role` attributes. They are accessible via visible text, but a per-widget pass to add explicit names would tighten the AT experience. Files: `widgets/ch03/TokenizerComparison.tsx`, `widgets/ch04/CausalMask.tsx`, `widgets/ch11/ActiveVsTotalParams.tsx`, `widgets/ch13/ChatTemplateComparison.tsx`, `widgets/ch13/SFTLossMasking.tsx`, `widgets/ch14/PreferenceLearningPipeline.tsx`, `widgets/ch15/ParameterBudgetCalculator.tsx`, `widgets/ch19/ConstrainedDecoding.tsx`, `widgets/ch21/ToolCallTrace.tsx`, `widgets/ch21/ToolSchemaValidator.tsx`, `widgets/ch22/ChunkingVisualizer.tsx`, `widgets/ch22/RetrievalComparator.tsx`, `widgets/ch24/PromptInjectionClassifier.tsx`, `widgets/ch26/BenchmarkHeatmap.tsx`, `widgets/ch26/LLMJudgeBiasDemo.tsx`, `widgets/ch27-agent-foundations/AgenticLoopVisualizer.tsx`, `widgets/ch28-agent-from-scratch/AgentTraceInspector.tsx`, `widgets/ch28-agent-from-scratch/ToolSchemaBuilder.tsx`, `widgets/ch29-multi-agent/InterAgentConversationViewer.tsx`, `widgets/ch30-agent-eval-and-frameworks/AgentBenchmarkExplorer.tsx`, `widgets/ch30-agent-eval-and-frameworks/FrameworkPicker.tsx`.
-4. **`SearchButton` `platform` deprecation**: Unrelated to a11y but flagged by `astro check` — `navigator.platform` is deprecated in favor of `navigator.userAgentData.platform`. One-line fix when convenient.
-5. **Accessibility statement page**: Not required for conformance, but a public-facing `/accessibility` page noting "WCAG 2.2 AA conformance verified on 2026-05-24" + a contact email would close the audit trail.
+1. Step-through visualizers and the benchmark-detail selector now announce their changing state through polite live regions.
+2. The topology explorer and tool schema builder now implement tab semantics, including Arrow keys, <kbd>Home</kbd>, and <kbd>End</kbd> navigation.
+3. The 21 previously unnamed widgets now have explicit labelled group boundaries.
+4. The `SearchButton` platform deprecation was resolved in the baseline work.
+5. A public accessibility statement is available at `/accessibility/`; accessibility barriers can be reported through the linked GitHub issue form.
 
 ---
 
@@ -244,7 +240,6 @@ SearchDialog re-export ships with the dialog chunk already client-loaded).
 
 ## Conformance statement
 
-> The LLM Tutorial site has been audited against **WCAG 2.2 Level AA**
-> and conforms across all applicable success criteria. Verified
-> 2026-05-24 (session 135). Re-audit recommended after any structural
-> layout change.
+> The LLM Tutorial site has been audited against **WCAG 2.2 Level AA**.
+> The documented audit and its follow-up remediation were last reviewed
+> on 2026-07-15. Re-audit after any structural layout change.

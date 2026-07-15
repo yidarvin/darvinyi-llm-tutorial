@@ -50,7 +50,7 @@ export default function PromptInjectionClassifier() {
   }, [sample, matches]);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Prompt injection classifier">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Prompt injection classifier</div>
         <div className={styles.titleSubLabel}>

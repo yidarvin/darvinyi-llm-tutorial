@@ -16,7 +16,7 @@ export default function CausalMask() {
   const [hovered, setHovered] = useState<Hovered>(null);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Causal mask attention comparison">
       <div className={styles.toggleRow}>
         <span className={styles.toggleLabel}>Attention mode:</span>
         <button

@@ -23,7 +23,7 @@ export default function ParameterBudgetCalculator() {
   const recommendedGPU = fittingGPUs[0];
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Parameter budget calculator">
       {/* Configuration */}
       <div className={styles.controlsPanel}>
         <div className={styles.panelTitle}>Configuration</div>

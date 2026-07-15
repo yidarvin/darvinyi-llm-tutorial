@@ -65,7 +65,7 @@ export default function AgenticLoopVisualizer() {
   });
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Agentic loop visualizer">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Agentic loop visualizer</div>
@@ -115,7 +115,7 @@ export default function AgenticLoopVisualizer() {
 
         {/* Step controls */}
         <div className={styles.stepBar}>
-          <div className={styles.stepCounter}>
+          <div className={styles.stepCounter} aria-live="polite">
             Step <strong>{step}</strong> of {totalSteps}
           </div>
           <div className={styles.stepButtons}>

@@ -28,7 +28,7 @@ export default function AgentTraceInspector() {
   }
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Agent trace inspector">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Agent trace inspector</div>

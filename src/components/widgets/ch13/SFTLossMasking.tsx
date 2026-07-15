@@ -9,7 +9,7 @@ export default function SFTLossMasking() {
   const stats = useMemo(() => getStats(), []);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="SFT loss masking explorer">
       <div className={styles.controls}>
         <span className={styles.controlsLabel}>Response mask:</span>
         <button

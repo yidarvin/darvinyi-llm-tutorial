@@ -34,7 +34,7 @@ export default function BenchmarkHeatmap() {
   }, []);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Benchmark heatmap">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Benchmark heatmap</div>

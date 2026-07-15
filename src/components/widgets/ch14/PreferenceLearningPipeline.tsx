@@ -18,7 +18,7 @@ export default function PreferenceLearningPipeline() {
     selectedPipeline.steps.find((s) => s.id === selected.step) ?? selectedPipeline.steps[0]!;
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Preference learning pipeline comparison">
       <div className={styles.dataPanel}>
         <div className={styles.dataTitle}>Shared input: preference pair</div>
         <div className={styles.dataRow}>

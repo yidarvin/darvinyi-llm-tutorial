@@ -105,7 +105,7 @@ export default function AgentBenchmarkExplorer() {
   const maturity = MATURITY[benchmark.maturity];
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Agent benchmark explorer">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Agent benchmark explorer</div>
@@ -134,7 +134,9 @@ export default function AgentBenchmarkExplorer() {
       {/* Detail */}
       <div className={styles.detailPanel}>
         <div className={styles.detailHeader}>
-          <div className={styles.detailTitle}>{benchmark.label.toUpperCase()}</div>
+          <div className={styles.detailTitle} aria-live="polite" aria-atomic="true">
+            {benchmark.label.toUpperCase()}
+          </div>
           <div
             className={styles.maturityBadge}
             style={{

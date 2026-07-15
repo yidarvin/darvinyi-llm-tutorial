@@ -59,7 +59,7 @@ export default function TokenizerComparison() {
   const textByteCount = new TextEncoder().encode(selected.text).length;
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Tokenizer comparison">
       <div className={styles.selectorRow}>
         <label className={styles.selectorLabel} htmlFor="tokenizer-example-select">
           Example:

@@ -39,7 +39,7 @@ export default function ChunkingVisualizer() {
   );
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Chunking strategy visualizer">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Chunking visualizer</div>
         <div className={styles.titleSubLabel}>

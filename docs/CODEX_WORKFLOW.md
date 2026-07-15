@@ -42,13 +42,15 @@ requests no longer emit the warning, and the hydrated dialog still opens from th
 
 ## Ordered backlog
 
-1. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
-   explicit names to the widgets identified in `docs/A11Y_AUDIT.md`, and a public accessibility statement.
-2. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
+1. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
    `docs/PROSE_CLEANUP_LOG.md`; measure large client chunks before code-splitting; scope Pagefind indexing if
    that preserves all reader-visible search content.
-3. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
+2. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
    `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
+
+Accessibility completion is now complete: the audited widgets have explicit accessible names, relevant
+step-through interfaces announce state changes, view selectors use keyboard-operable tab semantics, and the
+public statement lives at `/accessibility/`.
 
 ## Acceptance gates
 

@@ -14,7 +14,7 @@ export default function ConstrainedDecoding() {
     !validSet.has(step.modelPreferredId);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Constrained decoding walkthrough">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Constrained decoding (FSM masking)</div>
         <div className={styles.titleSubLabel}>
@@ -38,7 +38,7 @@ export default function ConstrainedDecoding() {
             className={styles.button}
             onClick={() => setStepIdx(0)}
           >↻ Reset</button>
-          <span className={styles.stepCounter}>
+          <span className={styles.stepCounter} aria-live="polite">
             Step {stepIdx + 1} of {STEPS.length} · state = <strong>{step.state}</strong>
           </span>
         </div>

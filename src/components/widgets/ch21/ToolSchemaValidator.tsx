@@ -16,7 +16,7 @@ export default function ToolSchemaValidator() {
   const result = useMemo(() => validate(currentCase.call, SCHEMAS), [currentCase]);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Tool schema validator">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Tool schema validator</div>
         <div className={styles.titleSubLabel}>

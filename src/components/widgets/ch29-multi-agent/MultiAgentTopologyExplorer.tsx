@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   MATURITY,
   ROLE_COLORS,
@@ -170,8 +170,40 @@ function useWhenFor(id: string): string {
 
 export default function MultiAgentTopologyExplorer() {
   const [idx, setIdx] = useState(0);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tabIdPrefix = useId();
+  const panelId = useId();
   const topology = TOPOLOGIES[idx]!;
   const maturity = MATURITY[topology.maturity];
+
+  function selectTopology(nextIdx: number) {
+    setIdx(nextIdx);
+  }
+
+  function handleTopologyKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentIdx: number) {
+    let nextIdx: number | null = null;
+
+    switch (event.key) {
+      case 'ArrowRight':
+        nextIdx = (currentIdx + 1) % TOPOLOGIES.length;
+        break;
+      case 'ArrowLeft':
+        nextIdx = (currentIdx - 1 + TOPOLOGIES.length) % TOPOLOGIES.length;
+        break;
+      case 'Home':
+        nextIdx = 0;
+        break;
+      case 'End':
+        nextIdx = TOPOLOGIES.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    selectTopology(nextIdx);
+    requestAnimationFrame(() => tabRefs.current[nextIdx]?.focus());
+  }
 
   return (
     <div className={styles.widget}>
@@ -185,13 +217,20 @@ export default function MultiAgentTopologyExplorer() {
       <div className={styles.controlsPanel}>
         <div className={styles.controlRow}>
           <span className={styles.controlLabel}>Pick an architecture:</span>
-          <div className={styles.topologyButtons}>
+          <div className={styles.topologyButtons} role="tablist" aria-label="Agent architectures">
             {TOPOLOGIES.map((t, i) => (
               <button
                 key={t.id}
+                ref={element => { tabRefs.current[i] = element; }}
+                id={`${tabIdPrefix}-${t.id}`}
+                role="tab"
+                aria-selected={idx === i}
+                aria-controls={panelId}
+                tabIndex={idx === i ? 0 : -1}
                 className={`${styles.topologyButton} ${idx === i ? styles.topologyButtonActive : ''}`}
                 style={{ borderLeftColor: MATURITY[t.maturity].color }}
-                onClick={() => setIdx(i)}
+                onClick={() => selectTopology(i)}
+                onKeyDown={event => handleTopologyKeyDown(event, i)}
               >
                 {t.shortLabel}
               </button>
@@ -200,7 +239,13 @@ export default function MultiAgentTopologyExplorer() {
         </div>
       </div>
 
-      <div className={styles.detailPanel}>
+      <div
+        id={panelId}
+        className={styles.detailPanel}
+        role="tabpanel"
+        aria-labelledby={`${tabIdPrefix}-${topology.id}`}
+        tabIndex={0}
+      >
         <div className={styles.detailHeader}>
           <div className={styles.detailTitle}>{topology.label.toUpperCase()}</div>
           <div

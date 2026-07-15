@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import {
   TOOLS,
   PATTERN_COLORS,
@@ -116,6 +116,12 @@ const SCHEMA_TABS: { id: SchemaTab; label: string }[] = [
 export default function ToolSchemaBuilder() {
   const [idx, setIdx] = useState(0);
   const [tab, setTab] = useState<SchemaTab>('openai');
+  const toolTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const schemaTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const toolTabIdPrefix = useId();
+  const toolPanelId = useId();
+  const schemaTabIdPrefix = useId();
+  const schemaPanelId = useId();
   const tool = TOOLS[idx]!;
 
   const schemaData: object =
@@ -126,8 +132,67 @@ export default function ToolSchemaBuilder() {
   const patternColor = PATTERN_COLORS[tool.pattern];
   const patternLabel = PATTERN_LABELS[tool.pattern];
 
+  function selectTool(nextIdx: number) {
+    setIdx(nextIdx);
+    setTab('openai');
+  }
+
+  function selectSchemaTab(nextTab: SchemaTab) {
+    setTab(nextTab);
+  }
+
+  function handleToolTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentIdx: number) {
+    let nextIdx: number | null = null;
+
+    switch (event.key) {
+      case 'ArrowRight':
+        nextIdx = (currentIdx + 1) % TOOLS.length;
+        break;
+      case 'ArrowLeft':
+        nextIdx = (currentIdx - 1 + TOOLS.length) % TOOLS.length;
+        break;
+      case 'Home':
+        nextIdx = 0;
+        break;
+      case 'End':
+        nextIdx = TOOLS.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    selectTool(nextIdx);
+    requestAnimationFrame(() => toolTabRefs.current[nextIdx]?.focus());
+  }
+
+  function handleSchemaTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentIdx: number) {
+    let nextIdx: number | null = null;
+
+    switch (event.key) {
+      case 'ArrowRight':
+        nextIdx = (currentIdx + 1) % SCHEMA_TABS.length;
+        break;
+      case 'ArrowLeft':
+        nextIdx = (currentIdx - 1 + SCHEMA_TABS.length) % SCHEMA_TABS.length;
+        break;
+      case 'Home':
+        nextIdx = 0;
+        break;
+      case 'End':
+        nextIdx = SCHEMA_TABS.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    selectSchemaTab(SCHEMA_TABS[nextIdx]!.id);
+    requestAnimationFrame(() => schemaTabRefs.current[nextIdx]?.focus());
+  }
+
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Tool schema builder">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Tool schema builder</div>
@@ -140,13 +205,20 @@ export default function ToolSchemaBuilder() {
       <div className={styles.controlsPanel}>
         <div className={styles.controlRow}>
           <span className={styles.controlLabel}>Pick a tool:</span>
-          <div className={styles.toolButtons}>
+          <div className={styles.toolButtons} role="tablist" aria-label="Tool examples">
             {TOOLS.map((t, i) => (
               <button
                 key={t.id}
+                ref={element => { toolTabRefs.current[i] = element; }}
+                id={`${toolTabIdPrefix}-${t.id}`}
+                role="tab"
+                aria-selected={idx === i}
+                aria-controls={toolPanelId}
+                tabIndex={idx === i ? 0 : -1}
                 className={`${styles.toolButton} ${idx === i ? styles.toolButtonActive : ''}`}
                 style={{ borderLeftColor: PATTERN_COLORS[t.pattern] }}
-                onClick={() => { setIdx(i); setTab('openai'); }}
+                onClick={() => selectTool(i)}
+                onKeyDown={event => handleToolTabKeyDown(event, i)}
               >{t.label}</button>
             ))}
           </div>
@@ -154,7 +226,12 @@ export default function ToolSchemaBuilder() {
       </div>
 
       {/* Detail */}
-      <div className={styles.detailPanel}>
+      <div
+        id={toolPanelId}
+        className={styles.detailPanel}
+        role="tabpanel"
+        aria-labelledby={`${toolTabIdPrefix}-${tool.id}`}
+      >
         <div className={styles.detailHeader}>
           <div className={styles.detailTitle}>{tool.label}</div>
           <div
@@ -180,16 +257,29 @@ export default function ToolSchemaBuilder() {
         {/* Schema tabs */}
         <div className={styles.section}>
           <div className={styles.sectionLabel}>Schema</div>
-          <div className={styles.tabBar}>
-            {SCHEMA_TABS.map(t => (
+          <div className={styles.tabBar} role="tablist" aria-label="Schema format">
+            {SCHEMA_TABS.map((t, i) => (
               <button
                 key={t.id}
+                ref={element => { schemaTabRefs.current[i] = element; }}
+                id={`${schemaTabIdPrefix}-${t.id}`}
+                role="tab"
+                aria-selected={tab === t.id}
+                aria-controls={schemaPanelId}
+                tabIndex={tab === t.id ? 0 : -1}
                 className={`${styles.tab} ${tab === t.id ? styles.tabActive : ''}`}
-                onClick={() => setTab(t.id)}
+                onClick={() => selectSchemaTab(t.id)}
+                onKeyDown={event => handleSchemaTabKeyDown(event, i)}
               >{t.label}</button>
             ))}
           </div>
-          <div className={styles.codePanel}>
+          <div
+            id={schemaPanelId}
+            className={styles.codePanel}
+            role="tabpanel"
+            aria-labelledby={`${schemaTabIdPrefix}-${tab}`}
+            tabIndex={0}
+          >
             <PrettyJson data={schemaData} />
           </div>
         </div>

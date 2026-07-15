@@ -11,7 +11,7 @@ export default function LLMJudgeBiasDemo() {
   const biasInfo = BIAS_MODES[scenario.biasMode];
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="LLM judge bias demonstration">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>LLM-as-judge bias demo</div>

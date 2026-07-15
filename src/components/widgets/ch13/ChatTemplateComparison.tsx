@@ -15,7 +15,7 @@ export default function ChatTemplateComparison() {
   const segments = formatConversation(selected, CONVERSATION);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Chat template comparison">
       <div className={styles.tabs}>
         <span className={styles.tabsLabel}>Template:</span>
         {TEMPLATE_IDS.map(id => (

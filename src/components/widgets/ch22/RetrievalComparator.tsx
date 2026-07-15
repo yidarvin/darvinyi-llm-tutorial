@@ -17,7 +17,7 @@ export default function RetrievalComparator() {
   const hybridFirstCorrect = firstCorrectRank(rankings.hybrid, query.correctDocIds, TOP_K);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Retrieval strategy comparator">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Retrieval comparator</div>
         <div className={styles.titleSubLabel}>

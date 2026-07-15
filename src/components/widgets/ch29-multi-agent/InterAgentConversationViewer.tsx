@@ -64,7 +64,7 @@ export default function InterAgentConversationViewer() {
   }, [isPlaying, step, totalSteps, isComplete]);
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Inter-agent conversation viewer">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Inter-agent conversation viewer</div>
         <div className={styles.titleSubLabel}>
@@ -121,7 +121,7 @@ export default function InterAgentConversationViewer() {
         </div>
 
         <div className={styles.stepBar}>
-          <div className={styles.stepCounter}>
+          <div className={styles.stepCounter} aria-live="polite">
             Step <strong>{step}</strong> of {totalSteps}
           </div>
           <div className={styles.stepButtons}>

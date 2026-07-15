@@ -40,7 +40,7 @@ export default function ActiveVsTotalParams() {
   };
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Active and total parameter explorer">
       <div className={styles.sortToggle}>
         <span className={styles.sortLabel}>Sort by:</span>
         <button

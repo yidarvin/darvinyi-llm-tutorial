@@ -17,7 +17,7 @@ export default function ToolCallTrace() {
   const currentStepKind = currentEvent?.kind ?? 'none';
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Tool call trace walkthrough">
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Agent loop trace</div>
         <div className={styles.titleSubLabel}>
@@ -55,7 +55,7 @@ export default function ToolCallTrace() {
           >
             ↻ Reset
           </button>
-          <span className={styles.stepCounter}>
+          <span className={styles.stepCounter} aria-live="polite">
             {isFirst ? (
               <>Step 0 of {TRACE_EVENTS.length} · waiting</>
             ) : (

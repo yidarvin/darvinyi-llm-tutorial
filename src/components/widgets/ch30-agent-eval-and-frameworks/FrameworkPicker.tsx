@@ -116,7 +116,7 @@ export default function FrameworkPicker() {
   }
 
   return (
-    <div className={styles.widget}>
+    <div className={styles.widget} role="group" aria-label="Agent framework picker">
       {/* Title */}
       <div className={styles.titlePanel}>
         <div className={styles.titleLabel}>Framework picker</div>
