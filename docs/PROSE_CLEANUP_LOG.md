@@ -45,7 +45,7 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 17  | 77                | thorough     | Seven residual comma splices corrected across both cleanup passes; long aside about open-source serving systems converted to parentheses |
 | 18  | 73                | targeted     | Two comma splices fixed |
 | 19  | 85                | targeted     | Bold-list splice fixed |
-| 20  | 78                | bulk only    | No additional manual splices found in spot-check |
+| 20  | 78                | thorough     | Three residual comma splices corrected in the Codex follow-up |
 | 21  | 91                | targeted     | Bold-list of computer-use tradeoffs converted to colons |
 | 22  | 102               | bulk only    | No additional manual splices found in spot-check |
 | 23  | 116               | targeted     | Whisper-properties bold list converted to colons; "computer use" bold list converted to colons |
