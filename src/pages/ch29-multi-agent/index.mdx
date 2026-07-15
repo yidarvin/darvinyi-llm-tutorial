@@ -298,7 +298,7 @@ for q in ['Capital of Australia', 'Square root of 144', 'Fastest land animal']:
 </RunnableCode>
 
 <Callout type="warning">
-**"More agents = better results."** False. More agents means more cost, more latency, more failure modes, and rarely more quality. A five-agent crew with similar prompts is typically worse than one well-prompted agent. The quality benefit comes from genuine role differentiation, not from agent count. Adding agents because the task feels hard is the multi-agent equivalent of adding cores to a single-threaded program, it doesn't help if the work isn't actually decomposable.
+**"More agents = better results."** False. More agents means more cost, more latency, more failure modes, and rarely more quality. A five-agent crew with similar prompts is typically worse than one well-prompted agent. The quality benefit comes from genuine role differentiation, not from agent count. Adding agents because the task feels hard is the multi-agent equivalent of adding cores to a single-threaded program: it does not help if the work is not actually decomposable.
 </Callout>
 
 ## The 2025 framework landscape
@@ -317,7 +317,7 @@ Five frameworks dominate the multi-agent landscape as of early $2025$. Each has 
 
 **MetaGPT.** SOPs baked in, agent roles like PM, Architect, and Engineer, with phase-driven execution. **Strengths**: structure for software-development workflows. **Weaknesses**: rigid; less useful outside software engineering. **Production traction**: limited; mostly research and demos.
 
-Most production multi-agent systems are not pure framework adoptions, they are bespoke code that uses one of the above as scaffolding (or none at all), with custom prompts and tools per role.
+Most production multi-agent systems are not pure framework adoptions. They are bespoke code that uses one of the above as scaffolding (or none at all), with custom prompts and tools per role.
 
 ### How to pick one
 

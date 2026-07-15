@@ -54,7 +54,7 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 26  | 129               | targeted     | "What benchmarks measure" bold lists converted to colons |
 | 27  | 125               | targeted     | Phase-13/14/15 bold list converted to colons; Ch 27/28 conceptual-vs-engineering pair converted to colons |
 | 28  | 84                | bulk only    | No additional manual splices found in spot-check |
-| 29  | 112               | bulk only    | No additional manual splices found in spot-check |
+| 29  | 112               | thorough     | Two residual comma splices corrected in the Codex follow-up |
 | 30  | 119               | targeted     | Final-chapter close splice fixed; agent-eval criteria bold list converted to colons |
 
 **Total em dashes removed: ~2,990 across all 30 chapters.**
