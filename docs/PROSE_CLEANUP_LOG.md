@@ -44,14 +44,14 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 16  | 99                | thorough     | Four residual comma splices corrected in the Codex follow-up |
 | 17  | 77                | thorough     | Seven residual comma splices corrected across both cleanup passes; long aside about open-source serving systems converted to parentheses |
 | 18  | 73                | targeted     | Two comma splices fixed |
-| 19  | 85                | targeted     | Bold-list splice fixed |
+| 19  | 85                | thorough     | Three residual bold-label splices corrected in the Codex follow-up |
 | 20  | 78                | thorough     | Three residual comma splices corrected in the Codex follow-up |
-| 21  | 91                | targeted     | Bold-list of computer-use tradeoffs converted to colons |
+| 21  | 91                | thorough     | Three residual sentence-boundary splices corrected in the Codex follow-up |
 | 22  | 102               | thorough     | Four residual comma splices corrected in the Codex follow-up |
 | 23  | 116               | targeted     | Whisper-properties bold list converted to colons; "computer use" bold list converted to colons |
-| 24  | 123               | targeted     | Constitutional AI properties bold list converted to colons |
-| 25  | 133               | targeted     | Interpretability-as-research-discipline splice fixed |
-| 26  | 129               | targeted     | "What benchmarks measure" bold lists converted to colons |
+| 24  | 123               | thorough     | Three residual comma splices corrected in the Codex follow-up |
+| 25  | 133               | thorough     | Four residual sentence-boundary splices corrected in the Codex follow-up |
+| 26  | 129               | thorough     | Seven residual bold-label and sentence-boundary splices corrected in the Codex follow-up |
 | 27  | 125               | targeted     | Phase-13/14/15 bold list converted to colons; Ch 27/28 conceptual-vs-engineering pair converted to colons |
 | 28  | 84                | bulk only    | No additional manual splices found in spot-check |
 | 29  | 112               | thorough     | Two residual comma splices corrected in the Codex follow-up |
