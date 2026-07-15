@@ -12,6 +12,13 @@ on:
     paths:
       - 'src/**'
       - 'scripts/check-content-integrity.mjs'
+      - 'scripts/check-active-workflow.mjs'
+      - '.claude/**'
+      - '.codex/**'
+      - '.github/workflows/**'
+      - 'AGENTS.md'
+      - 'docs/CODEX_WORKFLOW.md'
+      - 'package.json'
   workflow_dispatch:
 
 jobs:
@@ -25,4 +32,6 @@ jobs:
           node-version: '20'
 
       - name: Check content integrity
-        run: node scripts/check-content-integrity.mjs
+        run: |
+          node scripts/check-active-workflow.mjs
+          node scripts/check-content-integrity.mjs

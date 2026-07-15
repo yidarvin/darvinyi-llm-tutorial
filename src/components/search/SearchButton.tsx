@@ -10,7 +10,10 @@ export default function SearchButton({ compact = false }: SearchButtonProps) {
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
-    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform));
+    const platform = (navigator as Navigator & {
+      userAgentData?: { platform?: string };
+    }).userAgentData?.platform ?? navigator.userAgent;
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(platform));
   }, []);
 
   function open() {

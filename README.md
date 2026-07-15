@@ -24,11 +24,12 @@ Output goes to `dist/`. Vercel auto-deploys `main`.
 ## Structure
 
 - `src/` — the Astro app
-- `context/` — design system, tech stack, curriculum (read by Claude Code sessions)
-- `prompts/` — Claude Code session prompts (the build's archaeological record)
+- `context/` — design system, tech stack, curriculum (read by Codex agent sessions)
+- `prompts/` — completed build-session prompts (the project's archaeological record)
 - `research/` — per-chapter pre-research material
 
-See `MASTER_PLAN.md` and `BUILD_ORDER.md` for the project's roadmap.
+See `docs/CODEX_WORKFLOW.md` for active development. `MASTER_PLAN.md` and
+`BUILD_ORDER.md` preserve the completed build record.
 
 ## Author
 

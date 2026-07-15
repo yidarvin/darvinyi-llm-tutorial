@@ -104,13 +104,13 @@ img, video, iframe, svg {
   overflow-wrap: anywhere;
 }
 @media (max-width: 720px) {
-  pre {
+  body pre {
     font-size: 13px;
     padding: 0.85rem;
   }
 }
 @media (max-width: 380px) {
-  pre {
+  body pre {
     font-size: 12px;
     padding: 0.75rem;
   }

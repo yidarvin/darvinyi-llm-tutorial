@@ -90,7 +90,7 @@ a:hover {
 }
 
 /* Lists */
-ul, ol {
+body ul, body ol {
   font-size: 16px;
   line-height: 1.7;
   color: var(--text-primary);
@@ -98,13 +98,13 @@ ul, ol {
   padding-left: 1.5rem;
   margin: 1rem 0;
 }
-ul { list-style: disc; }
-ol { list-style: decimal; }
-li { margin: 0; }
-li + li { margin-top: 0.5rem; }
+body ul { list-style: disc; }
+body ol { list-style: decimal; }
+body li { margin: 0; }
+body li + li { margin-top: 0.5rem; }
 
 /* Blockquote */
-blockquote {
+body blockquote {
   border-left: 2px solid var(--cyan-500);
   background: var(--bg-elevated);
   padding: 1rem 1.25rem;
@@ -113,7 +113,7 @@ blockquote {
   max-width: var(--container-prose);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
-blockquote p { color: inherit; }
+body blockquote p { color: inherit; }
 
 /* Inline code */
 :not(pre) > code {
@@ -127,7 +127,7 @@ blockquote p { color: inherit; }
 }
 
 /* Code blocks */
-pre {
+body pre {
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -138,7 +138,7 @@ pre {
   margin: 1.5rem 0;
   max-width: var(--container-wide);
 }
-pre code {
+body pre code {
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
   background: transparent;
   border: none;
@@ -148,7 +148,7 @@ pre code {
 }
 
 /* Horizontal rule */
-hr {
+body hr {
   border: none;
   border-top: 1px solid var(--border-default);
   margin: 3rem 0;

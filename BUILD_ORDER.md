@@ -1,5 +1,8 @@
 # BUILD_ORDER
 
+> **Historical build record, completed 2026-07-15.** This completed file inventory is retained as an
+> archaeological record. Use [`docs/CODEX_WORKFLOW.md`](docs/CODEX_WORKFLOW.md) for active work.
+
 The full file list for `darvinyi-llm-tutorial`, in the order each file should be created. Each entry is one focused Claude chat message — say **"continue to the next file"** to trigger the next.
 
 **Total files:** 177 (5 foundation + 6 scaffolding prompts + 30 chapter research files + 130 chapter session prompts + 6 polish prompts)

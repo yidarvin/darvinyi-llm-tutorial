@@ -2,6 +2,11 @@
 
 **darvinyi-llm-tutorial** · the roadmap and decisions log
 
+> **Historical build record, completed 2026-07-15.** The project now uses the Codex workflow in
+> [`docs/CODEX_WORKFLOW.md`](docs/CODEX_WORKFLOW.md) and the rules in [`AGENTS.md`](AGENTS.md).
+> References below to the prior build environment describe how the shipped textbook was made; they are not
+> instructions for current work.
+
 > This file is the project's 30,000-foot view: what we're building, in what sequence, with what locked decisions. It does NOT duplicate the four context files (`PROJECT_OVERVIEW.md`, `DESIGN_SYSTEM.md`, `TECH_STACK.md`, `CURRICULUM.md`) — it points to them and frames their relationship.
 
 ---
