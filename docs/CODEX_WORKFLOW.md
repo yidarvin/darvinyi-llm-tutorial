@@ -35,12 +35,15 @@ is deliberately retired.
 
 1. **Executable-content safety.** Add a browser/Pyodide harness for runnable code and deterministic checks for
    data-backed widget claims. Promote stable checks to CI.
-2. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
+2. **Development-runtime warning investigation.** Reproduce and explain the React "invalid hook call" warning
+   observed while rendering Chapter 1 in Astro's development server. Either eliminate it or document a
+   reproducible framework-level cause; do not treat the clean production build as a substitute for that evidence.
+3. **Accessibility completion.** Add live status updates to step-through widgets, tab semantics to selectors,
    explicit names to the widgets identified in `docs/A11Y_AUDIT.md`, and a public accessibility statement.
-3. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
+4. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
    `docs/PROSE_CLEANUP_LOG.md`; measure large client chunks before code-splitting; scope Pagefind indexing if
    that preserves all reader-visible search content.
-4. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
+5. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
    `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
 
 ## Acceptance gates
