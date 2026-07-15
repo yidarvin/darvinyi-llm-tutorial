@@ -42,7 +42,7 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 14  | 114               | thorough     | |
 | 15  | 82                | thorough     | |
 | 16  | 99                | thorough     | Four residual comma splices corrected in the Codex follow-up |
-| 17  | 77                | targeted     | Three comma splices fixed; long aside about open-source serving systems converted to parentheses |
+| 17  | 77                | thorough     | Seven residual comma splices corrected across both cleanup passes; long aside about open-source serving systems converted to parentheses |
 | 18  | 73                | targeted     | Two comma splices fixed |
 | 19  | 85                | targeted     | Bold-list splice fixed |
 | 20  | 78                | bulk only    | No additional manual splices found in spot-check |
