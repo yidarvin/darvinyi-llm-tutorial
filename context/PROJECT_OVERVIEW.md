@@ -215,7 +215,7 @@ Full visual spec, including the component contracts every chapter uses: see `con
 Chapters are designed to be read linearly. Each chapter assumes mastery of preceding chapters. The site supports two reading modes:
 
 - **Linear** — prev/next at chapter end, sidebar lists all 30 chapters in order. This is the primary reading mode.
-- **Direct lookup** — full-text search via Pagefind, sidebar jump. For readers returning to look up a specific concept.
+- **Direct lookup** — full-text search through the local MiniSearch index, sidebar jump. For readers returning to look up a specific concept.
 
 We do not optimize for randomized reading order. A reader landing on Chapter 17 without having read Chapter 4 will struggle, and the prose doesn't apologize for that.
 
@@ -238,7 +238,7 @@ We do not optimize for randomized reading order. A reader landing on Chapter 17 
 - Astro 5 static build. Output in `dist/`.
 - Vercel auto-deploys `main`. PRs preview-deploy automatically.
 - Subdomain `llm-tutorial.darvinyi.com` configured via Namecheap CNAME → `cname.vercel-dns.com`.
-- Pagefind static search built post-build (`astro build && pagefind --site dist`).
+- A local MiniSearch index is generated from every chapter before development and production builds. It is segmented by chapter section, requires no runtime backend, and must cover all 30 chapters.
 - No runtime backend. Pyodide runs entirely client-side.
 - Tool-use examples that hit the Anthropic API (Chapter 21+) require the reader to supply their own key via a small in-widget form. The key is held in `localStorage`, never sent to any server we control.
 

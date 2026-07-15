@@ -21,7 +21,7 @@
 | Diagrams | **D3** (custom) + **Recharts** (standard) | D3 for bespoke widgets; Recharts when a stock chart suffices |
 | Icons | **lucide-react** | One icon set, tree-shakes cleanly |
 | Animation | CSS + `requestAnimationFrame` + **framer-motion** (rare) | Most state transitions are CSS; framer-motion only when layout animates |
-| Search | **Pagefind** | Static-site full-text search, built post-build |
+| Search | **MiniSearch** | Local full-text search over a generated chapter-section index |
 | Deployment | **Vercel** | Auto-deploys on `main`, no config needed; previews on PRs |
 
 ---
@@ -75,7 +75,7 @@ Pin major versions. Float minor/patch. Lockfile (`package-lock.json`) committed.
 | `clsx` | `^2.0.0` | |
 | `tailwind-merge` | `^2.0.0` | |
 | `mathjs` | `^13.0.0` | |
-| `pagefind` | `^1.1.0` | devDependency; built post-build |
+| `minisearch` | `^7.2.0` | Client-side search over the generated chapter-section index |
 
 ### Dev dependencies
 
@@ -96,7 +96,7 @@ Pin major versions. Float minor/patch. Lockfile (`package-lock.json`) committed.
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && pagefind --site dist",
+    "build": "node scripts/clean-dist.mjs && astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
     "astro": "astro"
@@ -546,12 +546,13 @@ Internal links use Astro's `<a>` with absolute paths from site root: `<a href="/
 
 ```bash
 npm run build
-# Equivalent to: astro build && pagefind --site dist
+# The prebuild hook first generates the MiniSearch document index. The build then removes the ignored, derived `dist/` output before Astro writes the site.
 ```
 
-1. Astro builds the static site to `dist/`
-2. Pagefind indexes `dist/` and adds search assets to `dist/pagefind/`
-3. Vercel detects `dist/` automatically and serves it
+1. The prebuild hook generates `public/search-index.json` from every chapter, segmented by H2 section. It fails if fewer than 30 chapters are present.
+2. The build removes the previous `dist/` directory, so stale generated assets cannot survive a tooling change.
+3. Astro builds the static site to `dist/`, including that index.
+4. Vercel detects `dist/` automatically and serves it.
 
 ### Vercel configuration
 
@@ -738,7 +739,7 @@ Things that have already been decided and don't need to be re-litigated:
 - **Pyodide over Skulpt / Brython / server-side Python** — only Pyodide runs real numpy in browser
 - **D3 + Recharts (both)** — D3 for bespoke widgets, Recharts for stock charts (loss curves, bars)
 - **Shiki over Prism / highlight.js** — server-rendered, no client JS
-- **Pagefind over Algolia / Lunr** — Pagefind is static-site-friendly, self-hosted, no API limits
+- **MiniSearch over Pagefind / Algolia** — the reader-facing dialog already uses MiniSearch over a prebuilt local index; removing Pagefind eliminates a second, unused index without reducing search coverage
 - **Vercel over Netlify / Cloudflare Pages** — Astro's first-class deploy target; auto-detects config
 - **No analytics beyond Vercel's built-in** — privacy stance
 - **Dark mode only** — design stance

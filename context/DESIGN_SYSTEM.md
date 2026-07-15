@@ -527,7 +527,7 @@ Common icons and where they're used:
 |---|---|
 | `ChevronRight`, `ChevronDown` | Sidebar expanders, accordion toggles |
 | `Menu`, `X` | Mobile nav toggle (open / close) |
-| `Search` | Search bar (Pagefind UI) |
+| `Search` | Search control and dialog |
 | `Play`, `Pause`, `RotateCcw` | Widget playback controls |
 | `Copy`, `Check` | Code block copy button (Check appears for 1.5s after copy) |
 | `Github`, `ExternalLink` | Footer, external citations |
