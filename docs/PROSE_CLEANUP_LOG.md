@@ -47,7 +47,7 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 19  | 85                | targeted     | Bold-list splice fixed |
 | 20  | 78                | thorough     | Three residual comma splices corrected in the Codex follow-up |
 | 21  | 91                | targeted     | Bold-list of computer-use tradeoffs converted to colons |
-| 22  | 102               | bulk only    | No additional manual splices found in spot-check |
+| 22  | 102               | thorough     | Four residual comma splices corrected in the Codex follow-up |
 | 23  | 116               | targeted     | Whisper-properties bold list converted to colons; "computer use" bold list converted to colons |
 | 24  | 123               | targeted     | Constitutional AI properties bold list converted to colons |
 | 25  | 133               | targeted     | Interpretability-as-research-discipline splice fixed |

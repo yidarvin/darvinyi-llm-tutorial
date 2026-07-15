@@ -34,7 +34,7 @@ The fundamental trade-off is the same one that shows up everywhere in systems en
 The empirical scale of production RAG in early $2025$ is consistent enough to be worth memorizing. **Internal docs corpora** run $100\text{K}$ to $10\text{M}$ documents for enterprise deployments. **Top-$K$ per query** lands at $3$ to $20$ documents after reranking. **Total retrieved context** is typically $5\text{K}$ to $50\text{K}$ tokens. **Latency target** is under $2$ seconds end-to-end (retrieval plus generation). **Quality**: a well-tuned RAG system reaches $80$ to $95\%$ answer accuracy on domain-specific QA, far above what the same model achieves without retrieval on the same questions.
 
 <Callout type="aside">
-RAG is the single most-deployed LLM application pattern of 2024 – 2025. Every enterprise AI assistant, documentation chatbot, customer support agent, and legal-research tool uses RAG. If you are building AI products, you are building (or about to build) a RAG system, the patterns in this chapter are not optional, they are the foundation that every production deployment rests on.
+RAG is the single most-deployed LLM application pattern of 2024 – 2025. Every enterprise AI assistant, documentation chatbot, customer support agent, and legal-research tool uses RAG. If you are building AI products, you are building (or about to build) a RAG system. The patterns in this chapter are not optional; they are the foundation that every production deployment rests on.
 </Callout>
 
 ## Sparse retrieval: BM25
@@ -458,7 +458,7 @@ for i in mmr_top_3:
 ```
 </RunnableCode>
 
-MMR sits downstream of reranking, not instead of it: rerank first for relevance, then diversify the top-K before handing it to the LLM. Skipping it costs nothing on corpora with little redundancy; on corpora with lots of near-duplicate content, restated FAQ answers, template policy variations, MMR is the difference between a top-K that says one thing five times and a top-K that actually covers the question.
+MMR sits downstream of reranking, not instead of it: rerank first for relevance, then diversify the top-K before handing it to the LLM. Skipping it costs nothing on corpora with little redundancy. On corpora with lots of near-duplicate content, restated FAQ answers, or template policy variations, MMR is the difference between a top-K that says one thing five times and a top-K that actually covers the question.
 
 ## RAG architectures
 
@@ -485,7 +485,7 @@ The honest answer is that long context and RAG solve different problems, and the
 Xu et al. 2024 ("Retrieval meets Long Context", [arxiv.org/abs/2310.03025](https://arxiv.org/abs/2310.03025)) made the sharpest empirical case for combining rather than choosing: retrieval augmentation with a *moderate* context window matched or beat brute-force long-context generation on several benchmarks at a fraction of the compute, and pairing retrieval with a larger context window (retrieve more candidates, rerank, then fill a bigger window with the reranked results) beat either extreme alone. The two techniques are less rivals than points on the same dial; production systems increasingly use both, retrieval to cut a huge corpus down to a relevant slice, a moderately long context to hold that slice without brutal chunking.
 
 <Callout type="insight">
-"Long context obsoletes RAG" is a **common misconception**, not a conclusion the evidence supports. Long context is expensive per query and does not scale past corpora larger than the window; RAG is cheaper, handles arbitrarily large and constantly-changing corpora, and stays auditable, you can point to exactly which documents fed which answer. The two compose: retrieve first to cut a large corpus down to size, then spend whatever context budget you have on the retrieved slice.
+"Long context obsoletes RAG" is a **common misconception**, not a conclusion the evidence supports. Long context is expensive per query and does not scale past corpora larger than the window; RAG is cheaper, handles arbitrarily large and constantly-changing corpora, and stays auditable: you can point to exactly which documents fed which answer. The two compose: retrieve first to cut a large corpus down to size, then spend whatever context budget you have on the retrieved slice.
 </Callout>
 
 The decision guide below assumes retrieval is worth doing at all; the prior question, retrieve or just paste everything into context, is almost always answered by corpus size and update frequency, not by "long context wins now."
@@ -963,7 +963,7 @@ The gap between a RAG prototype and a production system is filled by four operat
 
 ### Evaluation
 
-Production RAG that has not been measured is not done, it is just being optimistic. The discipline that turns "seems to work" into "measurably works" is a small set of metrics, used together.
+Production RAG that has not been measured is not done; it is just being optimistic. The discipline that turns "seems to work" into "measurably works" is a small set of metrics, used together.
 
 | Metric | What it measures |
 |---|---|
