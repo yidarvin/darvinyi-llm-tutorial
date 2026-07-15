@@ -41,7 +41,7 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 13  | 91                | thorough     | |
 | 14  | 114               | thorough     | |
 | 15  | 82                | thorough     | |
-| 16  | 99                | targeted     | Two comma splices fixed manually after bulk pass |
+| 16  | 99                | thorough     | Four residual comma splices corrected in the Codex follow-up |
 | 17  | 77                | targeted     | Three comma splices fixed; long aside about open-source serving systems converted to parentheses |
 | 18  | 73                | targeted     | Two comma splices fixed |
 | 19  | 85                | targeted     | Bold-list splice fixed |
@@ -81,7 +81,7 @@ Per-chapter commits are in the git history. Each commit message names the chapte
 
 ## Known remaining work
 
-The bulk substitution handles the most common em-dash patterns cleanly, but it cannot detect every comma splice it creates. The chapters listed as "bulk only" or "targeted" in the table above may still have comma-splice patterns that read as run-ons; a careful editorial pass in those chapters would catch the remaining issues. The pattern to watch for is `X, [the/this/that/it/they/we/a/an] [verb]` where the second clause is independent.
+The bulk substitution handles the most common em-dash patterns cleanly, but it cannot detect every comma splice it creates. The chapters still listed as "bulk only" or "targeted" in the table above may have comma-splice patterns that read as run-ons; a careful editorial pass in those chapters would catch the remaining issues. The pattern to watch for is `X, [the/this/that/it/they/we/a/an] [verb]` where the second clause is independent.
 
 ## Acceptance criteria status
 

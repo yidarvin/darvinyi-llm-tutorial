@@ -192,7 +192,7 @@ print("- T=4 is a common starting point for distillation.")
 </RunnableCode>
 
 <Callout type="note">
-The $T^2$ multiplier in the soft loss is not a heuristic, it is the mathematically correct factor to compensate for the $1/T^2$ shrinkage of softmax gradients at high temperature. **Don't forget it.** Many tutorials omit it or describe it as an arbitrary scaling factor; readers come away thinking it is optional. It is not. Without it, the soft loss provides essentially no gradient signal at the $T = 4$ to $T = 8$ values used in practice.
+The $T^2$ multiplier in the soft loss is not a heuristic; it is the mathematically correct factor to compensate for the $1/T^2$ shrinkage of softmax gradients at high temperature. **Don't forget it.** Many tutorials omit it or describe it as an arbitrary scaling factor; readers come away thinking it is optional. It is not. Without it, the soft loss provides essentially no gradient signal at the $T = 4$ to $T = 8$ values used in practice.
 </Callout>
 
 ## Hard vs soft distillation
@@ -269,7 +269,7 @@ Everything so far in this chapter is **off-policy distillation**: the teacher ge
 The distinction matters because of exposure bias. Off-policy training only ever shows the student teacher-quality prefixes. At inference time the student eventually makes a mistake the teacher never would have, and every following token is then conditioned on a prefix the student never saw during training, an error the training data gave it no way to recover from. On-policy distillation closes that gap by construction: the student is trained on exactly the self-generated prefixes it will encounter at inference time, and the teacher's role narrows to scoring how good each candidate continuation is. The cost is what you would expect: every training example now needs a full decode through the student plus a scoring pass through the teacher, instead of one teacher call whose output gets reused as static data.
 
 <Callout type="aside">
-**Self-distillation** is the limit case where the teacher isn't even a different network: a model's own predictions (or an earlier checkpoint's predictions) become the soft targets for training a same-architecture, same-size copy of itself. That sounds circular, there is no new capability entering the system, but the softened self-predictions still smooth out overconfident, noisy hard labels, and the result can measurably outperform training on hard labels directly. Furlanello et al. (2018), "Born-Again Neural Networks" ([arxiv.org/abs/1805.04770](https://arxiv.org/abs/1805.04770)), showed that a student with the *identical* architecture as its teacher can outperform the teacher it was distilled from. Self-distillation is used less for compression and more as a regularizer: with no size reduction, the entire value is in the softened, self-consistent training signal.
+**Self-distillation** is the limit case where the teacher isn't even a different network: a model's own predictions (or an earlier checkpoint's predictions) become the soft targets for training a same-architecture, same-size copy of itself. That sounds circular: no new capability enters the system. Yet the softened self-predictions still smooth out overconfident, noisy hard labels, and the result can measurably outperform training on hard labels directly. Furlanello et al. (2018), "Born-Again Neural Networks" ([arxiv.org/abs/1805.04770](https://arxiv.org/abs/1805.04770)), showed that a student with the *identical* architecture as its teacher can outperform the teacher it was distilled from. Self-distillation is used less for compression and more as a regularizer: with no size reduction, the entire value is in the softened, self-consistent training signal.
 </Callout>
 
 ### Reverse KL and MiniLLM: mode-seeking vs mode-covering
@@ -307,7 +307,7 @@ When the student *does* share architecture with the teacher, you can save substa
 When teacher and student architectures diverge, as in Phi-mini or R1-Distill, none of this applies. The student is initialized randomly (or from a different pre-trained model entirely) and learns the teacher's behavior through the distillation loss or, more commonly, through SFT on teacher-generated data. The runs are longer, but the architectural freedom is worth it for the cases where the teacher is a closed-weights model or the desired student shape is very different from the teacher's.
 
 <Callout type="aside">
-**Misconception.** "The student needs the same architecture as the teacher." False. **Students can differ in depth, width, vocabulary, even tokenizer.** What matters is that the student's *output interface* aligns with the teacher's in the way the distillation method requires. For soft distillation, that means a shared vocabulary so that the softmax is over the same classes. For hard distillation, even that constraint goes away, the student can have a completely different tokenizer and still train normally on teacher-generated text.
+**Misconception.** "The student needs the same architecture as the teacher." False. **Students can differ in depth, width, vocabulary, even tokenizer.** What matters is that the student's *output interface* aligns with the teacher's in the way the distillation method requires. For soft distillation, that means a shared vocabulary so that the softmax is over the same classes. For hard distillation, even that constraint goes away; the student can have a completely different tokenizer and still train normally on teacher-generated text.
 </Callout>
 
 ## Feature and attention distillation
@@ -400,7 +400,7 @@ The most exciting recent thread is reasoning distillation. **Orca** (Mukherjee e
 </WidgetFrame>
 
 <Callout type="note">
-R1-Distill is the most exciting recent demonstration that **reasoning capabilities can be distilled**. The student does not need to discover chain-of-thought from scratch via RLVR, which is genuinely expensive and difficult to stabilize, it can inherit the capability from a teacher that already has it. This dramatically lowers the cost of producing reasoning-capable models and is one of the most important post-training developments of the R1/o1 generation. The caveats are real: the student still does not match the teacher on the hardest problems, and very-long-tail capabilities may not transfer perfectly. But the direction is genuinely new.
+R1-Distill is the most exciting recent demonstration that **reasoning capabilities can be distilled**. The student does not need to discover chain-of-thought from scratch via RLVR, a process that is genuinely expensive and difficult to stabilize. It can inherit the capability from a teacher that already has it. This dramatically lowers the cost of producing reasoning-capable models and is one of the most important post-training developments of the R1/o1 generation. The caveats are real: the student still does not match the teacher on the hardest problems, and very-long-tail capabilities may not transfer perfectly. But the direction is genuinely new.
 </Callout>
 
 Those caveats are worth taking seriously on their own.
