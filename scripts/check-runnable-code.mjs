@@ -13,6 +13,7 @@ const PAGES_DIR = join(ROOT, 'src', 'pages');
 const PYODIDE_DIR = join(ROOT, 'node_modules', 'pyodide');
 const failures = [];
 const filter = process.env.RUNNABLE_FILTER;
+const showOutput = process.env.RUNNABLE_SHOW_OUTPUT === '1';
 
 function isEscaped(text, index) {
   let slashCount = 0;
@@ -65,9 +66,48 @@ function lineNumber(text, index) {
 }
 
 function packagesFrom(attributes) {
-  const match = attributes.match(/packages=\{\[([^\]]*)\]\}/);
-  if (!match) return ['numpy'];
-  return [...match[1].matchAll(/["']([^"']+)["']/g)].map((entry) => entry[1]);
+  const packages = stringArrayAttribute(attributes, 'packages');
+  return packages ?? ['numpy'];
+}
+
+function stringArrayAttribute(attributes, name) {
+  const marker = `${name}={`;
+  const start = attributes.indexOf(marker);
+  if (start === -1) return undefined;
+
+  const arrayStart = start + marker.length;
+  if (attributes[arrayStart] !== '[') {
+    throw new Error(`${name} must be an array of quoted strings`);
+  }
+
+  let end = arrayStart + 1;
+  let quote;
+  let escaped = false;
+  for (; end < attributes.length; end += 1) {
+    const character = attributes[end];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ']') {
+      break;
+    }
+  }
+
+  if (end === attributes.length || attributes[end + 1] !== '}') {
+    throw new Error(`unterminated ${name} array`);
+  }
+
+  const value = attributes.slice(arrayStart + 1, end);
+  return [...value.matchAll(/["']((?:\\.|[^"'\\])*)["']/g)].map((entry) =>
+    entry[1].replace(/\\([\\"'])/g, '$1'),
+  );
 }
 
 function extractBlocks(filePath) {
@@ -116,6 +156,7 @@ function extractBlocks(filePath) {
       filePath,
       line: lineNumber(text, start),
       packages: packagesFrom(attributes),
+      expectedOutput: stringArrayAttribute(attributes, 'expectedOutput') ?? [],
       runnable: !/runnable=\{false\}/.test(attributes),
     });
     cursor = end;
@@ -194,6 +235,16 @@ if (!failures.length) {
         `exec(compile(${JSON.stringify(block.code)}, ${JSON.stringify(block.id)}, 'exec'), namespace, namespace)`,
       ].join('\n');
       await pyodide.runPythonAsync(source);
+      const renderedOutput = output.join('');
+      if (showOutput) {
+        console.log(`--- ${relative(ROOT, block.filePath)}:${block.line} ---`);
+        console.log(renderedOutput);
+      }
+      for (const expected of block.expectedOutput) {
+        if (!renderedOutput.includes(expected)) {
+          failures.push(`${relative(ROOT, block.filePath)}:${block.line}: output did not include expected fragment ${JSON.stringify(expected)}\nactual output:\n${renderedOutput}`);
+        }
+      }
     } catch (error) {
       const message = String(error?.message ?? error).split('\n');
       failures.push(`${relative(ROOT, block.filePath)}:${block.line}: ${message.slice(-8).join('\n')}`);

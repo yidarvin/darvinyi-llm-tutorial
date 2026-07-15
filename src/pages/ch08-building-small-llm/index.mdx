@@ -119,6 +119,7 @@ print(f"\\nA random-init language model produces loss ≈ baseline initially.")
 print(f"Training drives this down, well-trained models reach loss < 3 on text.")
 `}
   packages={["numpy"]}
+  expectedOutput={["Cross-entropy on random logits, random targets: 4.6095", "Theoretical baseline (uniform over 100):  4.6052"]}
   height={420}
 />
 
@@ -263,15 +264,16 @@ params = np.array([5.0])
 opt = AdamW(params.shape, lr=0.1, weight_decay=0.05)
 
 print(f"Step  0: x = {params[0]:.4f}   (target = 3)")
-for step in range(50):
+for step in range(200):
     grads = 2 * (params - 3)              # gradient of (x - 3)^2
     opt.step(params, grads)
 
-print(f"Step 50: x = {params[0]:.4f}")
+print(f"Step 200: x = {params[0]:.4f}")
 print(f"\\nConverges near 3, but weight decay tugs slightly toward 0.")
-print(f"With weight_decay = 0 the converged value would be exactly 3.")
+print(f"With weight_decay = 0 it would settle very close to 3.")
 `}
   packages={["numpy"]}
+  expectedOutput={["Step 200: x = 2.9990", "Converges near 3, but weight decay tugs slightly toward 0."]}
   height={460}
 />
 
@@ -423,7 +425,7 @@ print(f"Without clipping, the outlier would produce a 100x larger optimizer step
 "Mixed precision is just FP16" is the misconception that has cost real training runs. Mixed precision uses FP16 or BF16 for the *forward and backward passes*, the parts that benefit from faster matmuls, but keeps the **master weights and optimizer state in FP32**. Without the FP32 state, the AdamW second moment $v_t$ accumulates floating-point error, and the trained model silently underperforms. PyTorch's `torch.cuda.amp` and `bfloat16` autocast machinery, and JAX's mixed-precision tooling, all enforce this mix automatically, but only if you use them as intended. Implementing "mixed precision" by casting everything to FP16 manually is a route to bad models.
 </Callout>
 
-The loss, the optimizer, the schedule, and the stability tools are all the pieces. The next section is the loop that wires them together.
+The loss, the optimizer, the schedule, and the stability tools are all the pieces of the training loop.
 
 ## The complete training loop
 
@@ -688,10 +690,11 @@ for i in range(10):
     sample = sample_next_token(fake_logits.copy(), temperature=0.7, top_p=0.9)
     print(f"  sample {i + 1}: token {sample}")
 
-print(f"\\nMostly token 5 (the model's confident choice), with occasional")
-print(f"alternates from the top of the distribution, the temperature/top-p mix.")
+print(f"\\nThis distribution is confident enough that the nucleus contains only token 5,")
+print(f"so every sample matches the greedy choice. A flatter distribution would admit alternates.")
 `}
   packages={["numpy"]}
+  expectedOutput={["sample 10: token 5", "so every sample matches the greedy choice."]}
   height={520}
 />
 

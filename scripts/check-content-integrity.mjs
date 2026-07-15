@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Content integrity guard.
 //
-// Catches six defect classes surfaced by the 2026-07 content critique
+// Catches seven defect classes surfaced by the 2026-07 content critique
 // (docs/CONTENT_CRITIQUE.md):
 //
 //   1. Internal build-process "Phase N" labels leaking into reader-facing
@@ -34,6 +34,9 @@
 //      pattern, which a numeric "Phase N" regex can't (there's no number).
 //   6. The "cross-phase" compound specifically, which the numeric check
 //      above cannot catch because it has no number.
+//   7. Reader-facing navigation that announces "The next section" instead
+//      of advancing the argument. The project voice guide explicitly forbids
+//      this authoring residue.
 //
 // Run: node scripts/check-content-integrity.mjs
 
@@ -127,9 +130,20 @@ for (const dir of chapterDirs) {
       `${dir}/index.mdx:${lineNum}: imports the @components/widgets barrel; import each chapter widget directly so it can remain a page-specific client chunk`
     );
   }
+
+  // Check 5: do not use a standalone "The next section/subsection" teaser.
+  // Fold the substantive transition into the surrounding argument instead.
+  lines.forEach((line, i) => {
+    const m = line.match(/\bThe next (?:sub)?section\b/);
+    if (m) {
+      failures.push(
+        `${dir}/index.mdx:${i + 1}: reader-facing navigation leak "${m[0]}"; state the transition directly instead`
+      );
+    }
+  });
 }
 
-// Check 5 + 6: everywhere else under src/ (components, lib, layouts, pages'
+// Check 6 + 7: everywhere else under src/ (components, lib, layouts, pages'
 // own frontmatter is already covered by Check 1, so this walks all of src/
 // and just skips src/pages/*/index.mdx to avoid double-reporting).
 const allSrcFiles = walk(SRC_DIR, ['.tsx', '.ts', '.astro']).filter(
@@ -139,7 +153,7 @@ for (const filePath of allSrcFiles) {
   const text = readFileSync(filePath, 'utf8');
   const rel = relative(ROOT, filePath);
 
-  // Check 5: numeric "Phase N" leakage (same pattern as Check 1, wider scope).
+  // Check 6: numeric "Phase N" leakage (same pattern as Check 1, wider scope).
   text.split('\n').forEach((line, i) => {
     const m = line.match(/\bPhase\s+\d+\b/);
     if (m) {
@@ -147,7 +161,7 @@ for (const filePath of allSrcFiles) {
     }
   });
 
-  // Check 6: the "cross-phase" compound specifically (no number, so Check 5
+  // Check 7: the "cross-phase" compound specifically (no number, so Check 6
   // can't catch it) — this exact pattern leaked through a TypeScript
   // RelationshipType literal in src/lib/related-chapters.ts. Case-insensitive
   // since it could appear as a string literal, object key, or CSS-ish token.
@@ -166,6 +180,6 @@ if (failures.length) {
   process.exit(1);
 } else {
   console.log(
-    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, no dangling EqRefs, no landmark-anchor mismatches, and no chapter-wide widget barrels.`
+    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, dangling EqRefs, landmark-anchor mismatches, next-section teasers, or chapter-wide widget barrels.`
   );
 }

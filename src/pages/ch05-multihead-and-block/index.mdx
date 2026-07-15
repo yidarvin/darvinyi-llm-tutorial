@@ -29,8 +29,6 @@ What makes multi-head attention interesting, and the source of the most common m
 This chapter assumes Chapter 4. If $\attn(Q, K, V) = \softmax(QK^\top/\sqrt{d_k})V$ is not already second nature, including why the $\sqrt{d_k}$ is there, what causal masking does and where it gets added, pause and revisit Chapter 4 before continuing. Multi-head attention reuses everything from there; this chapter only adds the wrapping.
 </Callout>
 
-The next section makes the architecture formal. Three matrices in, $h$ heads of attention in parallel, one matrix out.
-
 ## Multi-head attention: the parallel-heads architecture
 
 ### The formula
@@ -125,8 +123,6 @@ The two reshape calls are the only part of the implementation that is not a dire
 The most common misconception about multi-head attention is that "more heads = more capacity." With $d_k = d_{\text{model}} / h$, the parameter count is exactly $4 d_{\text{model}}^2$ regardless of $h$, and the compute per attention pass is exactly $O(n^2 d_{\text{model}})$ regardless of $h$. The number of heads is a representation choice, how finely to partition the same total budget into specialists, not a capacity choice. Doubling $h$ does not add parameters; it just halves the per-head dimension. The marginal benefit of more heads diminishes quickly, which is why production models cluster around $h \in [8, 96]$ rather than scaling $h$ proportionally to $d_{\text{model}}$.
 </Callout>
 
-The next section makes the parameter accounting rigorous and shows where it fits in the broader transformer block.
-
 ## Parameter and compute accounting
 
 A single transformer block is dominated, in parameter count, by two operations: multi-head attention and the feedforward network. The layer norms contribute a small amount; the residual connections contribute none.
@@ -155,8 +151,6 @@ Compute scales differently from parameters because attention has both linear-in-
 <Callout type="warning">
 A persistent misconception is that "the FFN is the least important part of the transformer." The numbers above say otherwise: the FFN holds twice the parameters of multi-head attention in a standard block, and at short context lengths it does most of the compute. Mechanistic interpretability research (Geva et al. 2022 and later) further argues that the FFN is where most of the model's *factual knowledge* lives. Attention shuffles information between positions; the FFN processes that information at each position. Both pieces are essential, and the FFN is, parameter-wise, the bigger of the two.
 </Callout>
-
-The next section opens up the FFN. Two linear layers with an activation between them, but the choices inside that simple structure have outsized influence on modern model design.
 
 ## The feedforward network (FFN)
 
@@ -235,7 +229,7 @@ Every modern transformer's FFN reduces to roughly that structure. Production cod
 Modern open-source LLMs (Llama, Mistral, Gemma) use SwiGLU rather than GELU. The performance gain over GELU is small but consistent, and the parameter cost is similar: SwiGLU uses three linear projections of $d_{\text{model}} \times (\tfrac{2}{3} \cdot 4 d_{\text{model}})$ each, which works out to roughly the same parameter count as the GELU FFN's two $d_{\text{model}} \times 4 d_{\text{model}}$ projections. The chapter implements GELU because the structural lesson is the same and the code is simpler; Exercise 4 below implements SwiGLU as an extension.
 </Callout>
 
-So far the chapter has treated multi-head attention and the FFN as two separate operations. The next sections introduce what connects them inside the transformer block: residuals and layer norm.
+So far the chapter has treated multi-head attention and the FFN as two separate operations. Residual connections and layer norm connect them inside the transformer block.
 
 ## Residual connections: why they matter
 
@@ -343,7 +337,7 @@ Before layer norm, each token's per-feature mean and standard deviation vary wid
 "Layer norm is just like batch norm" is a common confusion that turns out to be wrong about a load-bearing axis. They normalize across *different* dimensions: batch norm across the batch, layer norm across the features of one example. For sequence models with variable-length inputs and small or batch-size-1 inference, layer norm's per-example statistics are essential. Batch norm's batch statistics break in exactly those settings. The transformer paper used layer norm specifically because batch norm did not work for the variable-length translation task that motivated it.
 </Callout>
 
-The next section assembles everything, multi-head attention, FFN, residuals, layer norms, into the full transformer block.
+Multi-head attention, the FFN, residuals, and layer norms together form the full transformer block.
 
 ## The full transformer block: Pre-LN vs Post-LN
 

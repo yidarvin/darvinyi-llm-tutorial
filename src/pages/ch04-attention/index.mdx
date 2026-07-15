@@ -33,8 +33,6 @@ This chapter is about the operation itself: what scaled dot-product attention co
 "Attention" in this chapter means *self-attention* by default: the variant where queries, keys, and values all come from the same input sequence. Section 7 introduces cross-attention, where the query comes from a different sequence than the keys and values. The original 2017 paper introduced both; modern decoder-only LLMs (the GPT family, Llama, Mistral, Claude) use only self-attention with causal masking, and the broader literature has settled into using "attention" to mean self-attention unless otherwise specified.
 </Callout>
 
-The next section introduces the three-letter abstraction ($Q$, $K$, $V$) that the rest of the chapter is built around.
-
 ## Soft database lookup: the Q, K, V framing
 
 Attention is a soft database lookup. Hold the mental model fixed before any equations land, because $Q$, $K$, $V$ as letters are otherwise easy to memorize and hard to feel.
@@ -146,7 +144,7 @@ The widget below ties the formula to a concrete sequence. The same six-position 
 The softmax in the code above subtracts the max before exponentiating: `x = x - x.max(...)`. This is the standard numerical-stability trick. Without it, large logits cause `np.exp` to overflow. Mathematically the subtraction is a no-op (the factor cancels in numerator and denominator), but numerically it is the difference between a stable computation and an array of `inf` / `nan`. Production frameworks (PyTorch, JAX, TensorFlow) do this automatically; understanding *why* matters for debugging.
 </Callout>
 
-The denominator $\sqrt{d_k}$ in equation <EqRef id="4.attn" /> is the one piece of the formula that is not visually obvious. The next section explains where it comes from.
+The denominator $\sqrt{d_k}$ in equation <EqRef id="4.attn" /> is the one piece of the formula that is not visually obvious, so it deserves a derivation.
 
 ## Why √d_k? The variance argument
 
@@ -316,7 +314,7 @@ The masked attention matrix is strictly lower-triangular: row $i$ has non-zero w
 
 Two related masking patterns appear in practice. *Padding masks* zero out attention to padding tokens in batched training (variable-length sequences are right-padded to a common length for batching). *Prefix-LM masks* allow bidirectional attention within a prefix and causal attention thereafter, used in some encoder-decoder hybrids. Both are additive masks of the same kind (different patterns of zeros and $-\infty$ in the same matrix slot), and combine cleanly with the causal mask by addition.
 
-Everything so far has been self-attention. The next section is a brief detour into the variant where $Q$ comes from one sequence and $K, V$ from another.
+Everything so far has been self-attention. Cross-attention is the variant where $Q$ comes from one sequence and $K, V$ from another.
 
 ## Self-attention vs cross-attention
 

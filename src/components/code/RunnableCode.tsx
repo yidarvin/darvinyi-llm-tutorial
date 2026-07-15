@@ -66,6 +66,11 @@ export interface RunnableCodeProps {
    * for code that requires a local runtime unavailable in Pyodide (for
    * example, CUDA-backed PyTorch). */
   runnable?: boolean;
+  /**
+   * Output fragments asserted by the repository's Pyodide validation. They
+   * are deliberately not rendered or sent to the browser component.
+   */
+  expectedOutput?: string[];
 }
 
 type Status = 'idle' | 'loading' | 'running' | 'done' | 'error';

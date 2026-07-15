@@ -116,7 +116,7 @@ print(f"  (nearly identical, these dimensions have periods of tens of thousands 
 The base $10000$ in <EqRef id="6.sin" /> is the standard value from Vaswani 2017. It works well for sequences up to a few thousand positions. Modern long-context models (Llama 3 and successors) sometimes increase the base substantially (Llama 3 uses $500{,}000$) to keep the slow frequencies meaningful at $128{,}000$-position contexts. The base is a knob: smaller values give more resolution at short distances and less at long; larger values do the opposite. The chapter sticks with $10000$ because it is the historical default and the value virtually all sinusoidal-PE references use.
 </Callout>
 
-The next section returns to a subtle property of the sinusoidal design, a property Vaswani's paper claimed in a footnote and subsequent work made rigorous.
+A footnote in Vaswani's paper claimed a subtle property of the sinusoidal design, and subsequent work made it rigorous.
 
 ## The implicit relative-position argument
 
@@ -138,7 +138,7 @@ Shaw, Uszkoreit & Vaswani (2018, [arxiv.org/abs/1803.02155](https://arxiv.org/ab
 "Sinusoidal PE encodes only absolute position" is half right and half wrong. It is encoded *as* absolute position, each row is labeled with the integer $p$, and there is no offset arithmetic in the formula. But the linear-transformation property above means relative-position information is *recoverable* from the sinusoidal PE if the model learns the right linear projections. Whether it does is empirical. The cleaner statement: sinusoidal PE makes relative position *available* but does not make it *the default*. RoPE, the next two sections, makes relative position the default.
 </Callout>
 
-The next section steps sideways to the simplest possible alternative: just learn the position encoding instead of computing it.
+The simplest alternative is to learn the position encoding instead of computing it.
 
 ## Learned positional embeddings
 
@@ -191,7 +191,7 @@ The trade-off is straightforward. Learned PE has the most flexibility (the model
 "Learned PE is always better than sinusoidal" is a claim you will see in older textbooks and survey papers, and it is wrong on the dimension that came to matter most. Learned PE is often better *within the training context length*. It does not generalize to longer sequences. If you trained a model at $M = 2048$ and want to evaluate at $4096$, learned PE has no answer: the embeddings simply do not exist. Sinusoidal PE keeps producing values, though quality degrades. RoPE and ALiBi (the next two sections) extrapolate better still. The "always better" framing is from a regime where context-length extension was not a research priority; today it is, and the framing has not aged well.
 </Callout>
 
-That regime, context-length extension and clean relative-position structure, is exactly what RoPE was designed for. The next section is the chapter's destination.
+That regime, context-length extension and clean relative-position structure, is exactly what RoPE was designed for.
 
 ## Rotary Positional Embedding (RoPE): the modern default
 

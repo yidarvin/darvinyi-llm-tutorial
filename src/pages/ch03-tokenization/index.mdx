@@ -35,7 +35,7 @@ The choice of tokenizer shapes vocab size, sequence length, training cost, infer
 The same tokenizer is used at training time and at inference time. Pre-training turns the training corpus into token IDs once; inference turns each user prompt into token IDs the same way. Mismatched tokenization between the two (a different vocabulary, a different merge order, a different whitespace convention) silently corrupts every input the model sees. This is why HuggingFace pins the tokenizer to the model in its "tokenizer + model" pairing. They are not separable components, even though they live in different files on disk.
 </Callout>
 
-The two reflexive approaches to tokenization are word-level (one token per whitespace-separated word) and character-level (one token per character). Both fail in different ways. The next section shows how, and motivates the subword tokenization that took over from 2015 onward.
+The two reflexive approaches to tokenization are word-level (one token per whitespace-separated word) and character-level (one token per character). Both fail in different ways, which motivates the subword tokenization that took over from 2015 onward.
 
 ## Naïve attempts: character-level and word-level
 
@@ -285,7 +285,7 @@ except UnicodeDecodeError as e:
 
 The failure at the end of that block is not a bug, it is the reason production decoders never decode token-by-token. A streaming chat completion emits token IDs one at a time; if a multi-byte Unicode character happens to be split across two tokens (`café`'s `é` is two bytes, `\xc3\xa9`, and BPE has no obligation to keep character boundaries intact when it merges bytes), decoding the first of those two tokens in isolation produces an invalid UTF-8 sequence. Real streaming implementations buffer raw bytes across token boundaries and only attempt a UTF-8 decode once they have a complete character, exactly the pattern OpenAI's and Anthropic's streaming APIs use under the hood.
 
-There is a problem with the training loop above, independent of decoding. The base alphabet is bytes, which sidesteps an issue character-level BPE has with Unicode. The next section makes that explicit.
+There is a problem with the training loop above, independent of decoding. The base alphabet is bytes, which sidesteps an issue character-level BPE has with Unicode.
 
 ## Byte-level BPE: handling all unicode
 
@@ -332,7 +332,7 @@ The structural result: an English prompt and a Korean prompt with the same chara
 "BPE handles all languages equally well" is wrong. BPE is biased toward whatever languages dominate the training corpus. When the corpus is 95% English, as it is for most commercial tokenizers, the resulting tokenizer is highly efficient on English and progressively less efficient on every language with less representation. The OpenAI API's per-token pricing therefore charges Korean, Hindi, Arabic, and Thai users substantially more per character of input than English users. This is not a moral judgment; it is a structural property of byte-level BPE trained on English-heavy data, and it is one of the most consequential effects tokenization has on downstream user experience.
 </Callout>
 
-BPE is one algorithm. The next section walks through the two others that show up in production.
+BPE is one algorithm. WordPiece and SentencePiece are the two others that show up in production.
 
 ## Other tokenizers: WordPiece and Unigram LM
 
