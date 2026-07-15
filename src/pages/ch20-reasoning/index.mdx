@@ -6,7 +6,8 @@ description: 'Reasoning, the capability that turns deployable models into useful
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { TestTimeComputeCurves, SelfConsistencyAggregator } from '@components/widgets';
+import TestTimeComputeCurves from '@components/widgets/ch20/TestTimeComputeCurves';
+import SelfConsistencyAggregator from '@components/widgets/ch20/SelfConsistencyAggregator';
 
 Part VI ended with a deployable model, efficient on the forward pass, quantized to fit on commodity hardware, and sampling tokens cleanly. But a deployable model is not automatically a *useful* one. For factual questions ("who painted the Mona Lisa?") direct generation works fine: the answer is in the weights and one forward pass suffices. For **hard reasoning**, math word problems, multi-step logic, code with a subtle bug, planning across many moves, direct generation often fails. The model commits to early decisions it cannot revise, and a wrong intermediate step compounds into a wrong final answer. **Reasoning techniques** address this by giving the model space to think before it answers.
 

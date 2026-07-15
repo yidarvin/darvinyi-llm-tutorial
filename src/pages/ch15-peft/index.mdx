@@ -6,7 +6,8 @@ description: "Parameter-efficient fine-tuning (PEFT), the practical alternative 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { LoRAArchitecture, ParameterBudgetCalculator } from '@components/widgets';
+import LoRAArchitecture from '@components/widgets/ch15/LoRAArchitecture';
+import ParameterBudgetCalculator from '@components/widgets/ch15/ParameterBudgetCalculator';
 
 Chapters 13 and 14 left you with the recipes for post-training. Take a base model, run SFT to teach it the chatbot format, layer DPO or RLHF on top to teach it quality, and you have a useful assistant. The recipes are clear; the problem is that doing them at the parameter scale of modern models is operationally brutal. Full fine-tuning of a $70$B-parameter model holds parameters, gradients, and AdamW's two optimizer moments in memory simultaneously, roughly $840$ GB before activations. That is $10\times$ A100s at minimum. Out of reach for most teams.
 

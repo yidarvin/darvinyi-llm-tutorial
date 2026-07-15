@@ -6,7 +6,9 @@ description: "The math and code of neural network primitives: affine maps, activ
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { BackpropVisualizer, TrainingCurves, AutogradGraph } from '@components/widgets';
+import BackpropVisualizer from '@components/widgets/ch01/BackpropVisualizer';
+import TrainingCurves from '@components/widgets/ch01/TrainingCurves';
+import AutogradGraph from '@components/widgets/ch01/AutogradGraph';
 
 Before a transformer, any neural network. Before any neural network, four things: a way to combine inputs (the affine map), a way to break linearity (the activation), a way to measure wrongness (the loss), and a way to reduce it (gradient descent). Every architecture in the chapters that follow (attention blocks, FFNs, MoE routers, state-space models) composes these four things at greater scale.
 

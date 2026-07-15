@@ -6,7 +6,8 @@ description: How discrete tokens become continuous vectors that a neural network
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { EmbeddingSpace, Word2VecDynamics } from '@components/widgets';
+import EmbeddingSpace from '@components/widgets/ch02/EmbeddingSpace';
+import Word2VecDynamics from '@components/widgets/ch02/Word2VecDynamics';
 
 Chapter 1 ended with a neural network that could classify 2D points by quadrant. Coordinates in, class label out. Both ends continuous. Both ends were always going to play nicely with backprop.
 

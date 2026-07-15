@@ -6,7 +6,8 @@ description: Evaluation, the discipline that turns intuition about LLM quality i
 
 import { Callout, Equation, EqRef, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { BenchmarkHeatmap, LLMJudgeBiasDemo } from '@components/widgets';
+import BenchmarkHeatmap from '@components/widgets/ch26/BenchmarkHeatmap';
+import LLMJudgeBiasDemo from '@components/widgets/ch26/LLMJudgeBiasDemo';
 
 Chapter 24 covered safety from the outside, alignment training, red-teaming, what we want the model to do. Chapter 25 covered interpretability from the inside, probes, sparse autoencoders, circuits, what the model is *actually* computing. This chapter covers the third discipline of Part VIII: how do we measure both? Evaluation turns *"this model is better"* into a measurable claim. Without it, AI development is opinion and marketing. With it, claims become comparable, across models, across techniques, across releases. It is the bridge from craft to engineering.
 

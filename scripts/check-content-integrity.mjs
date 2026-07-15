@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Content integrity guard.
 //
-// Catches five defect classes surfaced by the 2026-07 content critique
+// Catches six defect classes surfaced by the 2026-07 content critique
 // (docs/CONTENT_CRITIQUE.md):
 //
 //   1. Internal build-process "Phase N" labels leaking into reader-facing
@@ -19,15 +19,21 @@
 //      transformer block as "Chapter 7" (it's Chapter 5) and state-space
 //      models as "Chapter 11" (they're Chapter 12) — both inherited from a
 //      superseded chapter-numbering draft and never caught before ship.
-//   4. Same "Phase N" leakage as (1), but anywhere else under src/ — the
+//   4. A chapter importing the `@components/widgets` barrel. Astro then
+//      retains every widget in a shared client chunk, even though a chapter
+//      renders only its own one or two widgets. Chapters must import their
+//      widget islands directly so Rollup can emit page-specific chunks.
+//   5. Same "Phase N" leakage as (1), but anywhere else under src/ — the
 //      original Phase-N purge only swept src/pages/ch*/index.mdx. It missed
 //      widget .tsx/.ts files with reader-facing captions or "echoes Phase N
 //      conventions"-style code comments, AND it missed src/lib/related-
 //      chapters.ts, where a `RelationshipType` union member was literally
 //      named 'cross-phase' and rendered to readers as "cross-phase link" —
 //      the same internal vocabulary leaking through a TypeScript literal
-//      instead of prose. Check 5 below catches that specific compound-word
+//      instead of prose. Check 6 below catches that specific compound-word
 //      pattern, which a numeric "Phase N" regex can't (there's no number).
+//   6. The "cross-phase" compound specifically, which the numeric check
+//      above cannot catch because it has no number.
 //
 // Run: node scripts/check-content-integrity.mjs
 
@@ -111,9 +117,19 @@ for (const dir of chapterDirs) {
       }
     }
   }
+
+  // Check 4: chapter widgets must be direct imports, not the all-widgets barrel.
+  // Direct paths such as @components/widgets/ch04/AttentionHeatmap are allowed.
+  const barrelImport = /from\s+['"]@components\/widgets['"]/.exec(text);
+  if (barrelImport) {
+    const lineNum = text.slice(0, barrelImport.index).split('\n').length;
+    failures.push(
+      `${dir}/index.mdx:${lineNum}: imports the @components/widgets barrel; import each chapter widget directly so it can remain a page-specific client chunk`
+    );
+  }
 }
 
-// Check 4 + 5: everywhere else under src/ (components, lib, layouts, pages'
+// Check 5 + 6: everywhere else under src/ (components, lib, layouts, pages'
 // own frontmatter is already covered by Check 1, so this walks all of src/
 // and just skips src/pages/*/index.mdx to avoid double-reporting).
 const allSrcFiles = walk(SRC_DIR, ['.tsx', '.ts', '.astro']).filter(
@@ -123,7 +139,7 @@ for (const filePath of allSrcFiles) {
   const text = readFileSync(filePath, 'utf8');
   const rel = relative(ROOT, filePath);
 
-  // Check 4: numeric "Phase N" leakage (same pattern as Check 1, wider scope).
+  // Check 5: numeric "Phase N" leakage (same pattern as Check 1, wider scope).
   text.split('\n').forEach((line, i) => {
     const m = line.match(/\bPhase\s+\d+\b/);
     if (m) {
@@ -131,7 +147,7 @@ for (const filePath of allSrcFiles) {
     }
   });
 
-  // Check 5: the "cross-phase" compound specifically (no number, so Check 4
+  // Check 6: the "cross-phase" compound specifically (no number, so Check 5
   // can't catch it) — this exact pattern leaked through a TypeScript
   // RelationshipType literal in src/lib/related-chapters.ts. Case-insensitive
   // since it could appear as a string literal, object key, or CSS-ish token.
@@ -150,6 +166,6 @@ if (failures.length) {
   process.exit(1);
 } else {
   console.log(
-    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, no dangling EqRefs, no landmark-anchor mismatches.`
+    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, no dangling EqRefs, no landmark-anchor mismatches, and no chapter-wide widget barrels.`
   );
 }

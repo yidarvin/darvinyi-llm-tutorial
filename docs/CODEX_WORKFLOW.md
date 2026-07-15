@@ -40,11 +40,15 @@ The development-only React hook warning was traced to server-rendering the close
 has no reader-visible server output, so it now uses Astro's `client:only="react"` directive; repeated local
 requests no longer emit the warning, and the hydrated dialog still opens from the search control.
 
+The chapter pages now import widgets directly rather than through the all-widget barrel. That eliminated the
+previous 522.7 KB raw / 152.0 KB gzip shared widget chunk that every chapter referenced. The largest remaining
+client chunk is the 361.5 KB raw / 122.3 KB gzip CodeMirror editor bundle, which is requested only when a
+`RunnableCode` island becomes visible; individual widget chunks are now page-specific and remain below 5.6 KB gzip.
+
 ## Ordered backlog
 
-1. **Editorial and performance follow-up.** Resolve remaining comma-splice risks identified in
-   `docs/PROSE_CLEANUP_LOG.md`; measure large client chunks before code-splitting; scope Pagefind indexing if
-   that preserves all reader-visible search content.
+1. **Editorial and search follow-up.** Resolve remaining comma-splice risks identified in
+   `docs/PROSE_CLEANUP_LOG.md`; scope Pagefind indexing if that preserves all reader-visible search content.
 2. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
    `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
 

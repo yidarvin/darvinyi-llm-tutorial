@@ -6,7 +6,8 @@ description: Agents from scratch, the engineering chapter of Part IX (Agents). F
 
 import { Callout, Equation, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { ToolSchemaBuilder, AgentTraceInspector } from '@components/widgets';
+import ToolSchemaBuilder from '@components/widgets/ch28-agent-from-scratch/ToolSchemaBuilder';
+import AgentTraceInspector from '@components/widgets/ch28-agent-from-scratch/AgentTraceInspector';
 
 Chapter 27 covered what an agent *is*: an LLM acting as a controller in a loop with an environment. ReAct as the foundational pattern, AutoGPT as the cautionary tale, memory and patterns and the $2025$ stack. All conceptual. This chapter is engineering, how to take those concepts and assemble a working agent out of real code that survives real traffic. Production agents are $80\%$ engineering, $20\%$ LLM. The $20\%$ is the model and the basic loop. The $80\%$ is everything in this chapter: tools, schemas, error handling, observability, scaffolding.
 

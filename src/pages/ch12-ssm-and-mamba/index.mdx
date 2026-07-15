@@ -6,7 +6,8 @@ description: "State-space models (SSMs) and Mamba, the second major architectura
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SSMvsAttentionScaling, SelectiveScanAnimation } from '@components/widgets';
+import SSMvsAttentionScaling from '@components/widgets/ch12/SSMvsAttentionScaling';
+import SelectiveScanAnimation from '@components/widgets/ch12/SelectiveScanAnimation';
 
 Attention has a problem. It is $O(T^2)$ in both memory and compute, where $T$ is the sequence length. At a $32$K-token context, the attention matrix has a billion entries, about $2$GB in BF16 just to hold the scores for a single layer. At the rumored million-token frontier, the same matrix is a trillion entries, two terabytes. FlashAttention (Chapter 10) hid this cost from HBM by keeping intermediate tiles in SRAM, but the underlying compute is still quadratic: FlashAttention is a better implementation of the same $O(T^2)$ algorithm, not a different one. Long contexts are bottlenecked by attention, full stop.
 

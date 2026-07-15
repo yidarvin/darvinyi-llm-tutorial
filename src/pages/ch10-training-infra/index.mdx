@@ -6,7 +6,8 @@ description: The systems engineering chapter that closes Part III, Pre-training.
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { TrainingStackPicker, StepTimeline } from '@components/widgets';
+import TrainingStackPicker from '@components/widgets/ch10/TrainingStackPicker';
+import StepTimeline from '@components/widgets/ch10/StepTimeline';
 
 Chapter 9 ended with the complete conceptual story of distributed training. Choose a compute budget. Allocate it per Chinchilla, about $20$ tokens per parameter. Combine data, tensor, pipeline, and FSDP parallelism into a 3D layout across thousands of GPUs. Train. That is the math.
 

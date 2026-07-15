@@ -6,7 +6,8 @@ description: "Modern LLMs have 8B-1T parameters and train on trillions of tokens
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { ScalingLawCalculator, ParallelismDiagram } from '@components/widgets';
+import ScalingLawCalculator from '@components/widgets/ch09/ScalingLawCalculator';
+import ParallelismDiagram from '@components/widgets/ch09/ParallelismDiagram';
 
 Chapter 8 ended with a working training loop on a small model, a 50M-parameter transformer learning on a single GPU in an afternoon. The math of that chapter is the math of modern LLM training: same cross-entropy, same AdamW, same warmup-plus-cosine schedule. What is *not* the same at frontier scale is the engineering. Llama-3 has 8B to 405B parameters. GPT-4 is reportedly trillion-plus. The training corpora are trillions of tokens. A single H100 holds at most a few billion parameters in mixed precision, and training needs *additional* memory for gradients, optimizer state, and activations. The Chapter 8 loop, as written, runs out of memory before the first forward pass on these models, and would take years if it didn't.
 

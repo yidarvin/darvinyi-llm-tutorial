@@ -6,7 +6,8 @@ description: Tool use, how production agents call functions, query databases, br
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { ToolCallTrace, ToolSchemaValidator } from '@components/widgets';
+import ToolCallTrace from '@components/widgets/ch21/ToolCallTrace';
+import ToolSchemaValidator from '@components/widgets/ch21/ToolSchemaValidator';
 
 Chapter 20 ended with reasoning models that can think for minutes before answering, but they can only *describe* what they would do, not *do* it. A reasoning model that cannot act on the world is limited. **Tool use** removes that limit. Modern LLMs are trained to emit structured calls to external functions; the surrounding system executes those calls; the results flow back into the model's context. The model decides when to invoke a tool and which tool to invoke. This is the bridge from chat to agency.
 

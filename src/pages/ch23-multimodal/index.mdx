@@ -6,7 +6,8 @@ description: Multimodal, how LLMs perceive images, audio, and video. From the un
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { CLIPEmbeddingSpace, ViTPatchTokenizer } from '@components/widgets';
+import CLIPEmbeddingSpace from '@components/widgets/ch23/CLIPEmbeddingSpace';
+import ViTPatchTokenizer from '@components/widgets/ch23/ViTPatchTokenizer';
 
 Most of the world is not text. Images, audio, video, screenshots, charts, faces, voices, these carry vast information that text alone cannot represent. A text-only LLM can describe a chart it has been told about, but it cannot directly *see* one. Multimodal models extend the language-model framework to non-text inputs and outputs. The core technical question is mechanically simple and conceptually deep: how do you turn a non-text modality into something a transformer can process? The answer for vision is to chop the image into patches and treat each patch as a "visual token." The answer for audio is to compute a mel-spectrogram, split it into patches, and do the same thing. The recipe generalizes. Once a modality is tokenized, the transformer doesn't know the difference between a text token, a visual token, or an audio token, they're all just vectors.
 

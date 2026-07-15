@@ -6,7 +6,8 @@ description: Scaled dot-product attention, the operation that defines the modern
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { AttentionHeatmap, CausalMask } from '@components/widgets';
+import AttentionHeatmap from '@components/widgets/ch04/AttentionHeatmap';
+import CausalMask from '@components/widgets/ch04/CausalMask';
 
 The transformer is mostly attention. The rest is supporting cast: embeddings, feedforward layers, normalizations, residuals. Attention is what does the work of letting one position in a sequence look at every other position and decide what to take from each.
 

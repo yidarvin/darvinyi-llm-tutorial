@@ -6,7 +6,8 @@ description: Quantization, how to deploy large models cheaply by reducing the bi
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { QuantizationExplorer, GranularityVisualizer } from '@components/widgets';
+import QuantizationExplorer from '@components/widgets/ch18/QuantizationExplorer';
+import GranularityVisualizer from '@components/widgets/ch18/GranularityVisualizer';
 
 Chapter 17 reduced *wasted computation*: KV cache, continuous batching, Flash Attention, speculative decoding, PagedAttention. This chapter takes the complementary route, reduce the *bits per parameter*. A $70$B model in BF16 takes $140$ GB of weights; in INT4, the same model fits comfortably on a single A100 80GB with headroom left over for KV cache and batching. **Quantization is the optimization that decides whether a model can be deployed at all**: not just whether it is cheap.
 

@@ -6,7 +6,8 @@ description: Sampling, how a transformer's logits become emitted tokens. Greedy/
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SamplingDistribution, ConstrainedDecoding } from '@components/widgets';
+import SamplingDistribution from '@components/widgets/ch19/SamplingDistribution';
+import ConstrainedDecoding from '@components/widgets/ch19/ConstrainedDecoding';
 
 Chapter 17 made the forward pass faster. Chapter 18 made it smaller. This chapter is about what happens *after* the forward pass: how a vector of logits, one score per vocabulary token, becomes the next emitted text token. The choice matters enormously. Greedy decoding produces robotic, repetitive output. Pure random sampling produces incoherent nonsense. Carefully-designed strategies (temperature + nucleus + a mild repetition penalty) produce natural, varied, useful text. The algorithms are short; the impact is huge.
 

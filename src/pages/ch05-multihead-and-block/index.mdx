@@ -6,7 +6,8 @@ description: Multi-head attention generalizes Chapter 4's single-head attention 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { MultiHeadDecomposition, TransformerBlockFlow } from '@components/widgets';
+import MultiHeadDecomposition from '@components/widgets/ch05/MultiHeadDecomposition';
+import TransformerBlockFlow from '@components/widgets/ch05/TransformerBlockFlow';
 
 Chapter 4 was about one attention head. Real transformers have many (eight, twelve, ninety-six, depending on the model). Each head has its own learned projections, computes its own attention pattern, and produces its own slice of output. The slices are concatenated and projected back into the model's feature space. The motivation is that different heads can specialize in different relationships (locality, syntax, coreference) without the architectural complexity of separate networks.
 

@@ -6,7 +6,8 @@ description: Chapters 1-6 built the architecture; Chapter 7 built the data pipel
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { LossCurve, OptimizerComparison } from '@components/widgets';
+import LossCurve from '@components/widgets/ch08/LossCurve';
+import OptimizerComparison from '@components/widgets/ch08/OptimizerComparison';
 
 Seven chapters in, the pieces are on the bench. Chapters 1-6 built the architecture: embeddings, attention, the transformer block, positional encoding. Chapter 7 built the data pipeline: web text filtered, deduplicated, decontaminated into a clean corpus. What is missing is the part where the architecture *learns from* the data. That gap is this chapter.
 

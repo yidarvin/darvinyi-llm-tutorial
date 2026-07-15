@@ -6,7 +6,8 @@ description: Inference optimization, how to serve trained LLMs efficiently at sc
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { KVCacheAnimation, SpeculativeDecoding } from '@components/widgets';
+import KVCacheAnimation from '@components/widgets/ch17/KVCacheAnimation';
+import SpeculativeDecoding from '@components/widgets/ch17/SpeculativeDecoding';
 
 Part V left you with a trained model, pre-trained, supervised-fine-tuned, preference-aligned, optionally PEFT-adapted, optionally distilled. The mathematical object exists. Part VI asks the engineering question that follows: how do you actually serve it? A transformer forward pass is conceptually simple; serving one at production scale is an entire discipline. Naive implementations are shockingly inefficient. They rerun every layer for every generated token, pad short sequences to match long ones in the batch, and materialize huge intermediate attention matrices that the GPU spends most of its time reading and writing rather than computing. **A production stack does none of this.**
 

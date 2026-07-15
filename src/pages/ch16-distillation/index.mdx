@@ -6,7 +6,8 @@ description: Distillation, the compression technique that turns a frontier-capab
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { TemperatureScaling, DistillationPipeline } from '@components/widgets';
+import TemperatureScaling from '@components/widgets/ch16/TemperatureScaling';
+import DistillationPipeline from '@components/widgets/ch16/DistillationPipeline';
 
 Chapters 13 through 15 left you with the techniques to train and align large language models. *Large* is the operative word. A $70$B-parameter model is too expensive to deploy at scale for most use cases, even with the quantization and inference optimizations of Part VI, serving it cheaply at high throughput is hard. Most production teams want models in the $7$B–$14$B range. The capability gap, though, is significant: a $7$B base model is typically $10$ to $30$ MMLU points behind a $70$B base. Without help, the smaller model is not a viable substitute.
 

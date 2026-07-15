@@ -6,7 +6,8 @@ description: Multi-agent systems, the composition chapter. When one agent isn't 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { MultiAgentTopologyExplorer, InterAgentConversationViewer } from '@components/widgets';
+import MultiAgentTopologyExplorer from '@components/widgets/ch29-multi-agent/MultiAgentTopologyExplorer';
+import InterAgentConversationViewer from '@components/widgets/ch29-multi-agent/InterAgentConversationViewer';
 
 Chapter 27 covered the agent loop. Chapter 28 covered the engineering $80\%$, tools, schemas, error handling, observability, scaffolding. By the end of Ch 28 you could build a production-grade single-agent system out of real code that survives real traffic. This chapter asks the next question: what if one agent isn't enough? **Multi-agent systems**, manager-worker decompositions, peer-to-peer collaborations, hierarchical teams, adversarial debates, are the natural next step. The $2023$ hype around AutoGPT and BabyAGI promised AGI through agent multiplicity; the $2024$–$2025$ reality has been more sober. Production systems are still mostly single-agent.
 

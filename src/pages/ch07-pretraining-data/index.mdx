@@ -6,7 +6,8 @@ description: Modern LLMs are trained on trillions of tokens of web text, but raw
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { DedupInteractive, QualityFilter } from '@components/widgets';
+import DedupInteractive from '@components/widgets/ch07/DedupInteractive';
+import QualityFilter from '@components/widgets/ch07/QualityFilter';
 
 Six chapters in, the architecture is complete. Tokens go in. Embeddings get added to positional encodings. Attention runs, blocks stack, the last layer projects back to vocabulary space and a softmax produces probabilities. The forward pass is exactly the forward pass of every modern decoder-only LLM. What sits inside the weight matrices, though, is still random noise. The model from Chapters 1–6 is inert, a parameterized function with no preferences, no knowledge, no behavior.
 

@@ -6,7 +6,8 @@ description: Interpretability, the discipline of opening up trained LLMs and rea
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { SAEFeatureExplorer, LinearProbingVisualizer } from '@components/widgets';
+import SAEFeatureExplorer from '@components/widgets/ch25/SAEFeatureExplorer';
+import LinearProbingVisualizer from '@components/widgets/ch25/LinearProbingVisualizer';
 
 Chapter 24 covered safety from the outside in: alignment training, refusal calibration, red-teaming, the helpful-versus-harmless trade-off. All of those techniques operate on model behavior. Behavior is one signal; the model's internals are another. Interpretability is the discipline of reading those internals. Probes that decode concepts from hidden states. Sparse autoencoders that pull apart superposition into monosemantic features. Circuits, small weight subgraphs that implement specific algorithms. Causal interventions that test whether a component actually matters. The goal is two-fold: understand what the model is computing, and verify that it is computing what we want.
 

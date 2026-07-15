@@ -6,7 +6,8 @@ description: AI safety, the operational discipline of making capable models trus
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { JailbreakTaxonomy, PromptInjectionClassifier } from '@components/widgets';
+import JailbreakTaxonomy from '@components/widgets/ch24/JailbreakTaxonomy';
+import PromptInjectionClassifier from '@components/widgets/ch24/PromptInjectionClassifier';
 
 Part VII (Chapters 20–23) ended with a stack of capabilities, reasoning, tool use, retrieval, multimodal. A model that can reason, act, retrieve, and perceive is close to being a generally-capable digital assistant. Capability without trust is incomplete. Can the model be relied on to refuse harmful requests? Can it resist adversarial manipulation? Can it tell whose instructions to follow when retrieved content carries hidden commands? Part VIII covers the three disciplines that answer those questions. This is the first of them.
 

@@ -6,7 +6,8 @@ description: Retrieval-augmented generation, how production LLMs ground their an
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { RetrievalComparator, ChunkingVisualizer } from '@components/widgets';
+import RetrievalComparator from '@components/widgets/ch22/RetrievalComparator';
+import ChunkingVisualizer from '@components/widgets/ch22/ChunkingVisualizer';
 
 A trained LLM's knowledge lives in its weights, call this **parametric memory**. It is fast, always available, and learned from pretraining. It also has three fundamental limits: the training cutoff hides recent events, your company's private docs were never in pretraining, and specific records (a customer's order history, a database row) are too numerous to memorize. **Retrieval-augmented generation (RAG)** addresses all three. Index a corpus; given a query, fetch the most relevant documents; concatenate them into the model's context; generate a grounded answer. The model knows what is in its weights *and* what it can find.
 

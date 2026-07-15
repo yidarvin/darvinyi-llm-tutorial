@@ -6,7 +6,9 @@ description: Preference optimization, the algorithmic centerpiece of post-traini
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { PreferenceLearningPipeline, DPOLossLandscape, PPOClipExplorer } from '@components/widgets';
+import PreferenceLearningPipeline from '@components/widgets/ch14/PreferenceLearningPipeline';
+import DPOLossLandscape from '@components/widgets/ch14/DPOLossLandscape';
+import PPOClipExplorer from '@components/widgets/ch14/PPOClipExplorer';
 
 Chapter 13 left you with an SFT'd model. It follows the chat template, knows it is the assistant side of a conversation, and produces grammatical responses to instructions. What it does *not* know is how to produce *good* responses. Ask it a hard question and it may confidently invent an answer. Ask it for help on something edgy and it may refuse harmlessly or comply harmfully. The format is there; the quality and the alignment are not.
 

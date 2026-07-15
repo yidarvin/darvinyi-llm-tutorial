@@ -6,7 +6,8 @@ description: Mixture of Experts (MoE), the architectural pattern that decouples 
 
 import { Callout, Equation, EqRef, Figure, WidgetFrame } from '@components/content';
 import { RunnableCode } from '@components/code';
-import { MoERoutingVisualizer, ActiveVsTotalParams } from '@components/widgets';
+import MoERoutingVisualizer from '@components/widgets/ch11/MoERoutingVisualizer';
+import ActiveVsTotalParams from '@components/widgets/ch11/ActiveVsTotalParams';
 
 Chapter 10 closed the training-side arc. We now know how to *train* a dense transformer at any scale, what hardware to use, what frameworks to reach for, what numerical precision to keep, and roughly how many dollars it costs. Chapters 11 and 12 cover the major architectural alternatives, variants that change the building block itself rather than how it is trained.
 
