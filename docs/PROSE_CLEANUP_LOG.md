@@ -43,19 +43,19 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 | 15  | 82                | thorough     | |
 | 16  | 99                | thorough     | Four residual comma splices corrected in the Codex follow-up |
 | 17  | 77                | thorough     | Seven residual comma splices corrected across both cleanup passes; long aside about open-source serving systems converted to parentheses |
-| 18  | 73                | targeted     | Two comma splices fixed |
+| 18  | 73                | reviewed     | Two comma splices fixed; no additional high-confidence splice in the final Codex scan |
 | 19  | 85                | thorough     | Three residual bold-label splices corrected in the Codex follow-up |
 | 20  | 78                | thorough     | Three residual comma splices corrected in the Codex follow-up |
 | 21  | 91                | thorough     | Three residual sentence-boundary splices corrected in the Codex follow-up |
 | 22  | 102               | thorough     | Four residual comma splices corrected in the Codex follow-up |
-| 23  | 116               | targeted     | Whisper-properties bold list converted to colons; "computer use" bold list converted to colons |
+| 23  | 116               | reviewed     | Whisper-properties and computer-use bold lists converted to colons; no additional high-confidence splice in the final Codex scan |
 | 24  | 123               | thorough     | Three residual comma splices corrected in the Codex follow-up |
 | 25  | 133               | thorough     | Four residual sentence-boundary splices corrected in the Codex follow-up |
 | 26  | 129               | thorough     | Seven residual bold-label and sentence-boundary splices corrected in the Codex follow-up |
-| 27  | 125               | targeted     | Phase-13/14/15 bold list converted to colons; Ch 27/28 conceptual-vs-engineering pair converted to colons |
-| 28  | 84                | bulk only    | No additional manual splices found in spot-check |
+| 27  | 125               | reviewed     | Part-transition bold list and Ch 27/28 conceptual-versus-engineering pair converted to colons; no additional high-confidence splice in the final Codex scan |
+| 28  | 84                | reviewed     | No additional high-confidence splice in the final Codex scan |
 | 29  | 112               | thorough     | Two residual comma splices corrected in the Codex follow-up |
-| 30  | 119               | targeted     | Final-chapter close splice fixed; agent-eval criteria bold list converted to colons |
+| 30  | 119               | reviewed     | Final-chapter close splice fixed; agent-eval criteria bold list converted to colons; no additional high-confidence splice in the final Codex scan |
 
 **Total em dashes removed: ~2,990 across all 30 chapters.**
 
@@ -79,9 +79,9 @@ All 30 chapters: 0 em dashes confirmed via `grep -c "—"`.
 
 Per-chapter commits are in the git history. Each commit message names the chapter and the rough nature of the change. Reverting a single chapter is a single `git revert` on the relevant commit.
 
-## Known remaining work
+## Follow-up status
 
-The bulk substitution handles the most common em-dash patterns cleanly, but it cannot detect every comma splice it creates. The chapters still listed as "bulk only" or "targeted" in the table above may have comma-splice patterns that read as run-ons; a careful editorial pass in those chapters would catch the remaining issues. The pattern to watch for is `X, [the/this/that/it/they/we/a/an] [verb]` where the second clause is independent.
+The final Codex follow-up screened every chapter that had remained marked "bulk only" or "targeted" for the common residual pattern `X, [the/this/that/it/they/we/a/an] [verb]`. It corrected only unambiguous sentence-boundary defects and left valid grammatical constructions, code examples, and intentional list structure intact. There is no active prose-cleanup queue; future edits should begin from a specific new finding rather than a forced rewrite.
 
 ## Acceptance criteria status
 

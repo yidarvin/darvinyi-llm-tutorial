@@ -47,10 +47,10 @@ client chunk is the 361.5 KB raw / 122.3 KB gzip CodeMirror editor bundle, which
 
 ## Ordered backlog
 
-1. **Editorial follow-up.** Resolve remaining comma-splice risks identified in
-   `docs/PROSE_CLEANUP_LOG.md`. Reader search uses the generated MiniSearch section index across all 30 chapters; the obsolete, unused Pagefind build step was removed without reducing coverage.
-2. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
+1. **Maintenance.** Recheck time-sensitive claims with primary sources and run a Sol reconciliation against
    `docs/CONTENT_CRITIQUE.md` before declaring the quality program complete.
+
+Editorial follow-up is complete. Reader search uses the generated MiniSearch section index across all 30 chapters; the obsolete, unused Pagefind build step was removed without reducing coverage.
 
 Accessibility completion is now complete: the audited widgets have explicit accessible names, relevant
 step-through interfaces announce state changes, view selectors use keyboard-operable tab semantics, and the
