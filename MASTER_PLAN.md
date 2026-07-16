@@ -2,8 +2,8 @@
 
 **darvinyi-llm-tutorial** · the roadmap and decisions log
 
-> **Historical build record, completed 2026-07-15.** The project now uses the Codex workflow in
-> [`docs/CODEX_WORKFLOW.md`](docs/CODEX_WORKFLOW.md) and the rules in [`AGENTS.md`](AGENTS.md).
+> **Historical build record, completed 2026-07-15.** The project now uses the maintenance workflow in
+> [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md) and the rules in [`CLAUDE.md`](CLAUDE.md).
 > References below to the prior build environment describe how the shipped textbook was made; they are not
 > instructions for current work.
 

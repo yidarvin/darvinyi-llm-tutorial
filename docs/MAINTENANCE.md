@@ -1,4 +1,4 @@
-# Codex workflow and active backlog
+# Maintenance workflow and active backlog
 
 Owner: Project maintainers. Last reviewed: 2026-07-15.
 
@@ -8,28 +8,17 @@ active queue.
 
 ## How work proceeds
 
-Once the project is trusted, the repository defaults to GPT-5.6 Terra at High effort. Terra performs implementation, evidence gathering,
-and validation. GPT-5.6 Sol at High effort performs independent review and synthesis when a task needs
-additional judgment. Each work package has one file owner, a declared acceptance criterion, programmatic
-checks before review, and one commit after final validation.
-
-Use the project agents in `.codex/agents/` as follows:
-
-- `researcher` for source-grounded, read-only investigation.
-- `content-worker` and `widget-worker` for mutually exclusive implementation scopes.
-- `verifier` for independent checks without source edits.
-- `reviewer` and `synthesizer` for Sol-level review and reconciliation.
-
-Before using this configuration in Codex, mark the repository trusted. Codex deliberately ignores project-local
-configuration and agents for an untrusted repository; until it is trusted, select Terra and High effort explicitly.
+Each work package has one file owner, a declared acceptance criterion, programmatic checks before review, and
+one commit after final validation. For consequential work, use an author/reviewer split: implement, run the
+programmatic checks, then get an independent review pass before committing.
 
 ## Current baseline
 
-The transition baseline passes `npm run check:workflow`, `npm run check:content`, `npm run check:runnables`,
-`npm run check:widgets`, `npm run typecheck`, and `npm run build` with no typecheck hints or known
-content-integrity failures. The deprecated browser-platform API was replaced, base-element CSS was hardened
-against Tailwind preflight, and an independent Sol review confirmed the transition changes. The old local
-queue runner was not usable because it had no queue file and is deliberately retired.
+The transition baseline passes `npm run check:content`, `npm run check:runnables`, `npm run check:widgets`,
+`npm run typecheck`, and `npm run build` with no typecheck hints or known content-integrity failures. The
+deprecated browser-platform API was replaced, base-element CSS was hardened against Tailwind preflight, and an
+independent review confirmed the transition changes. The old local queue runner was not usable because it had
+no queue file and is deliberately retired.
 
 The executable-content safety pass runs 114 demonstration blocks in Pyodide 0.26.4, compiles 120
 intentional starter exercises, and keeps three PyTorch-only references visibly static rather than exposing a
@@ -48,7 +37,7 @@ client chunk is the 361.5 KB raw / 122.3 KB gzip CodeMirror editor bundle, which
 ## Ordered backlog
 
 No active remediation work remains. The 2026-07-15 maintenance pass rechecked volatile hardware, voice, and
-agent-platform claims against primary provider material; a GPT-5.6 Sol reviewer reconciled the live book against
+agent-platform claims against primary provider material; an independent reviewer reconciled the live book against
 `docs/CONTENT_CRITIQUE.md`; and the resulting source, prose, and runnable-output corrections passed every
 acceptance gate. Treat `docs/CONTENT_CRITIQUE.md` as a historical audit, not an active queue.
 
@@ -66,7 +55,6 @@ public statement lives at `/accessibility/`.
 Every work package must pass:
 
 ```bash
-npm run check:workflow
 npm run check:content
 npm run check:runnables
 npm run check:widgets

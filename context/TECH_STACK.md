@@ -1,6 +1,6 @@
 # TECH_STACK
 
-> Every Codex agent session reads this file before installing packages, writing configs, or making framework-level decisions.
+> Every Claude Code session reads this file before installing packages, writing configs, or making framework-level decisions.
 > The stack is locked. If a session believes a different tool would be better, it surfaces an open question rather than substituting.
 
 ---
@@ -490,7 +490,7 @@ darvinyi-llm-tutorial/
 │       ├── variables.css                  # CSS custom properties
 │       ├── base.css                       # Base element styles (h1, p, a, code, ...)
 │       └── katex.css                      # KaTeX overrides
-├── research/                              # Per-chapter pre-research (read by Codex at session start)
+├── research/                              # Per-chapter pre-research (read by Claude Code at session start)
 │   └── chNN-slug/
 │       └── research.md
 ├── prompts/                               # Historical build-session prompts
@@ -498,7 +498,7 @@ darvinyi-llm-tutorial/
 │   ├── chapters/
 │   │   └── chNN-slug/
 │   └── polish/
-└── context/                               # Read by every Codex agent session
+└── context/                               # Read by every Claude Code session
     ├── PROJECT_OVERVIEW.md
     ├── DESIGN_SYSTEM.md
     ├── TECH_STACK.md

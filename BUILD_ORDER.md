@@ -1,7 +1,7 @@
 # BUILD_ORDER
 
 > **Historical build record, completed 2026-07-15.** This completed file inventory is retained as an
-> archaeological record. Use [`docs/CODEX_WORKFLOW.md`](docs/CODEX_WORKFLOW.md) for active work.
+> archaeological record. Use [`docs/MAINTENANCE.md`](docs/MAINTENANCE.md) for active work.
 
 The full file list for `darvinyi-llm-tutorial`, in the order each file should be created. Each entry is one focused Claude chat message — say **"continue to the next file"** to trigger the next.
 

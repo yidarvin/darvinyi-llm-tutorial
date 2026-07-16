@@ -1,6 +1,6 @@
 # CURRICULUM
 
-> Every Codex chapter session reads its assigned chapter's entry here as the source of truth for what to build.
+> Every Claude Code chapter session reads its assigned chapter's entry here as the source of truth for what to build.
 > Pre-research, prompts, and chapter content all derive from these specs. If a spec needs to change, change it here first, then update downstream artifacts.
 
 ## How to read this file

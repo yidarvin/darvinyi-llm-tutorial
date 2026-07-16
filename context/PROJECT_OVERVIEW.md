@@ -1,6 +1,6 @@
 # PROJECT_OVERVIEW
 
-> Every Codex agent session reads this file first.
+> Every Claude Code session reads this file first.
 > If a downstream decision contradicts what's here, this file wins.
 
 ---

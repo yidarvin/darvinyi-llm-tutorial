@@ -1,6 +1,6 @@
 # DESIGN_SYSTEM
 
-> Every Codex agent session reads this file before writing any UI code, widget, or styled MDX content. If a visual question arises that this file doesn't answer, surface it as an open question — do not improvise.
+> Every Claude Code session reads this file before writing any UI code, widget, or styled MDX content. If a visual question arises that this file doesn't answer, surface it as an open question — do not improvise.
 
 The aesthetic target is **sparse, technical, calm.** Dark canvas, single accent color, restrained motion. The reader is here to learn, not to be entertained by the interface.
 
