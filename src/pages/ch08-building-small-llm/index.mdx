@@ -335,6 +335,7 @@ print(f"Min LR (at end of training, step = 100000):  {lr_schedule(100000):.2e}")
 print(f"Ratio (max / min):                           {lr_schedule(2000) / lr_schedule(100000):.1f}x")
 `}
   packages={["numpy"]}
+  expectedOutput={["Ratio (max / min):                           10.0x", "Max LR (at end of warmup, step = 2000):      6.00e-04"]}
   height={460}
 />
 
@@ -418,6 +419,7 @@ print(f"\\nThe outlier got rescaled down to norm 1.0; direction is preserved.")
 print(f"Without clipping, the outlier would produce a 100x larger optimizer step.")
 `}
   packages={["numpy"]}
+  expectedOutput={["Outlier batch:  norm before = 100.112, after = 1.000", "Without clipping, the outlier would produce a 100x larger optimizer step."]}
   height={380}
 />
 
@@ -593,6 +595,7 @@ print(f"flagged as a spike. Production harnesses use exactly this kind of rollin
 print(f"check to auto-skip the offending batch or roll back to the last checkpoint.")
 `}
   packages={["numpy"]}
+  expectedOutput={["25   4.042   SPIKE (flagged)", "3   4.750   warmup wrinkle"]}
   height={460}
 />
 

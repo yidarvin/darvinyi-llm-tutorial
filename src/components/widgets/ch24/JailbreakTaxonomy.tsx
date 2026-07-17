@@ -33,7 +33,7 @@ function renderExample(example: string): React.ReactNode[] {
       }
     }
     if (earliestIdx === -1) {
-      nodes.push(<span key={key++}>{remaining}</span>);
+      nodes.push(<span key={key}>{remaining}</span>);
       break;
     }
     if (earliestIdx > 0) {

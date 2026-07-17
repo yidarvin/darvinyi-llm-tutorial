@@ -229,8 +229,12 @@ function RowFragment({ rowLabel, row, matrixLabel, i, cellColor, setHovered }: R
           key={j}
           className={styles.cell}
           style={{ backgroundColor: cellColor(v) }}
+          tabIndex={0}
+          aria-label={`${matrixLabel}[${i},${j}] = ${v.toFixed(3)}`}
           onMouseEnter={() => setHovered({ matrix: matrixLabel, i, j, v })}
           onMouseLeave={() => setHovered(null)}
+          onFocus={() => setHovered({ matrix: matrixLabel, i, j, v })}
+          onBlur={() => setHovered(null)}
           title={`${matrixLabel}[${i},${j}] = ${v.toFixed(3)}`}
         />
       ))}

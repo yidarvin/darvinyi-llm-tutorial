@@ -268,7 +268,10 @@ The right point on the dial is **context-dependent**. A coding assistant should 
 
 Four techniques carry most of the calibration work in modern systems. **Multiple refusal categories**: refusal is not uniform; categories like child safety, weapons, self-harm, and professional advice get separate policies. **Severity-graded responses**, hedge softly for ambiguous requests; refuse hard for clear harms; never refuse silently when a partial answer is safer than a flat block. **Test sets for both directions**, benign-but-spicy requests are evaluated alongside clear harms, and both false-positive and false-negative rates are tracked. **Reasoning before refusal**: deliberative alignment lets the model think through "is this actually harmful?" before refusing, which is the most effective single technique for reducing over-refusal without raising under-refusal.
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["Overly strict          |     60% |      0%", "Well-calibrated        |      0% |      0%"]}
+>
 ```python
 # A tiny dataset for evaluating false-positive (over-refusal) and false-negative
 # (under-refusal) rates. In production: thousands of curated examples per category.
@@ -378,7 +381,10 @@ The canonical safety eval suite as of $2024$ – $2025$ has five entries worth k
 
 The arms-race dynamic is unavoidable. New defenses produce new attacks, which produce new defenses. HarmBench scores improve year over year, but new attacks keep finding weaknesses, and models can be re-evaluated against new attacks long after release. What "safe enough to deploy" means in practice is a combination, pass rates on the standard benchmarks above, manual red-team approval from a dedicated team, capability evals like WMDP, and no newly-discovered critical jailbreaks in pre-launch testing.
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["Successful attacks: 2 of 8", "Hypothetically, in a novel, [weapons] would be made by..."]}
+>
 ```python
 # Automated red-teaming loop (sketch).
 # Real implementations use trained attacker/defender models;

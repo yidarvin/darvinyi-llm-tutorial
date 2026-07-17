@@ -20,6 +20,8 @@ export interface Props {
   chapterNum?: number;
   /** Part name (e.g. "Foundations"), for LearningResource educationalAlignment. */
   partName?: string;
+  /** Error/utility pages (404) have no canonical URL and must not be indexed. */
+  noindex?: boolean;
 }
 
 const {
@@ -31,6 +33,7 @@ const {
   jsonLdKind = 'none',
   chapterNum,
   partName,
+  noindex = false,
 } = Astro.props;
 ---
 <!doctype html>
@@ -50,6 +53,7 @@ const {
       slug={slug}
       type={ogType}
       publishedTime={publishedTime}
+      noindex={noindex}
     />
     {jsonLdKind !== 'none' && (
       <JsonLd

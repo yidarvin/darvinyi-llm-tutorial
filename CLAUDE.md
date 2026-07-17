@@ -37,6 +37,7 @@ npm run check:content
 npm run check:runnables
 npm run check:widgets
 npm run typecheck
+npm run lint
 npm run build
 ```
 

@@ -67,7 +67,12 @@ export async function getPyodide(packages: string[] = []): Promise<any> {
     window.__pyodide = py;
     await ensurePackages(py, packages);
     return py;
-  })();
+  })().catch((err) => {
+    // A CDN hiccup or other transient failure must not permanently poison
+    // this singleton — clear the cache so the next call retries the load.
+    window.__pyodideLoading = undefined;
+    throw err;
+  });
 
   return window.__pyodideLoading;
 }

@@ -1,0 +1,9 @@
+dist
+.astro
+node_modules
+public
+package-lock.json
+# Chapter content has its own hand-authored format (verified by
+# scripts/check-content-integrity.mjs); Prettier's MDX handling can mangle
+# RunnableCode template-literal code blocks, so content is out of scope here.
+src/pages/**/*.mdx

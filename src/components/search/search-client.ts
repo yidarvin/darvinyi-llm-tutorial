@@ -48,7 +48,12 @@ async function loadIndex() {
     ms.addAll(documents);
 
     return { ms, docs };
-  })();
+  })().catch((err) => {
+    // A transient fetch failure must not permanently poison this singleton
+    // — clear the cache so the next search retries the load.
+    indexPromise = null;
+    throw err;
+  });
 
   return indexPromise;
 }
@@ -89,9 +94,9 @@ function snippet(content: string, query: string, maxLen: number = 200): string {
       break;
     }
   }
-  let snippetText = content.slice(snippetStart, snippetStart + maxLen);
-  let prefix = snippetStart > 0 ? '...' : '';
-  let suffix = snippetStart + maxLen < content.length ? '...' : '';
+  const snippetText = content.slice(snippetStart, snippetStart + maxLen);
+  const prefix = snippetStart > 0 ? '...' : '';
+  const suffix = snippetStart + maxLen < content.length ? '...' : '';
   return prefix + highlight(snippetText, query) + suffix;
 }
 

@@ -196,7 +196,7 @@ Even with the auxiliary loss, imbalance can persist. Frontier MoE training adds 
 
 The demo below compares the loss value for a balanced routing pattern against a collapsed one. The collapsed case produces a larger loss, which is exactly the gradient signal that pushes the router back toward balance.
 
-<RunnableCode client:visible>
+<RunnableCode client:visible expectedOutput={["Aux loss: 0.01001", "Aux loss: 0.03841"]}>
 ```python
 import numpy as np
 
@@ -278,7 +278,7 @@ Switch Transformer introduced **top-1 routing**: one expert per token. This is t
 
 ### GLaM (2021)
 
-GLaM (Generalist Language Model) used **top-2 routing** at $1.2$T total parameters, matching the quality of contemporary dense models at roughly one-third the FLOPs. The headline architectural choice, top-2 instead of top-1, became the de facto standard after GLaM. The extra expressiveness of weighted-combining two experts turned out to be worth the doubled FFN cost.
+GLaM (Generalist Language Model) used **top-2 routing** at $1.2$T total parameters, exceeding the quality of contemporary dense models while using about one-third the training energy and half the per-token inference FLOPs. The headline architectural choice, top-2 instead of top-1, became the de facto standard after GLaM. The extra expressiveness of weighted-combining two experts turned out to be worth the doubled FFN cost.
 
 ### Mixtral 8x7B (2024)
 
@@ -296,7 +296,7 @@ The frontier kept moving on exactly this recipe. DeepSeek itself shipped **DeepS
 
 The parameter-counting math for an MoE configuration is short enough to write out. The function below computes total and active parameters for a given config and applies it to Mixtral 8x7B and Llama-2 70B for comparison.
 
-<RunnableCode client:visible>
+<RunnableCode client:visible expectedOutput={["Total params:  47.2B", "Active params: 13.4B"]}>
 ```python
 def moe_parameter_count(num_experts, k, d_model,
                         d_ffn=None, num_layers=32):

@@ -21,6 +21,8 @@ export interface Props {
   publishedTime?: string;
   /** Twitter handle without leading @. */
   twitterCreator?: string;
+  /** Error/utility pages (404) have no canonical URL and must not be indexed. */
+  noindex?: boolean;
 }
 
 const {
@@ -31,6 +33,7 @@ const {
   type = 'website',
   publishedTime,
   twitterCreator = 'darvinistrying',
+  noindex = false,
 } = Astro.props;
 
 const SITE_NAME = 'LLM Tutorial';
@@ -42,7 +45,7 @@ const ogImageAlt = `${title} — ${SITE_NAME}`;
 ---
 <title>{fullTitle}</title>
 <meta name="description" content={description} />
-<link rel="canonical" href={fullUrl} />
+{!noindex && <link rel="canonical" href={fullUrl} />}
 
 <meta property="og:type" content={type} />
 <meta property="og:site_name" content={SITE_NAME} />
@@ -69,5 +72,5 @@ const ogImageAlt = `${title} — ${SITE_NAME}`;
 )}
 
 <meta name="author" content="Darvin Yi" />
-<meta name="robots" content="index,follow,max-image-preview:large" />
+<meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow,max-image-preview:large'} />
 <meta name="theme-color" content="#0a0e1a" />

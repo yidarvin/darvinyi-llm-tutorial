@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import GithubSlugger from 'github-slugger';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -28,14 +29,6 @@ async function loadChapterTitles() {
   return titles;
 }
 
-function slugify(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
-}
-
 function stripMdx(mdx) {
   let text = mdx;
   text = text.replace(/^---[\s\S]*?---\n/, '');
@@ -56,7 +49,7 @@ function stripMdx(mdx) {
   return text.trim();
 }
 
-function segmentByH2(text) {
+function segmentByH2(text, slugger) {
   const lines = text.split('\n');
   const segments = [];
   let current = { heading: 'Introduction', anchor: 'introduction', body: [] };
@@ -72,7 +65,7 @@ function segmentByH2(text) {
         });
       }
       const heading = h2Match[1].replace(/^#+\s*/, '').trim();
-      current = { heading, anchor: slugify(heading), body: [] };
+      current = { heading, anchor: slugger.slug(heading), body: [] };
       continue;
     }
     if (/^#{1,6}\s+/.test(line)) {
@@ -121,7 +114,12 @@ async function buildIndex() {
     }
 
     const stripped = stripMdx(mdxRaw);
-    const segments = segmentByH2(stripped);
+    // A fresh slugger per chapter matches rehype-slug's per-page duplicate
+    // tracking (see astro.config.mjs); a single site-wide instance would
+    // wrongly suffix a heading because an unrelated earlier chapter already
+    // used the same text, which is not how the rendered ids actually work.
+    const slugger = new GithubSlugger();
+    const segments = segmentByH2(stripped, slugger);
     let sectionCount = 0;
 
     for (const seg of segments) {

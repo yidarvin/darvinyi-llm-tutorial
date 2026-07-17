@@ -11,6 +11,9 @@ import {
 import styles from './QuantizationExplorer.module.css';
 
 const BIT_WIDTHS = [16, 8, 4, 3, 2];
+const HIST_VAL_MIN = -0.4;
+const HIST_VAL_MAX = 0.4;
+const HIST_N_BINS = 40;
 
 export default function QuantizationExplorer() {
   const [nBits, setNBits] = useState(8);
@@ -29,11 +32,8 @@ export default function QuantizationExplorer() {
   const insight = insightFor(nBits, effectiveFormat);
   const effBits = effectiveBits(nBits);
 
-  const valMin = -0.4;
-  const valMax = 0.4;
-  const nBins = 40;
   const histCounts = useMemo(
-    () => buildHistogram(WEIGHTS, nBins, valMin, valMax),
+    () => buildHistogram(WEIGHTS, HIST_N_BINS, HIST_VAL_MIN, HIST_VAL_MAX),
     [],
   );
   const maxCount = Math.max(...histCounts);
@@ -45,7 +45,7 @@ export default function QuantizationExplorer() {
   const errMax = Math.max(0.001, metrics.maxErr) * 1.1;
   const errMin = -errMax;
   const errCounts = useMemo(
-    () => buildHistogram(errorValues, nBins, errMin, errMax),
+    () => buildHistogram(errorValues, HIST_N_BINS, errMin, errMax),
     [errorValues, errMin, errMax],
   );
   const errMaxCount = Math.max(1, ...errCounts);
@@ -123,7 +123,7 @@ export default function QuantizationExplorer() {
         >
           {/* Original distribution: gray bars */}
           {histCounts.map((count, i) => {
-            const binW = W / nBins;
+            const binW = W / HIST_N_BINS;
             const x = i * binW;
             const h = (count / maxCount) * (H - 20);
             return (
@@ -140,8 +140,8 @@ export default function QuantizationExplorer() {
           {/* Quantization grid: amber (INT) or emerald (NF) vertical lines */}
           {drawGridLines &&
             gridLevels.map((level, i) => {
-              if (level < valMin || level > valMax) return null;
-              const x = xForVal(level, valMin, valMax);
+              if (level < HIST_VAL_MIN || level > HIST_VAL_MAX) return null;
+              const x = xForVal(level, HIST_VAL_MIN, HIST_VAL_MAX);
               return (
                 <line
                   key={`grid-${i}`}
@@ -162,13 +162,13 @@ export default function QuantizationExplorer() {
             className={styles.axis}
           />
           <text x={5} y={H - 1} className={styles.axisLabel}>
-            {valMin.toFixed(2)}
+            {HIST_VAL_MIN.toFixed(2)}
           </text>
           <text x={W / 2 - 5} y={H - 1} className={styles.axisLabel}>
             0
           </text>
           <text x={W - 25} y={H - 1} className={styles.axisLabel}>
-            {valMax.toFixed(2)}
+            {HIST_VAL_MAX.toFixed(2)}
           </text>
         </svg>
         <div className={styles.chartLegend}>
@@ -209,7 +209,7 @@ export default function QuantizationExplorer() {
           aria-label="Quantization error histogram"
         >
           {errCounts.map((count, i) => {
-            const binW = W / nBins;
+            const binW = W / HIST_N_BINS;
             const x = i * binW;
             const h = (count / errMaxCount) * (ErrH - 20);
             return (

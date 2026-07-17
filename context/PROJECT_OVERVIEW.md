@@ -240,7 +240,7 @@ We do not optimize for randomized reading order. A reader landing on Chapter 17 
 - Subdomain `llm-tutorial.darvinyi.com` configured via Namecheap CNAME → `cname.vercel-dns.com`.
 - A local MiniSearch index is generated from every chapter before development and production builds. It is segmented by chapter section, requires no runtime backend, and must cover all 30 chapters.
 - No runtime backend. Pyodide runs entirely client-side.
-- Tool-use examples that hit the Anthropic API (Chapter 21+) require the reader to supply their own key via a small in-widget form. The key is held in `localStorage`, never sent to any server we control.
+- Tool-use examples (Chapter 21+) are Pyodide-only: `<RunnableCode>` has no network access, so these blocks illustrate the request/response shape with hardcoded mock model responses rather than calling a live model. The reader-supplied-API-key, in-widget-form, localStorage-held-key design described in earlier planning was never built — no widget calls the Anthropic API, and no widget reads or writes `localStorage`. If a future session adds this capability, update this line and `context/TECH_STACK.md`'s "what NOT to install" (`react-query`/`SWR` exception) to match.
 
 ---
 

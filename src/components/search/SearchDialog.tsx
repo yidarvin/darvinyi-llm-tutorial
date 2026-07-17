@@ -10,6 +10,7 @@ export default function SearchDialog() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const resultListRef = useRef<HTMLUListElement>(null);
 
@@ -71,14 +72,19 @@ export default function SearchDialog() {
     if (!isOpen) return;
     if (!query.trim()) {
       setResults([]);
+      setSearchError(false);
       return;
     }
     setIsLoading(true);
+    setSearchError(false);
     const handle = setTimeout(async () => {
       try {
         const r = await search(query);
         setResults(r);
         setSelectedIdx(0);
+      } catch {
+        setResults([]);
+        setSearchError(true);
       } finally {
         setIsLoading(false);
       }
@@ -118,11 +124,13 @@ export default function SearchDialog() {
 
   const announcement = isLoading
     ? 'Searching…'
-    : query
-      ? results.length > 0
-        ? `${results.length} result${results.length === 1 ? '' : 's'} for ${query}`
-        : `No results for ${query}`
-      : '';
+    : searchError
+      ? 'Search unavailable'
+      : query
+        ? results.length > 0
+          ? `${results.length} result${results.length === 1 ? '' : 's'} for ${query}`
+          : `No results for ${query}`
+        : '';
 
   return (
     <div className={styles.overlay} onClick={close} role="presentation">
@@ -156,13 +164,16 @@ export default function SearchDialog() {
 
           <div className={styles.statusBar}>
             {isLoading && <span>Searching…</span>}
-            {!isLoading && query && results.length === 0 && (
+            {!isLoading && searchError && (
+              <span role="alert">Search unavailable — try again in a moment.</span>
+            )}
+            {!isLoading && !searchError && query && results.length === 0 && (
               <span>No results for &quot;{query}&quot;</span>
             )}
-            {!isLoading && results.length > 0 && (
+            {!isLoading && !searchError && results.length > 0 && (
               <span>{results.length} result{results.length === 1 ? '' : 's'}</span>
             )}
-            {!query && (
+            {!query && !searchError && (
               <span>
                 Try: <em>scaling laws</em>, <em>tool use</em>, <em>pass^k</em>
               </span>

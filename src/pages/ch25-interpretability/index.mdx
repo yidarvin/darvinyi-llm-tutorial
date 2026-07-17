@@ -65,7 +65,10 @@ A robust empirical finding: concepts come online at different depths. **Early la
   <LinearProbingVisualizer client:visible />
 </WidgetFrame>
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["Probe accuracy: 98.00%", "Direction alignment: 0.711"]}
+>
 ```python
 import numpy as np
 
@@ -180,7 +183,10 @@ Three properties make SAEs the interpretability community's current flagship for
   <SAEFeatureExplorer client:visible />
 </WidgetFrame>
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["step    0  recon 0.9204  sparsity 60.1 active/input  128 live of 128", "Live SAE features:   119 of 128"]}
+>
 ```python
 import numpy as np
 
@@ -247,12 +253,16 @@ print(f"Live SAE features:   {live_final} of {D}")
 
 # Observations:
 # - The SAE is wider than the input (D > d): room to un-pack superposition
-# - The L1 penalty forces few features active PER INPUT (~2-3), but that alone
-#   does not shrink the live-feature COUNT down near n_true_features: most of
-#   the D units stay live, because L1 on f can be gamed by shrinking decoder
-#   weights (no unit-norm constraint here) and dead units are never resampled
-# - Getting live count close to n_true_features needs more machinery: a
-#   decoder unit-norm constraint plus periodic dead-feature resampling
+# - Each input is a mix of exactly 2 true features, so the ideal sparsity is
+#   2 active/input. This L1 penalty (no decoder unit-norm constraint, no
+#   dead-feature resampling) only gets partway there: sparsity per input
+#   drops from 60 to the mid-20s over training, an order of magnitude looser
+#   than the ideal 2, and does not shrink the live-feature COUNT down near
+#   n_true_features either: most of the D units stay live, because L1 on f
+#   can be gamed by shrinking decoder weights instead of zeroing activations
+# - Getting both live count AND per-input sparsity close to n_true_features
+#   needs more machinery: a decoder unit-norm constraint plus periodic
+#   dead-feature resampling
 # - In real SAEs at production scale: millions of features, mostly
 #   monosemantic, achieved with exactly these additional tricks
 ```
@@ -304,7 +314,10 @@ Four techniques carry most of the causal-intervention work in modern interpretab
 
 **Feature clamping**: the SAE-enabled variant of steering. Force an SAE feature's activation high or low; observe the behavioral effect. Maps SAE features to causal influence in a way that pure observation cannot.
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["Matches clean output? True", "Clean output:     0.0111"]}
+>
 ```python
 import numpy as np
 

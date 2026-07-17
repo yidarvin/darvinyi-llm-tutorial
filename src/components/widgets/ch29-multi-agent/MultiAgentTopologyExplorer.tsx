@@ -157,7 +157,7 @@ function complexityFor(id: string): string {
   }
 }
 
-function useWhenFor(id: string): string {
+function whenToUseFor(id: string): string {
   switch (id) {
     case 'single-agent-baseline': return 'most tasks (the default)';
     case 'manager-worker':        return 'task decomposition';
@@ -333,7 +333,7 @@ export default function MultiAgentTopologyExplorer() {
                   {MATURITY[t.maturity].label}
                 </td>
                 <td>{complexityFor(t.id)}</td>
-                <td>{useWhenFor(t.id)}</td>
+                <td>{whenToUseFor(t.id)}</td>
               </tr>
             ))}
           </tbody>

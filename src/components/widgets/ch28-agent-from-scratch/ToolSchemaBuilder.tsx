@@ -15,7 +15,7 @@ interface JsonToken {
 
 function colorJson(json: string): JsonToken[] {
   const out: JsonToken[] = [];
-  const regex = /("(?:[^"\\]|\\.)*")(\s*:)?|(\b(?:true|false|null)\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([\{\}\[\],])|(\s+)|([^\s\{\}\[\],"]+)/g;
+  const regex = /("(?:[^"\\]|\\.)*")(\s*:)?|(\b(?:true|false|null)\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}[\],])|(\s+)|([^\s{}[\],"]+)/g;
   let m: RegExpExecArray | null;
   while ((m = regex.exec(json)) !== null) {
     const str = m[1];

@@ -65,7 +65,10 @@ At $T = 1$ this is the standard softmax. At $T > 1$ the distribution softens, pr
 
 The runnable cell below sweeps $T$ over a fixed logit vector and prints how the top-3 probabilities reshape. At $T = 1$ the top class dominates; at $T = 4$ the tail comes into view; at $T = 32$ the distribution starts to flatten toward uniform.
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["T=  1 | class 0: 0.554", "top class dominates (~0.55)"]}
+>
 ```python
 import numpy as np
 
@@ -132,7 +135,10 @@ $$\mathcal{L}_{\text{total}} = (1 - \alpha) \cdot \text{CE}(y_{\text{true}}, \si
 
 The runnable cell below implements the full loss and sweeps $T$ over a small synthetic batch where the teacher is "confidently correct" and the student is initialized to noise. The hard loss is invariant to $T$ (it always uses the true label at $T = 1$); the soft loss varies non-trivially across temperatures and is comparable in magnitude to the hard loss only because of the $T^2$ scaling.
 
-<RunnableCode client:visible>
+<RunnableCode
+  client:visible
+  expectedOutput={["T=  1 |   2.126   2.693   1.883", "Hard loss is independent of T"]}
+>
 ```python
 import numpy as np
 

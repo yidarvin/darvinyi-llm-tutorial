@@ -128,6 +128,7 @@ print(f"Removed: {len(corpus) - len(deduped)} exact duplicates of doc 0.")
 print(f"Note: doc 2 ('paris' lowercased) was NOT deduped, exact match only.")
 `}
   packages={[]}
+  expectedOutput={["Original: 5 docs  →  Exact-deduped: 3 docs", "Removed: 2 exact duplicates of doc 0."]}
   height={420}
 />
 
@@ -240,6 +241,7 @@ print(f"  True Jaccard:     {true_jaccard(shingles_a, shingles_c):.3f}")
 print(f"  MinHash estimate: {estimate_jaccard(sig_a, sig_c):.3f}")
 `}
   packages={["numpy"]}
+  expectedOutput={["True Jaccard:     0.929", "standard error ≈ 0.035 at J=0.5 with 200 hash functions"]}
   height={560}
 />
 
@@ -364,6 +366,7 @@ for text, _label in samples:
     print(f"{snippet:<55} {mark:<5} {s['reason']:<20}")
 `}
   packages={[]}
+  expectedOutput={["too repetitive", "wrong language", "too short/long"]}
   height={520}
 />
 
@@ -418,6 +421,7 @@ for i, d in enumerate(documents):
 # That paraphrase-blindness is the structural weakness of n-gram decon.
 `}
   packages={[]}
+  expectedOutput={["[CONTAMINATED] doc 1", "[safe        ] doc 2"]}
   height={440}
 />
 

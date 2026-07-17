@@ -258,4 +258,5 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Runnable-code check passed: ${executableBlocks.length}${filter ? ` filtered of ${runnableBlocks.length}` : ''} Pyodide demos executed; ${starterBlocks.length} starter exercise block${starterBlocks.length === 1 ? '' : 's'} compiled; ${staticBlocks.length} static reference block${staticBlocks.length === 1 ? '' : 's'} excluded.`);
+const assertedBlocks = executableBlocks.filter((block) => block.expectedOutput.length > 0).length;
+console.log(`Runnable-code check passed: ${executableBlocks.length}${filter ? ` filtered of ${runnableBlocks.length}` : ''} Pyodide demos executed (${assertedBlocks}/${executableBlocks.length} assert their printed output); ${starterBlocks.length} starter exercise block${starterBlocks.length === 1 ? '' : 's'} compiled; ${staticBlocks.length} static reference block${staticBlocks.length === 1 ? '' : 's'} excluded.`);

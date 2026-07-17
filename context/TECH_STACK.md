@@ -18,9 +18,9 @@
 | Code highlighting | **Shiki** (Astro built-in) | Server-rendered, no client JS, supports any TextMate grammar |
 | Code editor | **CodeMirror 6** | Lighter than Monaco; sufficient for Python and Pyodide integration |
 | Runnable code | **Pyodide** (lazy-loaded) | Real numpy in-browser via WebAssembly |
-| Diagrams | **D3** (custom) + **Recharts** (standard) | D3 for bespoke widgets; Recharts when a stock chart suffices |
-| Icons | **lucide-react** | One icon set, tree-shakes cleanly |
-| Animation | CSS + `requestAnimationFrame` + **framer-motion** (rare) | Most state transitions are CSS; framer-motion only when layout animates |
+| Diagrams | Hand-rolled SVG/canvas per widget, driven by a per-chapter `*-data.ts` module | No charting library earned its weight against ~40-50 bespoke, purpose-built visuals; each widget owns its render logic |
+| Icons | Inline SVG per use site | No icon set is large enough to need a shared library; a handful of one-off glyphs |
+| Animation | CSS + `requestAnimationFrame` | Every widget transition is CSS or a hand-driven raf loop; no layout-animation library has been needed |
 | Search | **MiniSearch** | Local full-text search over a generated chapter-section index |
 | Deployment | **Vercel** | Auto-deploys on `main`, no config needed; previews on PRs |
 
@@ -67,22 +67,20 @@ Pin major versions. Float minor/patch. Lockfile (`package-lock.json`) committed.
 | `@codemirror/lang-python` | `^6.0.0` | |
 | `@codemirror/state` | `^6.0.0` | |
 | `@codemirror/view` | `^6.0.0` | |
+| `@codemirror/commands` | `^6.0.0` | Keymap primitives (`defaultKeymap`, `history`) used by `RunnableCode` |
+| `@codemirror/language` | `^6.0.0` | `HighlightStyle`/`syntaxHighlighting` used by `RunnableCode`'s theme |
+| `@lezer/highlight` | `^1.2.0` | Highlight tags consumed when building `RunnableCode`'s `HighlightStyle` |
 | `pyodide` | `~0.26.0` | Tilde-pin; Pyodide minor versions can break APIs |
-| `d3` | `^7.9.0` | |
-| `recharts` | `^2.13.0` | |
-| `lucide-react` | `^0.460.0` | |
-| `framer-motion` | `^11.0.0` | |
-| `clsx` | `^2.0.0` | |
-| `tailwind-merge` | `^2.0.0` | |
-| `mathjs` | `^13.0.0` | |
+| `github-slugger` | `^2.0.0` | Anchor-slug algorithm matching `rehype-slug`'s render-time heading ids; used by build-time link/search-index tooling so generated anchors agree with the rendered page |
 | `minisearch` | `^7.2.0` | Client-side search over the generated chapter-section index |
+
+`d3`, `recharts`, `lucide-react`, `framer-motion`, `clsx`, `tailwind-merge`, and `mathjs` were removed from `package.json`: none had a single import anywhere in `src`. Widgets render their own SVG/canvas from a per-chapter `-data.ts` module (see Diagrams, above); do not reintroduce a charting or icon library without updating this file first.
 
 ### Dev dependencies
 
 ```
 @types/react ^18.3.0
 @types/react-dom ^18.3.0
-@types/d3 ^7.4.0
 @types/node ^22.0.0
 ```
 
@@ -615,7 +613,6 @@ Order:
 
 ```tsx
 import { useState, useEffect } from 'react';
-import * as d3 from 'd3';
 
 import { seededPRNG } from '@lib/seeded-prng';
 import WidgetFrame from '@components/content/WidgetFrame.astro';
@@ -673,7 +670,7 @@ export default function AttentionHeatmap({
 
 ### Animation cleanup
 
-Every `requestAnimationFrame` loop cancels on unmount. Every D3 transition cleans up. Every event listener registered on `window` removes itself.
+Every `requestAnimationFrame` loop cancels on unmount. Every event listener registered on `window` removes itself.
 
 ```tsx
 useEffect(() => {
@@ -718,7 +715,7 @@ If a session would reach for any of these, stop and surface the question:
 - **Three.js / Babylon** — no 3D content planned; if a chapter ever needs it, raise it explicitly
 - **Redux / Zustand / Jotai / Context** — widgets are self-contained
 - **React Router** — Astro handles routing
-- **react-query / SWR** — no remote data fetching at runtime (the one exception is Anthropic-API tool-use widgets in Ch 21+, which use raw `fetch`)
+- **react-query / SWR** — no remote data fetching at runtime. The Ch 21+ tool-use widgets were originally planned to hit the Anthropic API via raw `fetch`; that never shipped (see `context/PROJECT_OVERVIEW.md`, "Repo and deployment") — those widgets illustrate tool-call shapes with hardcoded mock responses, no network call. Revisit this line if that capability is ever built.
 - **moment.js / day.js** — we don't render dates beyond a footer year
 - **Axios** — `fetch` is fine
 - **Babel plugins** — Astro and Vite handle transpilation
@@ -737,7 +734,7 @@ Things that have already been decided and don't need to be re-litigated:
 - **Tailwind 3 over Tailwind 4** — 4's CSS-based config conflicts with our token-mapping pattern
 - **CodeMirror 6 over Monaco** — lighter, sufficient for Python editing in Pyodide context
 - **Pyodide over Skulpt / Brython / server-side Python** — only Pyodide runs real numpy in browser
-- **D3 + Recharts (both)** — D3 for bespoke widgets, Recharts for stock charts (loss curves, bars)
+- **Hand-rolled SVG/canvas over D3 + Recharts** — dropped both after the shipped widgets never actually imported them; each widget renders its own visuals from a per-chapter `-data.ts` module, so no charting library earned its dependency weight
 - **Shiki over Prism / highlight.js** — server-rendered, no client JS
 - **MiniSearch over Pagefind / Algolia** — the reader-facing dialog already uses MiniSearch over a prebuilt local index; removing Pagefind eliminates a second, unused index without reducing search coverage
 - **Vercel over Netlify / Cloudflare Pages** — Astro's first-class deploy target; auto-detects config

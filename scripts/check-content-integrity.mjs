@@ -37,6 +37,21 @@
 //   7. Reader-facing navigation that announces "The next section" instead
 //      of advancing the argument. The project voice guide explicitly forbids
 //      this authoring residue.
+//   8. Em dashes in chapter prose. CLAUDE.md requires reader-facing prose
+//      "free of em dashes" — this locks the current (already-clean) state in
+//      so a regression fails the build instead of waiting for the next
+//      manual audit. Code blocks are stripped before scanning so a
+//      legitimate "—" inside an example string can't trip this.
+//   9. arxiv.org/pdf links. context/PROJECT_OVERVIEW.md's citation
+//      convention links arxiv abstract pages, not PDFs.
+//  10. Chapter citations that name a chapter number outside 1..N (a bare
+//      "(Chapter 47)" typo) or a <CrossRef slug="..."> that does not resolve
+//      to a real chapter. The 8-topic LANDMARK_ANCHORS list below only
+//      catches specific named topics cited at the wrong chapter; this check
+//      catches any citation to a chapter that does not exist at all, and
+//      closes the same silent-failure gap for CrossRef that check-widget-
+//      data.mjs closes for related-chapters.ts (CrossRef.tsx currently only
+//      console.warns and renders nothing on an unknown slug).
 //
 // Run: node scripts/check-content-integrity.mjs
 
@@ -46,6 +61,27 @@ import { join, relative } from 'node:path';
 const ROOT = process.cwd();
 const PAGES_DIR = join(ROOT, 'src/pages');
 const SRC_DIR = join(ROOT, 'src');
+
+// Regex-extract chapter slugs/numbers from the chapters.ts registry without
+// executing TypeScript — mirrors the approach scripts/build-search-index.mjs
+// already uses for the same file.
+const chaptersTs = readFileSync(join(ROOT, 'src/lib/chapters.ts'), 'utf8');
+const KNOWN_CHAPTER_NUMS = new Set(
+  [...chaptersTs.matchAll(/num:\s*(\d+)\s*,\s*slug:\s*'([^']+)'/g)].map((m) => parseInt(m[1], 10))
+);
+const KNOWN_CHAPTER_SLUGS = new Set(
+  [...chaptersTs.matchAll(/num:\s*(\d+)\s*,\s*slug:\s*'([^']+)'/g)].map((m) => m[2])
+);
+const MAX_CHAPTER_NUM = Math.max(...KNOWN_CHAPTER_NUMS);
+
+// Strip fenced ``` code blocks and RunnableCode `defaultCode={`...`}`
+// template bodies before scanning prose-only invariants (em dashes), so a
+// legitimate character inside an example string can't fail the build.
+function stripCode(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/defaultCode=\{`[\s\S]*?`\}/g, '');
+}
 
 function walk(dir, extensions) {
   const out = [];
@@ -141,6 +177,41 @@ for (const dir of chapterDirs) {
       );
     }
   });
+
+  // Check 8: no em dashes in reader-facing prose (CLAUDE.md invariant).
+  stripCode(text).split('\n').forEach((line, i) => {
+    if (line.includes('—')) {
+      failures.push(`${dir}/index.mdx:${i + 1}: em dash in reader-facing prose (forbidden by CLAUDE.md): "${line.trim()}"`);
+    }
+  });
+
+  // Check 9: arxiv links must point at the abstract page, not the PDF.
+  lines.forEach((line, i) => {
+    const m = line.match(/arxiv\.org\/pdf\/[^\s")]*/);
+    if (m) {
+      failures.push(`${dir}/index.mdx:${i + 1}: arxiv link points at a PDF, not the abstract page: "${m[0]}"`);
+    }
+  });
+
+  // Check 10a: "(Chapter N)" citations must name a chapter that exists.
+  for (const m of text.matchAll(/\(Chapter\s+(\d+)\)/g)) {
+    const cited = parseInt(m[1], 10);
+    if (cited < 1 || cited > MAX_CHAPTER_NUM || !KNOWN_CHAPTER_NUMS.has(cited)) {
+      const lineNum = text.slice(0, m.index).split('\n').length;
+      failures.push(
+        `${dir}/index.mdx:${lineNum}: cites "Chapter ${cited}", which does not exist (chapters run 1-${MAX_CHAPTER_NUM})`
+      );
+    }
+  }
+
+  // Check 10b: <CrossRef slug="..."> must resolve to a real chapter — the
+  // component itself only console.warns and renders nothing on a miss.
+  for (const m of text.matchAll(/<CrossRef\s+slug="([^"]+)"/g)) {
+    if (!KNOWN_CHAPTER_SLUGS.has(m[1])) {
+      const lineNum = text.slice(0, m.index).split('\n').length;
+      failures.push(`${dir}/index.mdx:${lineNum}: <CrossRef slug="${m[1]}" /> does not match any chapter in src/lib/chapters.ts`);
+    }
+  }
 }
 
 // Check 6 + 7: everywhere else under src/ (components, lib, layouts, pages'
@@ -180,6 +251,6 @@ if (failures.length) {
   process.exit(1);
 } else {
   console.log(
-    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, dangling EqRefs, landmark-anchor mismatches, next-section teasers, or chapter-wide widget barrels.`
+    `Content integrity check passed: ${chapterDirs.length} chapters, ${allSrcFiles.length} other src/ files, no Phase-N leakage, dangling EqRefs, landmark-anchor mismatches, next-section teasers, chapter-wide widget barrels, em dashes, arxiv/pdf links, out-of-range chapter citations, or dangling CrossRef slugs.`
   );
 }
